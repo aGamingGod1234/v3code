@@ -71,6 +71,7 @@ import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalServi
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
+import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import {
@@ -233,6 +234,7 @@ const V3IdentityLayerLive = Layer.mergeAll(
   DeviceSessionRepositoryLive,
   DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
+  UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
 ).pipe(Layer.provideMerge(PersistenceLayerLive));
 
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(

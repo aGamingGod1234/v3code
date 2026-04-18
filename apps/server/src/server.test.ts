@@ -109,6 +109,7 @@ import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalServi
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
+import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
 
 const defaultProjectId = ProjectId.make("project-default");
@@ -225,6 +226,7 @@ const v3IdentityTestLayer = Layer.mergeAll(
   DeviceSessionRepositoryLive,
   DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
+  UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
 ).pipe(Layer.provide(SqlitePersistenceMemory));
 
 const makeBrowserOtlpPayload = (spanName: string) =>
