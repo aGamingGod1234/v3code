@@ -580,7 +580,7 @@ function DoneScreen({ state }: { readonly state: ReturnType<typeof reduceV3Setup
     <section className="space-y-4">
       <h2 className="text-base font-semibold">Server-node config written</h2>
       <p className="text-sm text-muted-foreground">
-        V3 wrote <code>{path}</code>. To start using server-node mode:
+        V3 wrote <code>{path}</code>. To start using server-node mode with Postgres persistence:
       </p>
       <ol className="list-decimal space-y-1 pl-6 text-sm">
         <li>Quit the V3 desktop app.</li>
@@ -601,14 +601,6 @@ function DoneScreen({ state }: { readonly state: ReturnType<typeof reduceV3Setup
           Drive App Data and connect.
         </li>
       </ol>
-      <Alert>
-        <AlertTitle>Upstream migrations to Postgres are still landing</AlertTitle>
-        <AlertDescription>
-          Server-node mode currently boots with the existing SQLite persistence for compatibility
-          with upstream T3 tables. The Postgres swap + migration ports are tracked as sub-phase
-          P2b-mig and ship separately.
-        </AlertDescription>
-      </Alert>
       <div className="flex items-center gap-3 pt-2">
         <Button variant="outline" onClick={() => (window.location.href = "/")}>
           Back to app

@@ -63,7 +63,7 @@ import type { AuthControlPlaneShape } from "./auth/Services/AuthControlPlane.ts"
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
+import { PersistenceLive as SqlitePersistenceLayerLive } from "./persistence/Layers/PersistenceSelector.ts";
 import { RepositoryIdentityResolverLive } from "./project/Layers/RepositoryIdentityResolver.ts";
 import { getAutoBootstrapDefaultModelSelection } from "./serverRuntimeStartup.ts";
 import {

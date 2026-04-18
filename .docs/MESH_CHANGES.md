@@ -943,3 +943,120 @@ behind the existing `.todo` placeholder in
 src/persistence/PostgresMigrations.test.ts
 src/persistence/Layers/Postgres.test.ts`) is now **63 pass + 1 todo**
   (62 before + 1 new).
+
+### Phase 2d-persist — mode-aware persistence swap
+
+P2d-persist wires the persistence branch point that P2a, P2b, and
+P2b-mig set up but intentionally deferred. The server runtime, CLI
+runtime, and auth control-plane now select SQLite for `web` /
+`desktop` and the Postgres layer for `server-node`, which means the
+26-entry Postgres migration registry from P2b-mig is now actually
+reachable during a server-node boot. Desktop and web behavior remain
+unchanged on SQLite.
+
+**Modified upstream files:**
+
+### `apps/server/src/server.ts` (P2d-persist update on top of P1b/P1c/P1d)
+
+- **Modified**: 2026-04-19 (P2d-persist)
+- **V3 phase**: Phase 2d-persist — mode-aware persistence swap
+- **Reason**: Replace the hard-coded SQLite runtime import with the new
+  mode-aware selector so server-node boot can construct Postgres.
+- **What changed**:
+  - Replaced: `layerConfig as SqlitePersistenceLayerLive` import from
+    `Sqlite.ts` with `PersistenceLive as SqlitePersistenceLayerLive`
+    from `PersistenceSelector.ts`.
+  - Left the downstream alias + `PersistenceLayerLive` composition
+    unchanged so the diff stays local to the import seam.
+- **Conflict risk on rebase**: medium — `server.ts` is a hotspot and
+  the import block shifts often.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/cli.ts` (P2d-persist update on top of P2a/P2b)
+
+- **Modified**: 2026-04-19 (P2d-persist)
+- **V3 phase**: Phase 2d-persist — mode-aware persistence swap
+- **Reason**: Make the CLI's project/auth runtime composition follow the
+  active mode instead of always pinning SQLite.
+- **What changed**:
+  - Replaced: `layerConfig as SqlitePersistenceLayerLive` import from
+    `Sqlite.ts` with `PersistenceLive as SqlitePersistenceLayerLive`
+    from `PersistenceSelector.ts`.
+  - Left the surrounding runtime layer composition untouched.
+- **Conflict risk on rebase**: medium — `cli.ts` is a hotspot and
+  upstream may continue widening the runtime layer stack.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/auth/Layers/AuthControlPlane.ts`
+
+- **Modified**: 2026-04-19 (P2d-persist)
+- **V3 phase**: Phase 2d-persist — mode-aware persistence swap
+- **Reason**: Auth storage in server-node mode needs to land on the same
+  selected SQL backend as the rest of the runtime.
+- **What changed**:
+  - Replaced: `layerConfig as SqlitePersistenceLayerLive` import from
+    `Sqlite.ts` with `PersistenceLive as SqlitePersistenceLayerLive`
+    from `PersistenceSelector.ts`.
+  - `AuthStorageLive` keeps the same shape; only the persistence source
+    changed.
+- **Conflict risk on rebase**: low — narrow import swap in a stable
+  file.
+- **Last rebase verified**: 2026-04-19
+
+**Modified V3-owned files:**
+
+### `apps/server/src/persistence/Layers/PersistenceSelector.ts`
+
+- **Modified**: 2026-04-19 (P2d-persist) — new V3-owned file.
+- **V3 phase**: Phase 2d-persist — mode-aware persistence swap
+- **Reason**: Centralize the SQLite/Postgres branch point behind one
+  runtime layer so callers can swap from `Sqlite.ts` with a one-line
+  import change.
+- **What changed**:
+  - Added: `resolvePersistenceLive`, which reads `ServerConfig.mode`.
+  - Added: `PersistenceLive = Layer.unwrap(resolvePersistenceLive)`.
+  - Behavior: `server-node` returns
+    `makePostgresPersistenceLive({ connectionUrl })`; `web` and
+    `desktop` return `makeSqlitePersistenceLive(config.dbPath)`.
+  - Error path mirrors `Postgres.ts`: missing or empty `postgresUrl`
+    fails with the existing `PostgresNotConfiguredError`.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/Layers/PersistenceSelector.test.ts`
+
+- **Modified**: 2026-04-19 (P2d-persist) — new V3-owned file.
+- **V3 phase**: Phase 2d-persist — mode-aware persistence swap
+- **Reason**: Pin the three branch outcomes at the selector seam
+  without requiring a live Postgres instance.
+- **What changed**:
+  - Added: `web` and `desktop` cases that build the selector layer,
+    resolve `SqlClient`, and execute `SELECT 1`.
+  - Added: `server-node` + missing `postgresUrl` case asserting the
+    selector fails with `_tag === "PostgresNotConfiguredError"`.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/routes/setup.tsx` (P2d-persist update on top of P2d)
+
+- **Modified**: 2026-04-19 (P2d-persist) — V3-owned file.
+- **V3 phase**: Phase 2d-persist — mode-aware persistence swap
+- **Reason**: The setup wizard success screen still said the Postgres
+  swap was pending even though this phase wires it in.
+- **What changed**:
+  - Removed: the DoneScreen alert titled
+    `Upstream migrations to Postgres are still landing`.
+  - Updated: the lead-in copy to say the restart flow enables
+    server-node mode with Postgres persistence.
+- **Conflict risk on rebase**: low — localized DoneScreen copy change.
+- **Last rebase verified**: 2026-04-19
+
+**Test coverage**
+
+- New selector suite: 3 cases.
+- Targeted server run (`bun run --cwd apps/server vitest run
+--reporter=dot src/identity src/config src/serverMode.test.ts
+src/persistence/PostgresMigrations.test.ts
+src/persistence/Layers/Postgres.test.ts
+src/persistence/Layers/PersistenceSelector.test.ts`) is now
+  **66 pass + 1 todo**.

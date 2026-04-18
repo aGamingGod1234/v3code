@@ -6,7 +6,7 @@ import { ServerSecretStoreLive } from "./ServerSecretStore.ts";
 import { SessionCredentialServiceLive } from "./SessionCredentialService.ts";
 import { BootstrapCredentialService } from "../Services/BootstrapCredentialService.ts";
 import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "../../persistence/Layers/Sqlite.ts";
+import { PersistenceLive as SqlitePersistenceLayerLive } from "../../persistence/Layers/PersistenceSelector.ts";
 import {
   AuthControlPlane,
   AuthControlPlaneError,

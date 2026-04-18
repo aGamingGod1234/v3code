@@ -13,7 +13,7 @@ import {
 import { fixPath } from "./os-jank.ts";
 import { websocketRpcRouteLayer } from "./ws.ts";
 import { OpenLive } from "./open.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
+import { PersistenceLive as SqlitePersistenceLayerLive } from "./persistence/Layers/PersistenceSelector.ts";
 import { ServerLifecycleEventsLive } from "./serverLifecycleEvents.ts";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService.ts";
 import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger.ts";
