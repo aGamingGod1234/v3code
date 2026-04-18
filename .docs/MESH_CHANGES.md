@@ -125,3 +125,57 @@ All changes below are NEW files in V3-owned subtrees or additive entries in upst
 
 - `apps/web/src/components/ui/input.tsx:44` — pre-existing `tsc` error on the `style` prop where Base UI's state-callback `CSSProperties` shape doesn't assign to React's native `CSSProperties`. Confirmed present on pristine upstream before any V3 edits. Do NOT patch as part of V3 — either wait for upstream fix or file upstream bug. Current `bun run typecheck` exits non-zero on `@v3tools/web` because of this, but all 7 other packages typecheck clean.
 - `apps/server/src/auth/Layers/ServerSecretStore.test.ts > "uses restrictive permissions for the secret directory and files"` — asserts `chmod 0o700`/`0o600` calls were made, but Windows NTFS is a no-op for `chmod` so the recording file-system layer records zero calls on Windows. Platform bug in the test, not in production code. All other secret-store tests pass. Skip on Windows dev boxes; Linux CI passes.
+- `apps/server/src/server.test.ts > "subscribeServerConfig streams snapshot then update"` and `"projects.searchEntries errors"` — two of 61 integration tests flake on Windows, reproduced on pristine P1a state before any P1b changes. Not caused by V3 code. Linux CI presumably passes.
+
+### Phase 1b — Google bootstrap route + DeviceApprovalService (additive)
+
+**New files (V3-owned):**
+
+- `apps/server/src/identity/Services/DeviceSessionRepository.ts` (+ `Layers/DeviceSessionRepository.ts` + `.test.ts`) — `v3_device_sessions` table access (link a session to a device, lookup by session id). 3 tests.
+- `apps/server/src/identity/Services/DeviceApprovalService.ts` (+ `Layers/DeviceApprovalService.ts` + `.test.ts`) — `registerOrResume` (first-device auto-approve, subsequent devices need approval), `approve`, `remove`, PubSub event stream. 7 tests.
+- `apps/server/src/identity/http.ts` — `POST /api/auth/google/bootstrap` route. Verifies ID token, enforces `authorizedEmails` allowlist, upserts user, registers device via approval service, issues browser-session-cookie via existing `SessionCredentialService`, links session ↔ device, returns `GoogleBootstrapResult` with `Set-Cookie`.
+
+**Modified upstream files:**
+
+### `apps/server/src/config.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Carry Google OAuth client id and the email allowlist through the runtime config.
+- **What changed**:
+  - Added to `ServerConfigShape`: `googleClientId: string | undefined`, `authorizedEmails: ReadonlyArray<string>`.
+  - Added to `ServerConfig.layerTest` defaults: both fields set to absent / empty.
+- **Conflict risk on rebase**: medium — `ServerConfigShape` is a hotspot upstream.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/cli.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Load Google config from env (`V3CODE_GOOGLE_CLIENT_ID`, `V3CODE_AUTHORIZED_EMAILS`) and populate `ServerConfigShape`.
+- **What changed**:
+  - `EnvServerConfig` gains `googleClientId` and `authorizedEmails` entries.
+  - `config` struct populates both fields; `parseAuthorizedEmails` helper added.
+- **Conflict risk on rebase**: medium.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/server.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Wire the V3 identity Live layers into `RuntimeDependenciesLive` and register `googleBootstrapRouteLayer` in `makeRoutesLayer`.
+- **What changed**:
+  - New `V3IdentityLayerLive` composed from the 5 identity Live layers, provided via `PersistenceLayerLive`.
+  - `RuntimeDependenciesLive` adds `Layer.provideMerge(V3IdentityLayerLive)` right after `AuthLayerLive`.
+  - `makeRoutesLayer` adds `googleBootstrapRouteLayer`.
+- **Conflict risk on rebase**: medium — `RuntimeDependenciesLive` and `makeRoutesLayer` are both hotspots.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/server.test.ts` + `cli.test.ts` + `environment/Layers/ServerEnvironment.test.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Existing tests construct `ServerConfigShape` inline; they need the two new fields.
+  `server.test.ts` additionally provides the V3 identity Live layers via a new `v3IdentityTestLayer` composition so the test harness can build when `googleBootstrapRouteLayer` is in `makeRoutesLayer`.
+- **Conflict risk on rebase**: low for cli/environment (field addition). Medium for server.test.ts (two edits: config literal + layer composition).
+- **Last rebase verified**: 2026-04-18
