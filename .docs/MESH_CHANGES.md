@@ -813,3 +813,133 @@ Per Lucas's P2d sub-decisions (2026-04-19):
 - `bun run --cwd apps/server vitest run --reporter=dot src/identity src/config src/serverMode.test.ts src/persistence/PostgresMigrations.test.ts src/persistence/Layers/Postgres.test.ts` still shows 62 pass + 1 todo — no server-side behaviour changed in P2d either.
 - Desktop vitest full suite still 8/8 + 17 new = 25; web v3 suite is
   now 19 (auth) + 16 (setup) = 35.
+
+### Phase 2b-mig — Port upstream T3 migrations 001–025 to Postgres
+
+P2b-mig is the persistence prerequisite for P2d-persist (the mode-aware
+swap that wires server-node mode to the Postgres layer). Before this
+slice, `PostgresMigrations.ts` only registered the V3 identity baseline
+(`001_V3IdentityBaseline`), so booting the server in server-node mode
+against Postgres would leave 25 upstream-owned tables
+(`orchestration_events`, `projection_*`, `auth_*`, etc.) unconditionally
+missing. Every Postgres startup would fail the moment an upstream
+service tried to `SELECT ... FROM orchestration_events`.
+
+P2b-mig writes Postgres ports for every upstream migration, keeping the
+SQLite history canonical: the SQLite migration registry still runs on
+desktop + web modes unchanged, and the Postgres registry replays the
+same semantic steps in order so the two schemas stay congruent.
+
+**Sequencing**: `V3IdentityBaseline` keeps id `1` in Postgres, and
+upstream SQLite migrations `001..025` become Postgres migrations
+`002..026` respectively. A fresh V3 server-node deployment therefore
+runs 26 migrations in order, matching what a fresh SQLite deployment
+produces modulo the V3 tables at the head.
+
+**Dialect deltas applied**:
+
+- `INTEGER PRIMARY KEY AUTOINCREMENT` → `BIGSERIAL PRIMARY KEY`
+  (affects migrations 002, 006). Postgres sequences preserve the
+  monotonic-never-reused contract that AUTOINCREMENT promises.
+- `INTEGER NOT NULL` used as a boolean (`is_streaming`,
+  `pending_approval_count`, `has_actionable_proposed_plan`) stays
+  `INTEGER` in Postgres so existing queries comparing to `0` / `1`
+  literals keep working. Switching to `BOOLEAN` would also require
+  touching every SQL consumer, which is out of scope for a schema
+  port.
+- `PRAGMA table_info(...)` existence checks (migrations 017, 021, 022, 023) are dropped in favor of native `ADD COLUMN IF NOT EXISTS`
+  (Postgres 9.6+).
+- SQLite `json_extract` / `json_set` / `json_type` / `json_patch`
+  based data migrations (011, 016, 024, 025) are preserved as
+  explicit no-ops in Postgres. Fresh server-node deployments have
+  empty projection tables so the backfills would match zero rows; the
+  sequence is kept intact so a future legacy-replay importer can slot
+  the real jsonb-based logic in without renumbering.
+
+**New files (V3-owned):**
+
+- `apps/server/src/persistence/PostgresMigrations/002_OrchestrationEvents.ts`
+- `…/003_OrchestrationCommandReceipts.ts`
+- `…/004_CheckpointDiffBlobs.ts`
+- `…/005_ProviderSessionRuntime.ts`
+- `…/006_Projections.ts`
+- `…/007_ProjectionThreadSessionRuntimeModeColumns.ts`
+- `…/008_ProjectionThreadMessageAttachments.ts`
+- `…/009_ProjectionThreadActivitySequence.ts`
+- `…/010_ProviderSessionRuntimeMode.ts` (no-op; mirrors SQLite 009)
+- `…/011_ProjectionThreadsRuntimeMode.ts`
+- `…/012_OrchestrationThreadCreatedRuntimeMode.ts` (no-op; SQLite data
+  migration)
+- `…/013_ProjectionThreadsInteractionMode.ts`
+- `…/014_ProjectionThreadProposedPlans.ts`
+- `…/015_ProjectionThreadProposedPlanImplementation.ts`
+- `…/016_ProjectionTurnsSourceProposedPlan.ts`
+- `…/017_CanonicalizeModelSelections.ts` (no-op; SQLite data migration)
+- `…/018_ProjectionThreadsArchivedAt.ts`
+- `…/019_ProjectionThreadsArchivedAtIndex.ts`
+- `…/020_ProjectionSnapshotLookupIndexes.ts`
+- `…/021_AuthAccessManagement.ts` (upstream auth tables — required
+  before V3IdentityBaseline's `v3_device_sessions.session_id` gains a
+  FK in a follow-up)
+- `…/022_AuthSessionClientMetadata.ts`
+- `…/023_AuthSessionLastConnectedAt.ts`
+- `…/024_ProjectionThreadShellSummary.ts`
+- `…/025_BackfillProjectionThreadShellSummary.ts` (no-op; SQLite data
+  migration)
+- `…/026_CleanupInvalidProjectionPendingApprovals.ts` (no-op; SQLite
+  data migration)
+
+**Modified V3-owned files:**
+
+### `apps/server/src/persistence/PostgresMigrations.ts`
+
+- **Modified**: 2026-04-19 (P2b-mig)
+- **V3 phase**: Phase 2b-mig — upstream migrations to Postgres
+- **Reason**: Register the 25 new port files alongside
+  `V3IdentityBaseline`.
+- **What changed**:
+  - Added: 25 imports for `Migration0002..Migration0026`.
+  - Added: 25 entries at ids 2..26 in `postgresMigrationEntries`.
+  - Expanded the top-of-file doc comment to describe the layout.
+- **Conflict risk on rebase**: none (V3-owned file).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/PostgresMigrations.test.ts`
+
+- **Modified**: 2026-04-19 (P2b-mig) — V3-owned file.
+- **V3 phase**: Phase 2b-mig — upstream migrations to Postgres
+- **Reason**: Registry length changed from 1 to 26, and the port name
+  sequence is worth asserting so a future upstream migration addition
+  is caught at test time.
+- **What changed**:
+  - Added: `UPSTREAM_PORT_NAMES` constant.
+  - Added: `"registers the 25 upstream-port migrations as ids 2-26
+after P2b-mig"` assertion.
+  - Loosened: the old `expect(postgresMigrationEntries).toHaveLength(1)`
+    check to pin the length via the new `UPSTREAM_PORT_NAMES.length + 1`
+    computation.
+- **Last rebase verified**: 2026-04-19
+
+**Deferred to P2d-persist**
+
+P2b-mig only ships the migration sources; it does NOT flip server.ts to
+provide the Postgres layer in server-node mode. That flip lands in
+P2d-persist and is what actually executes these migrations at startup.
+Tests in this phase only exercise the registry + loader constructors —
+a real end-to-end run against a live Postgres instance still lives
+behind the existing `.todo` placeholder in
+`apps/server/src/persistence/Layers/Postgres.test.ts`.
+
+**Test coverage**
+
+- Identity suite: still 38/38.
+- P2a / P2b / P2c / P2d suites: unchanged (no server-side behaviour
+  changed in P2b-mig — just migration sources + registry).
+- `PostgresMigrations.test.ts` grows from 4 → 5 cases (adds the
+  "upstream ports are ids 2-26" assertion).
+- `Postgres.test.ts` unchanged at 5 + 1 `.todo`.
+- Targeted server run (`bun run --cwd apps/server vitest run
+--reporter=dot src/identity src/config src/serverMode.test.ts
+src/persistence/PostgresMigrations.test.ts
+src/persistence/Layers/Postgres.test.ts`) is now **63 pass + 1 todo**
+  (62 before + 1 new).

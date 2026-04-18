@@ -2,12 +2,50 @@ import { describe, expect, it } from "vitest";
 
 import { makePostgresMigrationLoader, postgresMigrationEntries } from "./PostgresMigrations.ts";
 
+// Name of every SQLite upstream migration, in id order. The Postgres
+// ports are `SQLite_N + 1` because `V3IdentityBaseline` claims id 1.
+const UPSTREAM_PORT_NAMES = [
+  "OrchestrationEvents",
+  "OrchestrationCommandReceipts",
+  "CheckpointDiffBlobs",
+  "ProviderSessionRuntime",
+  "Projections",
+  "ProjectionThreadSessionRuntimeModeColumns",
+  "ProjectionThreadMessageAttachments",
+  "ProjectionThreadActivitySequence",
+  "ProviderSessionRuntimeMode",
+  "ProjectionThreadsRuntimeMode",
+  "OrchestrationThreadCreatedRuntimeMode",
+  "ProjectionThreadsInteractionMode",
+  "ProjectionThreadProposedPlans",
+  "ProjectionThreadProposedPlanImplementation",
+  "ProjectionTurnsSourceProposedPlan",
+  "CanonicalizeModelSelections",
+  "ProjectionThreadsArchivedAt",
+  "ProjectionThreadsArchivedAtIndex",
+  "ProjectionSnapshotLookupIndexes",
+  "AuthAccessManagement",
+  "AuthSessionClientMetadata",
+  "AuthSessionLastConnectedAt",
+  "ProjectionThreadShellSummary",
+  "BackfillProjectionThreadShellSummary",
+  "CleanupInvalidProjectionPendingApprovals",
+] as const;
+
 describe("PostgresMigrations", () => {
   it("registers the V3 identity baseline as migration 001", () => {
-    expect(postgresMigrationEntries).toHaveLength(1);
     const [firstId, firstName] = postgresMigrationEntries[0]!;
     expect(firstId).toBe(1);
     expect(firstName).toBe("V3IdentityBaseline");
+  });
+
+  it("registers the 25 upstream-port migrations as ids 2-26 after P2b-mig", () => {
+    expect(postgresMigrationEntries).toHaveLength(1 + UPSTREAM_PORT_NAMES.length);
+    for (let index = 0; index < UPSTREAM_PORT_NAMES.length; index += 1) {
+      const [id, name] = postgresMigrationEntries[index + 1]!;
+      expect(id).toBe(index + 2);
+      expect(name).toBe(UPSTREAM_PORT_NAMES[index]);
+    }
   });
 
   it("produces a monotonically-increasing id sequence with no duplicates", () => {
