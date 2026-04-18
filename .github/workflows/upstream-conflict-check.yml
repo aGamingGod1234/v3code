@@ -1,0 +1,163 @@
+name: Upstream Conflict Check
+
+# Dry-rebase against the latest tagged release of pingdotgg/t3code and report
+# conflicts as a tracking issue without touching any branches. Runs weekly so
+# the monthly upstream-sync PR author always has an up-to-date conflict forecast.
+# Also runnable on demand via workflow_dispatch.
+
+on:
+  schedule:
+    - cron: "0 10 * * 1" # Mondays 10:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  UPSTREAM_REPO: pingdotgg/t3code
+  ISSUE_TITLE_PREFIX: "Upstream sync forecast"
+
+jobs:
+  dry-rebase:
+    name: Dry-rebase against latest upstream tag
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - name: Checkout V3 main with full history
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Configure upstream remote
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --tags upstream
+
+      - name: Resolve latest upstream tag
+        id: resolve-tag
+        run: |
+          latest=$(git -c 'versionsort.suffix=-' ls-remote --refs --tags --sort='-v:refname' upstream \
+            | awk '{print $2}' | sed 's#refs/tags/##' | head -n1)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream tag: $latest"
+
+      - name: Configure git identity
+        run: |
+          git config user.email "v3-bot@users.noreply.github.com"
+          git config user.name "V3 Upstream Bot"
+
+      - name: Run dry-rebase helper
+        id: dry-rebase
+        continue-on-error: true
+        run: |
+          set +e
+          bun run scripts/upstream-rebase.ts dry-run-rebase \
+            "refs/tags/${{ steps.resolve-tag.outputs.latest }}" \
+            --base main 2>&1 | tee dry-rebase.log
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Find or create tracking issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("node:fs");
+            const tag = "${{ steps.resolve-tag.outputs.latest }}";
+            const prefix = "${{ env.ISSUE_TITLE_PREFIX }}";
+            const title = `${prefix}: ${tag}`;
+            const log = fs.readFileSync("dry-rebase.log", "utf8");
+            const ran = new Date().toISOString();
+
+            const body = [
+              `Last run: ${ran}`,
+              `Upstream tag: \`${tag}\``,
+              ``,
+              `<details><summary>dry-rebase log</summary>`,
+              ``,
+              "```",
+              log.slice(-6000),
+              "```",
+              ``,
+              `</details>`,
+              ``,
+              `_This issue is maintained automatically by \`.github/workflows/upstream-conflict-check.yml\`. Do not edit manually._`,
+            ].join("\n");
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "upstream-sync",
+              per_page: 50,
+            });
+            const existing = issues.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+              core.info(`Updated issue #${existing.number}`);
+            } else {
+              const { data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["upstream-sync"],
+              });
+              core.info(`Created issue #${created.number}`);
+            }
+
+  mesh-changes-freshness:
+    name: MESH_CHANGES.md freshness check
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Enforce MESH_CHANGES.md updates
+        run: |
+          if [ ! -f .docs/MESH_CHANGES.md ]; then
+            echo "Missing .docs/MESH_CHANGES.md"
+            exit 1
+          fi
+          # Check that any modified upstream-inherited file in the PR has a corresponding
+          # MESH_CHANGES.md entry bumped. The list of tracked upstream files is extracted
+          # from the "Known-risk files" section of MESH_CHANGES.md.
+          tracked_files=$(awk '/^- `/{gsub(/`/,"");print $2}' .docs/MESH_CHANGES.md | head -200)
+          changed=$(git diff --name-only origin/main...HEAD)
+          missing=""
+          for f in $changed; do
+            if echo "$tracked_files" | grep -Fxq "$f"; then
+              # file is tracked; require that MESH_CHANGES.md was also modified
+              if ! echo "$changed" | grep -Fxq ".docs/MESH_CHANGES.md"; then
+                missing="$missing\n$f"
+              fi
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "The following tracked upstream files were modified without updating .docs/MESH_CHANGES.md:"
+            echo -e "$missing"
+            echo ""
+            echo "Add or bump the corresponding entry in .docs/MESH_CHANGES.md."
+            exit 1
+          fi
