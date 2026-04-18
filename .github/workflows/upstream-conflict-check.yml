@@ -58,16 +58,31 @@ jobs:
           git config user.email "v3-bot@users.noreply.github.com"
           git config user.name "V3 Upstream Bot"
 
-      - name: Run dry-rebase helper
+      - name: Run dry-rebase inline
         id: dry-rebase
         continue-on-error: true
         run: |
           set +e
-          bun run scripts/upstream-rebase.ts dry-run-rebase \
-            "refs/tags/${{ steps.resolve-tag.outputs.latest }}" \
-            --base main 2>&1 | tee dry-rebase.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
+          tag="${{ steps.resolve-tag.outputs.latest }}"
+          branch="v3/upstream-dry-run/${GITHUB_RUN_ID}"
+          {
+            echo "Creating ephemeral branch ${branch} from main"
+            git checkout -b "${branch}" main
+            echo "Rebasing onto refs/tags/${tag}..."
+            if git rebase "refs/tags/${tag}"; then
+              echo "Clean rebase."
+              status=0
+            else
+              echo "Conflicts detected:"
+              git diff --name-only --diff-filter=U
+              git rebase --abort || true
+              status=1
+            fi
+            echo "Cleaning up ephemeral branch ${branch}"
+            git checkout main || true
+            git branch -D "${branch}" || true
+          } 2>&1 | tee dry-rebase.log
+          echo "status=${status:-0}" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Find or create tracking issue

@@ -1,21 +1,18 @@
 #!/usr/bin/env node
 
-// V3 upstream-rebase helper.
+// V3 upstream-rebase helper — namespace rename codemod.
 //
-// Two subcommands:
-//   rename-v3        : one-shot codemod. Applies the V3 namespace renames listed in
-//                      RENAME_MAPPINGS below. Runs on first fork bootstrap (Phase 0)
-//                      and again on every upstream integration to re-apply renames
-//                      to incoming upstream changes before merging.
-//   dry-run-rebase   : checks out a throwaway ref and attempts a rebase onto the
-//                      latest upstream tag. Reports conflicts without touching HEAD.
-//                      Used by .github/workflows/upstream-conflict-check.yml.
+// Applies the V3 namespace renames listed in RENAME_MAPPINGS below. Runs on the
+// first fork bootstrap (Phase 0) and again on every upstream integration to
+// re-apply renames to incoming upstream changes before merging.
+//
+// The "dry-run rebase against upstream" conflict-check is done directly in bash
+// inside .github/workflows/upstream-conflict-check.yml — no TS wrapper needed.
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Console, Effect, FileSystem, Path } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
-import { ChildProcess } from "effect/unstable/process";
+import { Command, Flag } from "effect/unstable/cli";
 
 // ---------------------------------------------------------------------------
 // Rename mappings
@@ -46,10 +43,10 @@ const EXCLUDED_PATHS: ReadonlyArray<RegExp> = [
   /\/dist\//,
   /\/\.turbo\//,
   /\/dist-electron\//,
-  /\/\.docs\/MESH_CHANGES\.md$/, // documents the mappings, keep literal
-  /\/\.docs\/v3-master-plan\.md$/, // discusses both namespaces in context
-  /\/V3_CODE_SPEC\.md$/, // spec file is canonical, do not rewrite
-  /\/scripts\/upstream-rebase\.ts$/, // this script itself
+  /\/\.docs\/MESH_CHANGES\.md$/,
+  /\/\.docs\/v3-master-plan\.md$/,
+  /\/V3_CODE_SPEC\.md$/,
+  /\/scripts\/upstream-rebase\.ts$/,
 ];
 
 const TEXT_EXTENSIONS = new Set([
@@ -119,8 +116,7 @@ const applyRenamesToFile = Effect.fn("applyRenamesToFile")(function* (filePath: 
     const before = updated;
     updated = updated.split(mapping.from).join(mapping.to);
     if (updated !== before) {
-      const count = before.split(mapping.from).length - 1;
-      replacements += count;
+      replacements += before.split(mapping.from).length - 1;
     }
   }
   if (updated !== original) {
@@ -134,13 +130,12 @@ const runRename = Effect.fn("runRename")(function* (options: {
   readonly rootDir: string;
   readonly dryRun: boolean;
 }) {
+  const fs = yield* FileSystem.FileSystem;
   const files = yield* walkTextFiles(options.rootDir);
   const stats: RenameStats = { filesScanned: 0, filesChanged: 0, totalReplacements: 0 };
-
   for (const file of files) {
     stats.filesScanned += 1;
     if (options.dryRun) {
-      const fs = yield* FileSystem.FileSystem;
       const content = yield* fs.readFileString(file);
       let replacements = 0;
       for (const mapping of RENAME_MAPPINGS) {
@@ -160,7 +155,6 @@ const runRename = Effect.fn("runRename")(function* (options: {
       }
     }
   }
-
   yield* Console.log("");
   yield* Console.log(
     `Scanned ${stats.filesScanned} files. Changed ${stats.filesChanged}. Total replacements: ${stats.totalReplacements}.`,
@@ -168,40 +162,6 @@ const runRename = Effect.fn("runRename")(function* (options: {
   if (options.dryRun) {
     yield* Console.log("(dry-run: no files modified)");
   }
-});
-
-// ---------------------------------------------------------------------------
-// dry-run-rebase
-// ---------------------------------------------------------------------------
-
-const runDryRebase = Effect.fn("runDryRebase")(function* (options: {
-  readonly upstreamRef: string;
-  readonly baseBranch: string;
-}) {
-  const cp = yield* ChildProcess.ChildProcess;
-  const ephemeralBranch = `v3/upstream-dry-run/${Date.now()}`;
-
-  yield* Console.log(`Creating ephemeral branch ${ephemeralBranch} from ${options.baseBranch}`);
-  yield* cp.spawn("git", ["checkout", "-b", ephemeralBranch, options.baseBranch]);
-
-  yield* Console.log(`Rebasing onto ${options.upstreamRef}...`);
-  const rebaseResult = yield* cp.spawn("git", ["rebase", options.upstreamRef]).pipe(Effect.either);
-
-  if (rebaseResult._tag === "Right") {
-    yield* Console.log("Clean rebase.");
-  } else {
-    yield* Console.log("Conflicts detected:");
-    const diag = yield* cp
-      .spawn("git", ["diff", "--name-only", "--diff-filter=U"])
-      .pipe(Effect.orElseSucceed(() => ""));
-    yield* Console.log(diag);
-    // Clean up
-    yield* cp.spawn("git", ["rebase", "--abort"]).pipe(Effect.ignore);
-  }
-
-  yield* Console.log(`Cleaning up ephemeral branch ${ephemeralBranch}`);
-  yield* cp.spawn("git", ["checkout", options.baseBranch]).pipe(Effect.ignore);
-  yield* cp.spawn("git", ["branch", "-D", ephemeralBranch]).pipe(Effect.ignore);
 });
 
 // ---------------------------------------------------------------------------
@@ -217,39 +177,18 @@ const dryFlag = Flag.boolean("dry").pipe(
   Flag.withDefault(false),
 );
 
-const renameCommand = Command.make("rename-v3", {
+const renameCommand = Command.make("upstream-rebase", {
   root: rootFlag,
   dry: dryFlag,
 }).pipe(
   Command.withDescription("Apply V3 namespace renames to text files in the repo"),
-  Command.withHandler((args) => runRename({ rootDir: args.root, dryRun: args.dry })),
-);
-
-const upstreamRefArg = Argument.string("upstreamRef");
-const baseBranchFlag = Flag.string("base").pipe(
-  Flag.withDescription("Base branch to rebase (defaults to main)"),
-  Flag.withDefault("main"),
-);
-
-const dryRebaseCommand = Command.make("dry-run-rebase", {
-  upstreamRef: upstreamRefArg,
-  base: baseBranchFlag,
-}).pipe(
-  Command.withDescription(
-    "Attempt an ephemeral rebase onto upstream and report conflicts without touching HEAD",
-  ),
   Command.withHandler((args) =>
-    runDryRebase({ upstreamRef: args.upstreamRef, baseBranch: args.base }),
+    runRename({ rootDir: args.root, dryRun: args.dry }).pipe(Effect.provide(NodeServices.layer)),
   ),
-);
-
-const root = Command.make("upstream-rebase", {}).pipe(
-  Command.withDescription("V3 upstream-rebase helper (rename codemod + dry-run rebase)"),
-  Command.withSubcommands([renameCommand, dryRebaseCommand]),
 );
 
 if (import.meta.main) {
-  Command.run(root, { version: "0.0.1" }).pipe(
+  Command.run(renameCommand, { version: "0.0.1" }).pipe(
     Effect.provide(NodeServices.layer),
     NodeRuntime.runMain,
   );
