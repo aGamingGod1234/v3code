@@ -2,7 +2,7 @@ import type {
   GitStatusLocalResult,
   GitStatusRemoteResult,
   GitStatusStreamEvent,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./wsTransport", () => ({

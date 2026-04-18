@@ -6,7 +6,7 @@ import type {
   GitStatusLocalResult,
   GitStatusResult,
   GitStatusStreamEvent,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 
 export interface GitStatusBroadcasterShape {
   readonly getStatus: (

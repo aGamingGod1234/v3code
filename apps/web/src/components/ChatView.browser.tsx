@@ -16,8 +16,8 @@ import {
   WS_METHODS,
   OrchestrationSessionStatus,
   DEFAULT_SERVER_SETTINGS,
-} from "@t3tools/contracts";
-import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
+} from "@v3tools/contracts";
+import { scopedThreadKey, scopeThreadRef } from "@v3tools/client-runtime";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { HttpResponse, http, ws } from "msw";
 import { setupWorker } from "msw/browser";
@@ -54,7 +54,7 @@ import { useUiStateStore } from "../uiStateStore";
 import { createAuthenticatedSessionHandlers } from "../../test/authHttpHandlers";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 
-import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { DEFAULT_CLIENT_SETTINGS } from "@v3tools/contracts/settings";
 
 vi.mock("../lib/gitStatusState", () => ({
   useGitStatus: () => ({ data: null, error: null, cause: null, isPending: false }),
@@ -180,7 +180,7 @@ function createBaseServerConfig(): ServerConfig {
     ],
     availableEditors: [],
     observability: {
-      logsDirectoryPath: "/repo/project/.t3/logs",
+      logsDirectoryPath: "/repo/project/.v3code/logs",
       localTracingEnabled: true,
       otlpTracesEnabled: false,
       otlpMetricsEnabled: false,
@@ -1789,10 +1789,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
             cwd: "/repo/project",
             worktreePath: null,
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
+              V3CODE_PROJECT_ROOT: "/repo/project",
             },
           });
-          expect(openRequest?.env?.T3CODE_WORKTREE_PATH).toBeUndefined();
+          expect(openRequest?.env?.V3CODE_WORKTREE_PATH).toBeUndefined();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -2106,7 +2106,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/project",
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
+              V3CODE_PROJECT_ROOT: "/repo/project",
             },
           });
         },
@@ -2185,8 +2185,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
             threadId: THREAD_ID,
             cwd: "/repo/worktrees/feature-draft",
             env: {
-              T3CODE_PROJECT_ROOT: "/repo/project",
-              T3CODE_WORKTREE_PATH: "/repo/worktrees/feature-draft",
+              V3CODE_PROJECT_ROOT: "/repo/project",
+              V3CODE_WORKTREE_PATH: "/repo/worktrees/feature-draft",
             },
           });
         },
@@ -3685,7 +3685,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           thread.id === THREAD_ID
             ? Object.assign({}, thread, {
                 branch: "feature/existing",
-                worktreePath: "/repo/.t3/worktrees/existing",
+                worktreePath: "/repo/.v3code/worktrees/existing",
               })
             : thread,
         ),

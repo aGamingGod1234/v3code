@@ -6,10 +6,10 @@ import type {
   ServerProviderSlashCommand,
   ServerProviderModel,
   ServerProviderState,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { normalizeModelSlug } from "@t3tools/shared/model";
+import { normalizeModelSlug } from "@v3tools/shared/model";
 import { isWindowsCommandNotFound } from "../processRunner.ts";
 
 export const DEFAULT_TIMEOUT_MS = 4_000;

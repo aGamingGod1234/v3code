@@ -1,6 +1,6 @@
 import { Cause, Exit, Result, Schema } from "effect";
-import { PositiveInt, TrimmedNonEmptyString } from "@t3tools/contracts";
-import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson";
+import { PositiveInt, TrimmedNonEmptyString } from "@v3tools/contracts";
+import { decodeJsonResult, formatSchemaError } from "@v3tools/shared/schemaJson";
 
 export interface NormalizedGitHubPullRequestRecord {
   readonly number: number;

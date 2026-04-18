@@ -11,7 +11,7 @@ import type {
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Context } from "effect";
 import type { Effect } from "effect";
 

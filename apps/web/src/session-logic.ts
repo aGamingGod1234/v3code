@@ -11,7 +11,7 @@ import {
   type UserInputQuestion,
   type ThreadId,
   type TurnId,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 
 import type {
   ChatMessage,

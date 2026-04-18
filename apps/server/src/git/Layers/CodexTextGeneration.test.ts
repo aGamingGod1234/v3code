@@ -5,7 +5,7 @@ import { expect } from "vitest";
 
 import { ServerConfig } from "../../config.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
-import { TextGenerationError } from "@t3tools/contracts";
+import { TextGenerationError } from "@v3tools/contracts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 
@@ -136,9 +136,9 @@ function makeFakeCodexBinary(
           ? [`printf "%s\\n" ${JSON.stringify(input.stderr)} >&2`]
           : []),
         'if [ -n "$output_path" ]; then',
-        "  cat > \"$output_path\" <<'__T3CODE_FAKE_CODEX_OUTPUT__'",
+        "  cat > \"$output_path\" <<'__V3CODE_FAKE_CODEX_OUTPUT__'",
         input.output,
-        "__T3CODE_FAKE_CODEX_OUTPUT__",
+        "__V3CODE_FAKE_CODEX_OUTPUT__",
         "fi",
         `exit ${input.exitCode ?? 0}`,
         "",

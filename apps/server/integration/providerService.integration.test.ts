@@ -1,6 +1,6 @@
-import type { ProviderRuntimeEvent } from "@t3tools/contracts";
-import { ThreadId } from "@t3tools/contracts";
-import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts/settings";
+import type { ProviderRuntimeEvent } from "@v3tools/contracts";
+import { ThreadId } from "@v3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS } from "@v3tools/contracts/settings";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Queue, Stream } from "effect";

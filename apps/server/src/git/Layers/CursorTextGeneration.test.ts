@@ -8,7 +8,7 @@ import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { expect } from "vitest";
 
-import { ServerSettingsError } from "@t3tools/contracts";
+import { ServerSettingsError } from "@v3tools/contracts";
 
 import { ServerConfig } from "../../config.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";

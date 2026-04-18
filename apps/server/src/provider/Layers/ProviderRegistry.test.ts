@@ -18,10 +18,10 @@ import {
   ServerSettings,
   type ServerProvider,
   type ServerSettings as ContractServerSettings,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import * as PlatformError from "effect/PlatformError";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { deepMerge } from "@t3tools/shared/Struct";
+import { deepMerge } from "@v3tools/shared/Struct";
 
 import {
   checkCodexProviderStatus,
@@ -40,7 +40,7 @@ import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings.ts";
 import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
 
-process.env.T3CODE_CURSOR_ENABLED = "1";
+process.env.V3CODE_CURSOR_ENABLED = "1";
 
 // ── Test helpers ────────────────────────────────────────────────────
 

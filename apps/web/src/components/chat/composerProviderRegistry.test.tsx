@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ServerProviderModel } from "@t3tools/contracts";
+import type { ServerProviderModel } from "@v3tools/contracts";
 import {
   getComposerProviderControls,
   getComposerProviderState,

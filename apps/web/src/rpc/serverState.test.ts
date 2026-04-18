@@ -7,7 +7,7 @@ import {
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
   type ServerProvider,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

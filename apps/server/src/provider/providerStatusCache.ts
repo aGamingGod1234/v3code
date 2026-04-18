@@ -1,5 +1,5 @@
 import * as nodePath from "node:path";
-import { type ServerProvider, ServerProvider as ServerProviderSchema } from "@t3tools/contracts";
+import { type ServerProvider, ServerProvider as ServerProviderSchema } from "@v3tools/contracts";
 import { Cause, Effect, FileSystem, Path, Schema } from "effect";
 
 export const PROVIDER_CACHE_IDS = [

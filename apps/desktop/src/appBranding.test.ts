@@ -39,7 +39,7 @@ describe("resolveDesktopAppBranding", () => {
         appVersion: "0.0.17-nightly.20260414.1",
       }),
     ).toEqual({
-      baseName: "T3 Code",
+      baseName: "V3 Code",
       stageLabel: "Nightly",
       displayName: "T3 Code (Nightly)",
     });

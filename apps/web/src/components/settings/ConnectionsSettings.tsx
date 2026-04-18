@@ -5,7 +5,7 @@ import {
   type AuthPairingLink,
   type DesktopServerExposureState,
   type EnvironmentId,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { DateTime } from "effect";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";

@@ -7,7 +7,7 @@ import {
   type ProviderModelOptions,
   type ScopedThreadRef,
   type ServerProviderModel,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import {
   applyClaudePromptEffortPrefix,
   isClaudeUltrathinkPrompt,
@@ -16,7 +16,7 @@ import {
   getDefaultContextWindow,
   hasContextWindowOption,
   resolveEffort,
-} from "@t3tools/shared/model";
+} from "@v3tools/shared/model";
 import { memo, useCallback, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { ChevronDownIcon } from "lucide-react";

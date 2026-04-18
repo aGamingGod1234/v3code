@@ -5,7 +5,7 @@ import type {
   GitStatusRemoteResult,
   GitStatusResult,
   GitStatusStreamEvent,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Random from "effect/Random";
 

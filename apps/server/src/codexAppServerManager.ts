@@ -17,8 +17,8 @@ import {
   type ProviderTurnStartResult,
   RuntimeMode,
   ProviderInteractionMode,
-} from "@t3tools/contracts";
-import { normalizeModelSlug } from "@t3tools/shared/model";
+} from "@v3tools/contracts";
+import { normalizeModelSlug } from "@v3tools/shared/model";
 import { Effect, Context } from "effect";
 
 import {

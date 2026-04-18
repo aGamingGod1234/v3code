@@ -1,4 +1,4 @@
-import type { OpenCodeSettings, ServerProvider } from "@t3tools/contracts";
+import type { OpenCodeSettings, ServerProvider } from "@v3tools/contracts";
 import { Cause, Effect, Equal, Layer, Stream } from "effect";
 
 import { ServerConfig } from "../../config.ts";

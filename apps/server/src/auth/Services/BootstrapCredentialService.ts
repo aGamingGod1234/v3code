@@ -1,4 +1,4 @@
-import type { AuthPairingLink, ServerAuthBootstrapMethod } from "@t3tools/contracts";
+import type { AuthPairingLink, ServerAuthBootstrapMethod } from "@v3tools/contracts";
 import { Data, DateTime, Duration, Context } from "effect";
 import type { Effect, Stream } from "effect";
 

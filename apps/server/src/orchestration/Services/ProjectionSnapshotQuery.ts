@@ -16,7 +16,7 @@ import type {
   OrchestrationThreadShell,
   ProjectId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Context } from "effect";
 import type { Option } from "effect";
 import type { Effect } from "effect";

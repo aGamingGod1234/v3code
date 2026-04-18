@@ -6,7 +6,7 @@
  *
  * @module ProjectionStateRepository
  */
-import { IsoDateTime, NonNegativeInt } from "@t3tools/contracts";
+import { IsoDateTime, NonNegativeInt } from "@v3tools/contracts";
 import { Option, Schema, Context } from "effect";
 import type { Effect } from "effect";
 

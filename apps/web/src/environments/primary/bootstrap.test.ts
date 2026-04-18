@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@v3tools/contracts";
 
 import {
   getPrimaryKnownEnvironment,

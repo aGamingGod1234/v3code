@@ -14,10 +14,10 @@ import { randomUUID } from "node:crypto";
 import { Effect, Layer, FileSystem, Path } from "effect";
 
 import { CheckpointInvariantError } from "../Errors.ts";
-import { GitCommandError } from "@t3tools/contracts";
+import { GitCommandError } from "@v3tools/contracts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
-import { CheckpointRef } from "@t3tools/contracts";
+import { CheckpointRef } from "@v3tools/contracts";
 
 const CHECKPOINT_DIFF_MAX_OUTPUT_BYTES = 10_000_000;
 
@@ -100,9 +100,9 @@ const makeCheckpointStore = Effect.gen(function* () {
         const commitEnv: NodeJS.ProcessEnv = {
           ...process.env,
           GIT_INDEX_FILE: tempIndexPath,
-          GIT_AUTHOR_NAME: "T3 Code",
+          GIT_AUTHOR_NAME: "V3 Code",
           GIT_AUTHOR_EMAIL: "t3code@users.noreply.github.com",
-          GIT_COMMITTER_NAME: "T3 Code",
+          GIT_COMMITTER_NAME: "V3 Code",
           GIT_COMMITTER_EMAIL: "t3code@users.noreply.github.com",
         };
 

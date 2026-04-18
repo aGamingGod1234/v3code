@@ -8,8 +8,8 @@ import {
   ORCHESTRATION_WS_METHODS,
   type ServerSettingsPatch,
   WS_METHODS,
-} from "@t3tools/contracts";
-import { applyGitStatusStreamEvent } from "@t3tools/shared/git";
+} from "@v3tools/contracts";
+import { applyGitStatusStreamEvent } from "@v3tools/shared/git";
 import { Effect, Stream } from "effect";
 
 import { type WsRpcProtocolClient } from "./protocol";

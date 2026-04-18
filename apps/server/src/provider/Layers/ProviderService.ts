@@ -21,7 +21,7 @@ import {
   ProviderStopSessionInput,
   type ProviderRuntimeEvent,
   type ProviderSession,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Effect, Layer, Option, PubSub, Schema, SchemaIssue, Stream } from "effect";
 
 import {

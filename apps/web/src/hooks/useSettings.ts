@@ -10,16 +10,16 @@
  * store.
  */
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { ServerSettings, ServerSettingsPatch } from "@t3tools/contracts";
+import { ServerSettings, ServerSettingsPatch } from "@v3tools/contracts";
 import {
   type ClientSettings,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_UNIFIED_SETTINGS,
   UnifiedSettings,
-} from "@t3tools/contracts/settings";
+} from "@v3tools/contracts/settings";
 import { ensureLocalApi } from "~/localApi";
 import { Struct } from "effect";
-import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
+import { applyServerSettingsPatch } from "@v3tools/shared/serverSettings";
 import { applySettingsUpdated, getServerConfig, useServerSettings } from "~/rpc/serverState";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";

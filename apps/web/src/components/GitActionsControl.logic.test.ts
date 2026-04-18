@@ -1,4 +1,4 @@
-import type { GitStatusResult } from "@t3tools/contracts";
+import type { GitStatusResult } from "@v3tools/contracts";
 import { assert, describe, it } from "vitest";
 import {
   buildGitActionProgressStages,

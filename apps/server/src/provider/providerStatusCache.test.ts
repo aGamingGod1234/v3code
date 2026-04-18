@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { ServerProvider } from "@t3tools/contracts";
+import type { ServerProvider } from "@v3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 

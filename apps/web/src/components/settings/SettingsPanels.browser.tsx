@@ -11,7 +11,7 @@ import {
   type DesktopUpdateState,
   type LocalApi,
   type ServerConfig,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { DateTime } from "effect";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -191,7 +191,7 @@ function createBaseServerConfig(): ServerConfig {
     providers: [],
     availableEditors: ["cursor"],
     observability: {
-      logsDirectoryPath: "/repo/project/.t3/logs",
+      logsDirectoryPath: "/repo/project/.v3code/logs",
       localTracingEnabled: true,
       otlpTracesUrl: "http://localhost:4318/v1/traces",
       otlpTracesEnabled: true,
@@ -442,7 +442,7 @@ describe("GeneralSettingsPanel observability", () => {
     await expect.element(page.getByText("Diagnostics")).toBeInTheDocument();
     await expect.element(page.getByText("Open logs folder")).toBeInTheDocument();
     await expect
-      .element(page.getByText("/repo/project/.t3/logs", { exact: true }))
+      .element(page.getByText("/repo/project/.v3code/logs", { exact: true }))
       .toBeInTheDocument();
     await expect
       .element(
@@ -699,7 +699,7 @@ describe("GeneralSettingsPanel observability", () => {
     const openLogsButton = page.getByText("Open logs folder");
     await openLogsButton.click();
 
-    expect(openInEditor).toHaveBeenCalledWith("/repo/project/.t3/logs", "cursor");
+    expect(openInEditor).toHaveBeenCalledWith("/repo/project/.v3code/logs", "cursor");
   });
 
   it("shows an OpenCode server URL field in provider settings", async () => {

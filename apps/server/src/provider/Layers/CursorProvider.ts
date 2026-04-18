@@ -11,7 +11,7 @@ import type {
   ServerProviderModel,
   ServerProviderState,
   ServerSettingsError,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import { Cause, Effect, Equal, Exit, Layer, Option, Result, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";

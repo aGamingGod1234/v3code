@@ -8,7 +8,7 @@ import type {
   ProviderSendTurnInput,
   ProviderSession,
   ProviderTurnStartResult,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import {
   ApprovalRequestId,
   EventId,
@@ -16,7 +16,7 @@ import {
   ProviderSessionStartInput,
   ThreadId,
   TurnId,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { it, assert, vi } from "@effect/vitest";
 
 import { Effect, Fiber, Layer, Metric, Option, PubSub, Ref, Stream } from "effect";

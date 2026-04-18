@@ -11,7 +11,7 @@ import {
   type ServerLifecycleWelcomePayload,
   type ThreadId,
   WS_METHODS,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { ws, http, HttpResponse } from "msw";
 import { setupWorker } from "msw/browser";
@@ -86,7 +86,7 @@ function createBaseServerConfig(): ServerConfig {
     ],
     availableEditors: [],
     observability: {
-      logsDirectoryPath: "/repo/project/.t3/logs",
+      logsDirectoryPath: "/repo/project/.v3code/logs",
       localTracingEnabled: true,
       otlpTracesEnabled: false,
       otlpMetricsEnabled: false,

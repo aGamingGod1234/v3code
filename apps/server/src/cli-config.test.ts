@@ -3,7 +3,7 @@ import os from "node:os";
 import { assert, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer, Option, Path } from "effect";
 
-import { NetService } from "@t3tools/shared/Net";
+import { NetService } from "@v3tools/shared/Net";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { deriveServerPaths } from "./config.ts";
 import { resolveServerConfig } from "./cli.ts";
@@ -54,15 +54,15 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_LOG_LEVEL: "Warn",
-                  T3CODE_MODE: "desktop",
-                  T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
-                  T3CODE_HOME: baseDir,
+                  V3CODE_LOG_LEVEL: "Warn",
+                  V3CODE_MODE: "desktop",
+                  V3CODE_PORT: "4001",
+                  V3CODE_HOST: "0.0.0.0",
+                  V3CODE_HOME: baseDir,
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
-                  T3CODE_NO_BROWSER: "true",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
-                  T3CODE_LOG_WS_EVENTS: "true",
+                  V3CODE_NO_BROWSER: "true",
+                  V3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
+                  V3CODE_LOG_WS_EVENTS: "true",
                 },
               }),
             ),
@@ -116,15 +116,15 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_LOG_LEVEL: "Warn",
-                  T3CODE_MODE: "desktop",
-                  T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
-                  T3CODE_HOME: join(os.tmpdir(), "ignored-base"),
+                  V3CODE_LOG_LEVEL: "Warn",
+                  V3CODE_MODE: "desktop",
+                  V3CODE_PORT: "4001",
+                  V3CODE_HOST: "0.0.0.0",
+                  V3CODE_HOME: join(os.tmpdir(), "ignored-base"),
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
-                  T3CODE_NO_BROWSER: "false",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
-                  T3CODE_LOG_WS_EVENTS: "false",
+                  V3CODE_NO_BROWSER: "false",
+                  V3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
+                  V3CODE_LOG_WS_EVENTS: "false",
                 },
               }),
             ),
@@ -184,10 +184,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_BOOTSTRAP_FD: String(fd),
-                  T3CODE_NO_BROWSER: "true",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
-                  T3CODE_LOG_WS_EVENTS: "true",
+                  V3CODE_BOOTSTRAP_FD: String(fd),
+                  V3CODE_NO_BROWSER: "true",
+                  V3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
+                  V3CODE_LOG_WS_EVENTS: "true",
                 },
               }),
             ),
@@ -254,7 +254,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_BOOTSTRAP_FD: String(fd),
+                  V3CODE_BOOTSTRAP_FD: String(fd),
                 },
               }),
             ),
@@ -369,12 +369,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_MODE: "web",
-                  T3CODE_BOOTSTRAP_FD: String(fd),
-                  T3CODE_HOME: baseDir,
-                  T3CODE_NO_BROWSER: "true",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
-                  T3CODE_LOG_WS_EVENTS: "true",
+                  V3CODE_MODE: "web",
+                  V3CODE_BOOTSTRAP_FD: String(fd),
+                  V3CODE_HOME: baseDir,
+                  V3CODE_NO_BROWSER: "true",
+                  V3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
+                  V3CODE_LOG_WS_EVENTS: "true",
                 },
               }),
             ),
@@ -496,8 +496,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_NO_BROWSER: "false",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
+                  V3CODE_NO_BROWSER: "false",
+                  V3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
                 },
               }),
             ),

@@ -3,7 +3,7 @@ import type {
   AuthClientSession,
   AuthPairingLink,
   AuthSessionId,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Data, DateTime, Duration, Effect, Context } from "effect";
 import type { SessionRole } from "./SessionCredentialService.ts";
 

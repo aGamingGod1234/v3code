@@ -17,8 +17,8 @@ import type {
   GitStatusLocalResult,
   GitStatusRemoteResult,
   GitStatusStreamEvent,
-} from "@t3tools/contracts";
-import { mergeGitStatusParts } from "@t3tools/shared/git";
+} from "@v3tools/contracts";
+import { mergeGitStatusParts } from "@v3tools/shared/git";
 
 import {
   GitStatusBroadcaster,

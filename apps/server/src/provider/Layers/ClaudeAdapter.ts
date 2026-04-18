@@ -19,7 +19,7 @@ import {
   type SDKUserMessage,
   type ModelUsage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { parseCliArgs } from "@t3tools/shared/cliArgs";
+import { parseCliArgs } from "@v3tools/shared/cliArgs";
 import {
   ApprovalRequestId,
   type CanonicalItemType,
@@ -41,8 +41,8 @@ import {
   TurnId,
   type UserInputQuestion,
   ClaudeAgentEffort,
-} from "@t3tools/contracts";
-import { applyClaudePromptEffortPrefix, resolveEffort, trimOrNull } from "@t3tools/shared/model";
+} from "@v3tools/contracts";
+import { applyClaudePromptEffortPrefix, resolveEffort, trimOrNull } from "@v3tools/shared/model";
 import {
   Cause,
   DateTime,

@@ -1,4 +1,4 @@
-import { EDITORS, EditorId, LocalApi } from "@t3tools/contracts";
+import { EDITORS, EditorId, LocalApi } from "@v3tools/contracts";
 import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "./hooks/useLocalStorage";
 import { useMemo } from "react";
 

@@ -38,9 +38,9 @@
   "devDependencies": {
     "@effect/language-service": "catalog:",
     "@effect/vitest": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/web": "workspace:*",
+    "@v3tools/contracts": "workspace:*",
+    "@v3tools/shared": "workspace:*",
+    "@v3tools/web": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "effect-acp": "workspace:*",

@@ -22,16 +22,16 @@ import {
   type GitStatusLocalResult,
   type GitStatusRemoteResult,
   ModelSelection,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import {
   detectGitHostingProviderFromRemoteUrl,
   mergeGitStatusParts,
   resolveAutoFeatureBranchName,
   sanitizeBranchFragment,
   sanitizeFeatureBranchName,
-} from "@t3tools/shared/git";
+} from "@v3tools/shared/git";
 
-import { GitManagerError } from "@t3tools/contracts";
+import { GitManagerError } from "@v3tools/contracts";
 import {
   GitManager,
   type GitActionProgressReporter,
@@ -45,7 +45,7 @@ import { TextGeneration } from "../Services/TextGeneration.ts";
 import { ProjectSetupScriptRunner } from "../../project/Services/ProjectSetupScriptRunner.ts";
 import { extractBranchNameFromRemoteRef } from "../remoteRefs.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import type { GitManagerServiceError } from "@t3tools/contracts";
+import type { GitManagerServiceError } from "@v3tools/contracts";
 import {
   decodeGitHubPullRequestListJson,
   formatGitHubJsonDecodeError,

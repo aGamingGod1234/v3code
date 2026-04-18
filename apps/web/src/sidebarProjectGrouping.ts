@@ -1,5 +1,5 @@
-import { scopeProjectRef } from "@t3tools/client-runtime";
-import type { EnvironmentId, ScopedProjectRef } from "@t3tools/contracts";
+import { scopeProjectRef } from "@v3tools/client-runtime";
+import type { EnvironmentId, ScopedProjectRef } from "@v3tools/contracts";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKey,

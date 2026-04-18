@@ -1,9 +1,9 @@
-import type { ServerProvider } from "@t3tools/contracts";
+import type { ServerProvider } from "@v3tools/contracts";
 import { Duration, Effect, Equal, Fiber, PubSub, Ref, Scope, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
 import type { ServerProviderShape } from "./Services/ServerProvider.ts";
-import { ServerSettingsError } from "@t3tools/contracts";
+import { ServerSettingsError } from "@v3tools/contracts";
 
 interface ProviderSnapshotState {
   readonly snapshot: ServerProvider;

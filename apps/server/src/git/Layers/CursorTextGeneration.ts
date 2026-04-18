@@ -1,10 +1,10 @@
 import { Effect, Layer, Option, Ref, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-import { CursorModelSelection } from "@t3tools/contracts";
-import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
+import { CursorModelSelection } from "@v3tools/contracts";
+import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@v3tools/shared/git";
 
-import { TextGenerationError } from "@t3tools/contracts";
+import { TextGenerationError } from "@v3tools/contracts";
 import {
   type ThreadTitleGenerationResult,
   type TextGenerationShape,

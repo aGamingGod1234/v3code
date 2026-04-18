@@ -30,12 +30,12 @@ import type {
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
   DesktopUpdateState,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { autoUpdater } from "electron-updater";
 
-import type { ContextMenuItem } from "@t3tools/contracts";
-import { RotatingFileSink } from "@t3tools/shared/logging";
-import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
+import type { ContextMenuItem } from "@v3tools/contracts";
+import { RotatingFileSink } from "@v3tools/shared/logging";
+import { parsePersistedServerObservabilitySettings } from "@v3tools/shared/serverSettings";
 import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backendPort.ts";
 import {
   DEFAULT_DESKTOP_SETTINGS,
@@ -101,7 +101,7 @@ const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secr
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
-const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
+const BASE_DIR = process.env.V3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
 const CLIENT_SETTINGS_PATH = Path.join(STATE_DIR, "client-settings.json");
@@ -289,13 +289,13 @@ function resolveDesktopDevServerUrl(): string {
 
 function backendChildEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
-  delete env.T3CODE_PORT;
-  delete env.T3CODE_MODE;
-  delete env.T3CODE_NO_BROWSER;
-  delete env.T3CODE_HOST;
-  delete env.T3CODE_DESKTOP_WS_URL;
-  delete env.T3CODE_DESKTOP_LAN_ACCESS;
-  delete env.T3CODE_DESKTOP_LAN_HOST;
+  delete env.V3CODE_PORT;
+  delete env.V3CODE_MODE;
+  delete env.V3CODE_NO_BROWSER;
+  delete env.V3CODE_HOST;
+  delete env.V3CODE_DESKTOP_WS_URL;
+  delete env.V3CODE_DESKTOP_LAN_ACCESS;
+  delete env.V3CODE_DESKTOP_LAN_HOST;
   return env;
 }
 
@@ -316,7 +316,7 @@ function getDesktopSecretStorage() {
 }
 
 function resolveAdvertisedHostOverride(): string | undefined {
-  const override = process.env.T3CODE_DESKTOP_LAN_HOST?.trim();
+  const override = process.env.V3CODE_DESKTOP_LAN_HOST?.trim();
   return override && override.length > 0 ? override : undefined;
 }
 
@@ -707,7 +707,7 @@ function resolveAboutCommitHash(): string | null {
     return aboutCommitHashCache;
   }
 
-  const envCommitHash = normalizeCommitHash(process.env.T3CODE_COMMIT_HASH);
+  const envCommitHash = normalizeCommitHash(process.env.V3CODE_COMMIT_HASH);
   if (envCommitHash) {
     aboutCommitHashCache = envCommitHash;
     return aboutCommitHashCache;
@@ -862,13 +862,13 @@ function dispatchMenuAction(action: string): void {
 
 function handleCheckForUpdatesMenuClick(): void {
   const hasUpdateFeedConfig =
-    readAppUpdateYml() !== null || Boolean(process.env.T3CODE_DESKTOP_MOCK_UPDATES);
+    readAppUpdateYml() !== null || Boolean(process.env.V3CODE_DESKTOP_MOCK_UPDATES);
   const disabledReason = getAutoUpdateDisabledReason({
     isDevelopment,
     isPackaged: app.isPackaged,
     platform: process.platform,
     appImage: process.env.APPIMAGE,
-    disabledByEnv: process.env.T3CODE_DISABLE_AUTO_UPDATE === "1",
+    disabledByEnv: process.env.V3CODE_DISABLE_AUTO_UPDATE === "1",
     hasUpdateFeedConfig,
   });
   if (disabledReason) {
@@ -1139,14 +1139,14 @@ function applyAutoUpdaterChannel(channel: DesktopUpdateChannel): void {
 
 function shouldEnableAutoUpdates(): boolean {
   const hasUpdateFeedConfig =
-    readAppUpdateYml() !== null || Boolean(process.env.T3CODE_DESKTOP_MOCK_UPDATES);
+    readAppUpdateYml() !== null || Boolean(process.env.V3CODE_DESKTOP_MOCK_UPDATES);
   return (
     getAutoUpdateDisabledReason({
       isDevelopment,
       isPackaged: app.isPackaged,
       platform: process.platform,
       appImage: process.env.APPIMAGE,
-      disabledByEnv: process.env.T3CODE_DISABLE_AUTO_UPDATE === "1",
+      disabledByEnv: process.env.V3CODE_DISABLE_AUTO_UPDATE === "1",
       hasUpdateFeedConfig,
     }) === null
   );
@@ -1232,7 +1232,7 @@ async function installDownloadedUpdate(): Promise<{ accepted: boolean; completed
 
 function configureAutoUpdater(): void {
   const githubToken =
-    process.env.T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim() || "";
+    process.env.V3CODE_DESKTOP_UPDATE_GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim() || "";
   if (githubToken) {
     // When a token is provided, re-configure the feed with `private: true` so
     // electron-updater uses the GitHub API (api.github.com) instead of the
@@ -1248,10 +1248,10 @@ function configureAutoUpdater(): void {
     }
   }
 
-  if (process.env.T3CODE_DESKTOP_MOCK_UPDATES) {
+  if (process.env.V3CODE_DESKTOP_MOCK_UPDATES) {
     autoUpdater.setFeedURL({
       provider: "generic",
-      url: `http://localhost:${process.env.T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT ?? 3000}`,
+      url: `http://localhost:${process.env.V3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT ?? 3000}`,
     });
   }
 
@@ -2034,9 +2034,9 @@ configureAppIdentity();
 
 async function bootstrap(): Promise<void> {
   writeDesktopLogHeader("bootstrap start");
-  const configuredBackendPort = resolveConfiguredDesktopBackendPort(process.env.T3CODE_PORT);
+  const configuredBackendPort = resolveConfiguredDesktopBackendPort(process.env.V3CODE_PORT);
   if (isDevelopment && configuredBackendPort === undefined) {
-    throw new Error("T3CODE_PORT is required in desktop development.");
+    throw new Error("V3CODE_PORT is required in desktop development.");
   }
 
   backendPort =

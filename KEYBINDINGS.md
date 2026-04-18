@@ -2,7 +2,7 @@
 
 T3 Code reads keybindings from:
 
-- `~/.t3/keybindings.json`
+- `~/.v3code/keybindings.json`
 
 The file must be a JSON array of rules:
 

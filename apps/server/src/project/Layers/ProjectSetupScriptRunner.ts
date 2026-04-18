@@ -1,4 +1,4 @@
-import { projectScriptRuntimeEnv, setupProjectScript } from "@t3tools/shared/projectScripts";
+import { projectScriptRuntimeEnv, setupProjectScript } from "@v3tools/shared/projectScripts";
 import { Effect, Layer } from "effect";
 
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";

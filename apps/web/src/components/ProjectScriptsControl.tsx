@@ -2,7 +2,7 @@ import type {
   ProjectScript,
   ProjectScriptIcon,
   ResolvedKeybindingsConfig,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import {
   BugIcon,
   ChevronDownIcon,

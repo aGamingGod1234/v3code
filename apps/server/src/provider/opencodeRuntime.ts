@@ -11,7 +11,7 @@ import type {
   ProviderApprovalDecision,
   RuntimeMode,
   ServerProviderModel,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import {
   createOpencodeClient,
   type Agent,

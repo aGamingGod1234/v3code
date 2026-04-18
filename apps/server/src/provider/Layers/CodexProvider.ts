@@ -7,7 +7,7 @@ import type {
   ServerProviderAuth,
   ServerProviderSkill,
   ServerProviderState,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import {
   Cache,
   Duration,
@@ -48,7 +48,7 @@ import {
 import { probeCodexDiscovery } from "../codexAppServer.ts";
 import { CodexProvider } from "../Services/CodexProvider.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { ServerSettingsError } from "@t3tools/contracts";
+import { ServerSettingsError } from "@v3tools/contracts";
 
 const DEFAULT_CODEX_MODEL_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [

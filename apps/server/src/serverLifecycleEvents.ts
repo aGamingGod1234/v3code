@@ -1,4 +1,4 @@
-import type { ServerLifecycleStreamEvent } from "@t3tools/contracts";
+import type { ServerLifecycleStreamEvent } from "@v3tools/contracts";
 import { Effect, Layer, PubSub, Ref, Context, Stream } from "effect";
 
 type LifecycleEventInput =

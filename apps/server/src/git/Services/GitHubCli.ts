@@ -9,7 +9,7 @@ import { Context } from "effect";
 import type { Effect } from "effect";
 
 import type { ProcessRunResult } from "../../processRunner.ts";
-import type { GitHubCliError } from "@t3tools/contracts";
+import type { GitHubCliError } from "@v3tools/contracts";
 
 export interface GitHubPullRequestSummary {
   readonly number: number;

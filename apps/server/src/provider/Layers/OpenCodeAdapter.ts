@@ -10,7 +10,7 @@ import {
   type ToolLifecycleItemType,
   TurnId,
   type UserInputQuestion,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Cause, Effect, Layer, Queue, Stream } from "effect";
 import type { OpencodeClient, Part, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2";
 

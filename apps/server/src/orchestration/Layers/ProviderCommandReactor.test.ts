@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type { ModelSelection, ProviderRuntimeEvent, ProviderSession } from "@t3tools/contracts";
+import type { ModelSelection, ProviderRuntimeEvent, ProviderSession } from "@v3tools/contracts";
 import {
   ApprovalRequestId,
   CommandId,
@@ -12,12 +12,12 @@ import {
   ProjectId,
   ThreadId,
   TurnId,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { deriveServerPaths, ServerConfig } from "../../config.ts";
-import { TextGenerationError } from "@t3tools/contracts";
+import { TextGenerationError } from "@v3tools/contracts";
 import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";

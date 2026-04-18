@@ -1,4 +1,4 @@
-import type { EnvironmentId, ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
+import type { EnvironmentId, ExecutionEnvironmentDescriptor } from "@v3tools/contracts";
 import { Context } from "effect";
 import type { Effect } from "effect";
 

@@ -3,7 +3,7 @@
 import { Toast } from "@base-ui/react/toast";
 import { useEffect, useMemo, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
-import { type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
+import { type ScopedThreadRef, type ThreadId } from "@v3tools/contracts";
 import {
   CheckIcon,
   CircleAlertIcon,

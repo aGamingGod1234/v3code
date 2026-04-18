@@ -6,7 +6,7 @@ import {
   EnvironmentId,
   type ClientSettings,
   type PersistedSavedEnvironmentRecord,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {

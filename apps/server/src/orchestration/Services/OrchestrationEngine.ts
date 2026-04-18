@@ -14,7 +14,7 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
-} from "@t3tools/contracts";
+} from "@v3tools/contracts";
 import { Context } from "effect";
 import type { Effect, Stream } from "effect";
 

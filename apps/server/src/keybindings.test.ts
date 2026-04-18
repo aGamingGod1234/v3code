@@ -1,4 +1,4 @@
-import { KeybindingCommand, KeybindingRule, KeybindingsConfig } from "@t3tools/contracts";
+import { KeybindingCommand, KeybindingRule, KeybindingsConfig } from "@v3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
@@ -14,7 +14,7 @@ import {
   compileResolvedKeybindingsConfig,
   parseKeybindingShortcut,
 } from "./keybindings.ts";
-import { KeybindingsConfigError } from "@t3tools/contracts";
+import { KeybindingsConfigError } from "@v3tools/contracts";
 
 const KeybindingsConfigJson = Schema.fromJsonString(KeybindingsConfig);
 const makeKeybindingsLayer = () => {
