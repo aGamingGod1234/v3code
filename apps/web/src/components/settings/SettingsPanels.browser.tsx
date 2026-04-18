@@ -328,6 +328,9 @@ const createDesktopBridgeStub = (overrides?: {
       .fn()
       .mockResolvedValue({ accepted: false, completed: false, state: idleUpdateState }),
     onUpdateState: () => () => {},
+    openV3GoogleSignIn: vi
+      .fn()
+      .mockResolvedValue({ idToken: "mock-id-token", accessToken: "mock-access-token" }),
   };
 };
 

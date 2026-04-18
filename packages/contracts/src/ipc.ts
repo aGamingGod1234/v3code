@@ -175,13 +175,18 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
-  // V3 (Phase 1d): drive Google sign-in via the system browser. Resolves
-  // with the `id_token` returned by Google's token endpoint after the user
-  // consents and the `v3://auth/google/callback` deep link fires. Rejects
-  // on cancellation, timeout, network failure, or a misconfigured client.
-  // The renderer is expected to forward `idToken` to the V3 server's
-  // /api/auth/google/bootstrap route together with this device's metadata.
-  openV3GoogleSignIn: (input: { clientId: string }) => Promise<{ idToken: string }>;
+  // V3 (Phase 1d + 2c): drive Google sign-in via the system browser.
+  // Resolves with the `id_token` (for /api/auth/google/bootstrap) and the
+  // short-lived `access_token` (for the Drive App Data client in
+  // `@v3tools/client-runtime`) returned by Google's token endpoint after
+  // the user consents and the `v3://auth/google/callback` deep link fires.
+  // The access token scope includes `drive.appdata` so the renderer can
+  // read/write the `v3_config.json` discovery blob in the user's per-app
+  // Drive folder. Rejects on cancellation, timeout, network failure, or
+  // a misconfigured client.
+  openV3GoogleSignIn: (input: {
+    clientId: string;
+  }) => Promise<{ idToken: string; accessToken: string }>;
 }
 
 /**

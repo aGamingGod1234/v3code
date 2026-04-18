@@ -2,10 +2,18 @@
 //
 // Renderer asks main to open the system browser at Google's consent
 // screen, capture the `v3://auth/google/callback?code=…` deep link that
-// fires after the user consents, exchange the code for an `id_token`, and
-// return that id_token to the renderer. The renderer then POSTs it to the
-// V3 server's /api/auth/google/bootstrap. See
+// fires after the user consents, exchange the code for an `id_token` +
+// `access_token`, and return both to the renderer. The renderer POSTs
+// the id_token to /api/auth/google/bootstrap and uses the access token
+// for Drive App Data (server-URL discovery per V3 spec §3.4). See
 // apps/web/src/v3/auth/googleSignIn.ts for the renderer half.
+//
+// Requested scopes:
+//   * openid + email + profile — standard identity scopes for JWT claims
+//   * drive.appdata — per-app hidden folder in the user's Drive, scoped
+//     only to V3's own blob. Adding this in P2c so sign-in prompts for
+//     consent once; users who decline get a graceful fallback at the
+//     call site (Drive client surfaces `unauthorized`).
 //
 // Why PKCE: this is an installed-app OAuth client. We cannot ship the
 // client secret in the desktop bundle, so PKCE (RFC 7636) is the only
@@ -23,11 +31,16 @@ const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const REDIRECT_URI = "v3://auth/google/callback";
 const FLOW_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes — generous for users who switch tabs.
 
+interface TokenExchangeResult {
+  readonly idToken: string;
+  readonly accessToken: string;
+}
+
 interface PendingFlow {
   readonly state: string;
   readonly codeVerifier: string;
   readonly clientId: string;
-  readonly resolve: (result: { readonly idToken: string } | null) => void;
+  readonly resolve: (result: TokenExchangeResult | null) => void;
   readonly reject: (error: Error) => void;
   readonly timeout: ReturnType<typeof setTimeout>;
 }
@@ -53,7 +66,7 @@ const buildAuthUrl = (input: {
     client_id: input.clientId,
     redirect_uri: REDIRECT_URI,
     response_type: "code",
-    scope: "openid email profile",
+    scope: "openid email profile https://www.googleapis.com/auth/drive.appdata",
     state: input.state,
     code_challenge: input.codeChallenge,
     code_challenge_method: "S256",
@@ -72,7 +85,7 @@ const cancelPending = (reason: string): void => {
 };
 
 export interface V3GoogleAuthFlow {
-  readonly start: (input: { readonly clientId: string }) => Promise<{ readonly idToken: string }>;
+  readonly start: (input: { readonly clientId: string }) => Promise<TokenExchangeResult>;
   readonly handleDeepLink: (url: string) => boolean;
   readonly cancel: () => void;
 }
@@ -86,11 +99,11 @@ export interface V3GoogleAuthFlowDeps {
 }
 
 export const createV3GoogleAuthFlow = (deps: V3GoogleAuthFlowDeps): V3GoogleAuthFlow => {
-  const exchangeCodeForIdToken = async (input: {
+  const exchangeCodeForTokens = async (input: {
     readonly code: string;
     readonly clientId: string;
     readonly codeVerifier: string;
-  }): Promise<string> => {
+  }): Promise<TokenExchangeResult> => {
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code: input.code,
@@ -107,11 +120,17 @@ export const createV3GoogleAuthFlow = (deps: V3GoogleAuthFlowDeps): V3GoogleAuth
       const text = await response.text().catch(() => "");
       throw new Error(`Google token exchange failed (${response.status}): ${text}`);
     }
-    const json = (await response.json()) as { id_token?: unknown };
+    const json = (await response.json()) as {
+      id_token?: unknown;
+      access_token?: unknown;
+    };
     if (typeof json.id_token !== "string" || json.id_token.length === 0) {
       throw new Error("Google token response did not include an id_token.");
     }
-    return json.id_token;
+    if (typeof json.access_token !== "string" || json.access_token.length === 0) {
+      throw new Error("Google token response did not include an access_token.");
+    }
+    return { idToken: json.id_token, accessToken: json.access_token };
   };
 
   const start: V3GoogleAuthFlow["start"] = async ({ clientId }) => {
@@ -124,7 +143,7 @@ export const createV3GoogleAuthFlow = (deps: V3GoogleAuthFlowDeps): V3GoogleAuth
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
 
-    const handoff = new Promise<{ readonly idToken: string } | null>((resolve, reject) => {
+    const handoff = new Promise<TokenExchangeResult | null>((resolve, reject) => {
       const timeout = setTimeout(() => {
         cancelPending("Google sign-in timed out.");
       }, FLOW_TIMEOUT_MS);
@@ -181,8 +200,8 @@ export const createV3GoogleAuthFlow = (deps: V3GoogleAuthFlowDeps): V3GoogleAuth
     pendingFlow = null;
     clearTimeout(flow.timeout);
 
-    exchangeCodeForIdToken({ code, clientId: flow.clientId, codeVerifier: flow.codeVerifier })
-      .then((idToken) => flow.resolve({ idToken }))
+    exchangeCodeForTokens({ code, clientId: flow.clientId, codeVerifier: flow.codeVerifier })
+      .then((tokens) => flow.resolve(tokens))
       .catch((cause) => flow.reject(cause instanceof Error ? cause : new Error(String(cause))));
     return true;
   };

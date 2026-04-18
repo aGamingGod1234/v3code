@@ -26,7 +26,10 @@ const setupFlow = (overrides?: {
         },
     fetch: async () => {
       tokenCalls += 1;
-      return overrides?.tokenResponse?.() ?? okJson({ id_token: "stubbed-id-token" });
+      return (
+        overrides?.tokenResponse?.() ??
+        okJson({ id_token: "stubbed-id-token", access_token: "stubbed-access-token" })
+      );
     },
   });
   return { flow, opened, getTokenCalls: () => tokenCalls };
@@ -41,7 +44,7 @@ const extractStateFrom = (opened: ReadonlyArray<OpenedRequest>): string => {
 };
 
 describe("V3GoogleAuthFlow", () => {
-  it("opens the system browser and resolves with the id_token after a matching callback", async () => {
+  it("opens the system browser and resolves with both tokens after a matching callback", async () => {
     const { flow, opened } = setupFlow();
     const startPromise = flow.start({ clientId: "test-client.apps.googleusercontent.com" });
     // Yield once so start() reaches the openExternal call and registers the pending flow.
@@ -49,7 +52,25 @@ describe("V3GoogleAuthFlow", () => {
     const state = extractStateFrom(opened);
     const consumed = flow.handleDeepLink(`v3://auth/google/callback?code=fake-code&state=${state}`);
     expect(consumed).toBe(true);
-    await expect(startPromise).resolves.toEqual({ idToken: "stubbed-id-token" });
+    await expect(startPromise).resolves.toEqual({
+      idToken: "stubbed-id-token",
+      accessToken: "stubbed-access-token",
+    });
+    const authUrl = new URL(opened[0]!.url);
+    const scope = authUrl.searchParams.get("scope") ?? "";
+    expect(scope).toContain("openid");
+    expect(scope).toContain("https://www.googleapis.com/auth/drive.appdata");
+  });
+
+  it("rejects when the token endpoint omits the access_token", async () => {
+    const { flow, opened } = setupFlow({
+      tokenResponse: () => okJson({ id_token: "only-id-token" }),
+    });
+    const startPromise = flow.start({ clientId: "test-client" });
+    await Promise.resolve();
+    const state = extractStateFrom(opened);
+    flow.handleDeepLink(`v3://auth/google/callback?code=fake&state=${state}`);
+    await expect(startPromise).rejects.toThrow(/access_token/);
   });
 
   it("rejects empty client ids without opening a browser", async () => {

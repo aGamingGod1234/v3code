@@ -3,11 +3,14 @@
 // Coordinates the full flow:
 //   1. Fetch the operator's GoogleClientPublicConfig from the local server.
 //   2. Hand the OAuth client id to the desktop bridge, which drives the
-//      external-browser PKCE dance and returns an `id_token`.
+//      external-browser PKCE dance and returns `{ idToken, accessToken }`.
 //   3. POST that id_token + this device's metadata to the V3 bootstrap
 //      route. The server sets the session cookie on this origin and
 //      returns user/device info.
-//   4. Persist non-sensitive sign-in state for the UI to read.
+//   4. Use the access_token to read the user's Drive App Data blob for
+//      cross-device server-URL discovery (P2c); snapshot the result to
+//      localStorage for P3 to render the "Configure server" banner.
+//   5. Persist non-sensitive sign-in state for the UI to read.
 //
 // The Electron half lives in `apps/desktop/src/v3GoogleAuthFlow.ts` and is
 // reached via `window.desktopBridge.openV3GoogleSignIn`. Browser-only
@@ -21,6 +24,7 @@ import { Schema } from "effect";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
 import { isElectron } from "../../env";
 import { resolveDeviceId } from "./deviceId";
+import { captureDriveAppDataSnapshot, type V3DriveAppDataSnapshot } from "./driveAppData";
 import { recordV3SignedIn, clearV3SignedIn, type V3SignInSnapshot } from "./signInState";
 
 const APP_VERSION_FALLBACK = "0.0.1-dev";
@@ -76,6 +80,12 @@ const resolveCapabilities = (): readonly DeviceCapability[] =>
 export interface V3SignInResult {
   readonly snapshot: V3SignInSnapshot & { readonly email: string };
   readonly needsApproval: boolean;
+  // `null` when sign-in did not reach the Drive capture step (e.g. the
+  // desktop bridge returned only an id_token in a legacy build). On every
+  // current code path, captureDriveAppDataSnapshot swallows its own
+  // errors and yields a tagged snapshot, so a sign-in reaching here with
+  // a non-null value reflects the last observed Drive state.
+  readonly driveSnapshot: V3DriveAppDataSnapshot | null;
 }
 
 export class V3SignInError extends Error {
@@ -163,6 +173,30 @@ export const startV3GoogleSignIn = async (): Promise<V3SignInResult> => {
     avatarUrl: decoded.user.avatarUrl,
     pendingApproval: decoded.needsApproval,
   });
+
+  // Drive App Data capture runs after the server has accepted the id
+  // token, so the user is definitely the account-holder we think they
+  // are. We deliberately do not await this before the sign-in state is
+  // recorded — captureDriveAppDataSnapshot swallows Drive errors so a
+  // failing snapshot never masks a successful bootstrap, but ordering
+  // the recordV3SignedIn call first means the top-right chip updates
+  // immediately while Drive work continues.
+  const driveSnapshot = await captureDriveAppDataSnapshot({
+    accessToken: handoff.accessToken,
+    thisDevice: {
+      device_id: deviceId,
+      name: deviceName,
+      added_at: new Date().toISOString(),
+    },
+  }).catch((cause: unknown) => {
+    // Defensive: captureDriveAppDataSnapshot already converts known
+    // Drive errors to tagged snapshots. Anything thrown here is an
+    // unexpected programming error — log it and continue with a null
+    // snapshot so the user still gets a working sign-in.
+    console.warn("[v3] Drive App Data capture failed unexpectedly", cause);
+    return null;
+  });
+
   return {
     snapshot: {
       email: decoded.user.email,
@@ -171,6 +205,7 @@ export const startV3GoogleSignIn = async (): Promise<V3SignInResult> => {
       pendingApproval: decoded.needsApproval,
     },
     needsApproval: decoded.needsApproval,
+    driveSnapshot,
   };
 };
 

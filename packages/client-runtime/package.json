@@ -15,7 +15,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@v3tools/contracts": "workspace:*"
+    "@v3tools/contracts": "workspace:*",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/language-service": "catalog:",

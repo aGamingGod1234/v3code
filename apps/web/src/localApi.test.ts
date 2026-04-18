@@ -185,6 +185,10 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     showContextMenu: async () => null,
     openExternal: async () => true,
     onMenuAction: () => () => undefined,
+    openV3GoogleSignIn: async () => ({
+      idToken: "mock-id-token",
+      accessToken: "mock-access-token",
+    }),
     getUpdateState: async () => {
       throw new Error("getUpdateState not implemented in test");
     },

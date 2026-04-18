@@ -461,3 +461,184 @@ migrations to Postgres is scoped as a later P2 slice.
 - P2a suite: still 16/16 (unchanged).
 - New P2b suite: +8 tests (5 `persistence/Layers/Postgres.test.ts` + 4 `persistence/PostgresMigrations.test.ts`) + 1 `.todo` placeholder.
 - Full targeted run: 62 pass + 1 todo across 11 files.
+
+### Phase 2c — Drive App Data client (renderer-side discovery)
+
+P2c wires the cross-device server-URL discovery path promised by spec
+§3.4: on Google sign-in the renderer now reads (and, when a server node
+is already advertised, appends itself to) a small `v3_config.json` blob
+in the user's per-app Drive `appDataFolder`. Everything is client-side
+— the V3 server never sees the Drive access token. The Electron PKCE
+flow is widened to request the `drive.appdata` scope and to surface the
+`access_token` to the renderer alongside the `id_token`.
+
+Per Lucas's P2c sub-decisions:
+
+- **Q2c-1 (scope timing)**: added `drive.appdata` to the existing
+  Google consent step so there is a single, narrow prompt. The scope
+  grants access only to V3's own Drive folder, not the user's files.
+- **Q2c-2 (quota behaviour)**: Drive failures (including quota
+  exhaustion) log and continue. The renderer caches the last good
+  snapshot in `localStorage.v3.drive-app-data-snapshot` and tags the
+  failure reason so P3 can surface a targeted remediation.
+
+Ground-rule carryovers from the continuation-prompt §5.4 that shape
+implementation:
+
+- Reads are unconditional; writes are gated on `server_url` already
+  being set. A first-time single-device sign-in never writes to Drive
+  — the server-node setup wizard (P2d) will seed the blob instead.
+- Device list entries are idempotent by `device_id`; duplicate
+  sign-ins from the same device do not re-trigger writes.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `packages/client-runtime/src/drive/schema.ts` — Effect `Schema.Struct`
+  definitions for `DriveDeviceEntry`, `V3DriveConfigPayload`, and the
+  outer `V3DriveConfig`. `server_url`, `server_version_installed`, and
+  `setup_at` are `Schema.optional` because the blob is populated
+  incrementally across phases (P2c reads; P2d writes server metadata).
+  `device_list` is required once the blob exists.
+- `packages/client-runtime/src/drive/appDataClient.ts` — pure `fetch`
+  wrapper over Drive v3 REST: `findFileId` → `readFileById` → `read`
+  returns `V3DriveConfig | null`; `write` multipart-creates or
+  `PATCH`es; `readOrInit` returns an empty synthesised config without
+  writing; `appendDevice` reads-or-inits, appends de-duped by
+  `device_id`, and writes. All methods accept an explicit
+  `accessToken` and an optional `fetch` dep for tests. Errors surface
+  as a discriminated `V3DriveClientError` tagged with
+  `"unauthorized" | "quota-exhausted" | "network" | "malformed" |
+"unexpected-status"`. Quota detection sniffs the body for
+  `storageQuotaExceeded` to distinguish it from a plain 403.
+- `packages/client-runtime/src/drive/index.ts` — barrel; also reached
+  from the package root entry.
+- `packages/client-runtime/src/drive/appDataClient.test.ts` — 13 cases
+  covering missing-blob / populated-blob / malformed / auth / quota /
+  network paths, plus multipart upload shape, PATCH update, and
+  `appendDevice` idempotency + bootstrap.
+- `apps/web/src/v3/auth/driveAppData.ts` — renderer glue:
+  `captureDriveAppDataSnapshot` reads (and optionally appends) via the
+  client-runtime helper, log-and-ignores any `V3DriveClientError`, and
+  writes a discriminated `V3DriveAppDataSnapshot` to
+  `localStorage.v3.drive-app-data-snapshot`. Exports a cold read
+  helper `getV3DriveAppDataSnapshot` for P3 to consume.
+- `apps/web/src/v3/auth/driveAppData.test.ts` — 6 cases pinning the
+  no-blob, server-absent, already-listed, appends-new, read-failure,
+  and append-failure paths with a stub Drive client.
+
+**Modified upstream files:**
+
+### `packages/contracts/src/ipc.ts` (P2c update on top of P1d)
+
+- **Modified**: 2026-04-19 (P2c)
+- **V3 phase**: Phase 2c — Drive App Data client
+- **Reason**: The renderer now needs a Google OAuth access token (scoped
+  to `drive.appdata`) to drive the Drive REST client. The desktop
+  bridge already owns the PKCE handshake, so the cleanest seam is to
+  return both tokens from `openV3GoogleSignIn`.
+- **What changed**:
+  - Modified: `DesktopBridge.openV3GoogleSignIn` return type from
+    `Promise<{ idToken: string }>` to
+    `Promise<{ idToken: string; accessToken: string }>`.
+  - Updated the surrounding doc-comment to describe both fields and
+    reference the Drive App Data use case.
+- **Conflict risk on rebase**: low — V3-owned addition next to unrelated
+  upstream methods.
+- **Upstream signals to watch**: upstream rarely touches the V3 block.
+  If they add a new method above `openV3GoogleSignIn`, re-anchor the
+  diff with the surrounding comment as a marker.
+- **Last rebase verified**: 2026-04-19 (t3code v0.0.20 + 2 upstream commits)
+
+### `apps/desktop/src/v3GoogleAuthFlow.ts` (P2c update on top of P1d)
+
+- **Modified**: 2026-04-19 (P2c) — V3-owned file, but logged here for
+  the shared pattern.
+- **V3 phase**: Phase 2c — Drive App Data client
+- **Reason**: Widen the OAuth scope to include `drive.appdata` and
+  propagate the returned `access_token` to the renderer so it can call
+  the Drive REST API.
+- **What changed**:
+  - Modified: `buildAuthUrl.scope` now requests
+    `openid email profile https://www.googleapis.com/auth/drive.appdata`.
+  - Renamed: `exchangeCodeForIdToken` → `exchangeCodeForTokens`; now
+    returns `{ idToken, accessToken }` and asserts both fields are
+    non-empty strings on the token response.
+  - Modified: `V3GoogleAuthFlow.start` return type + `PendingFlow`
+    internal resolve signature both carry the `TokenExchangeResult`.
+- **Conflict risk on rebase**: low — V3-owned file.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/desktop/src/v3GoogleAuthFlow.test.ts` (P2c update on top of P1d)
+
+- **Modified**: 2026-04-19 (P2c) — V3-owned file.
+- **V3 phase**: Phase 2c — Drive App Data client
+- **Reason**: Reflect the new `access_token` field in the token response
+  stub, assert the happy-path result shape, assert the scope includes
+  `drive.appdata`, and add a negative case for a response missing
+  `access_token`.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/v3/auth/googleSignIn.ts` (P2c update on top of P1d)
+
+- **Modified**: 2026-04-19 (P2c) — V3-owned file.
+- **V3 phase**: Phase 2c — Drive App Data client
+- **Reason**: After a successful bootstrap, hand the Drive helper this
+  device's `{ device_id, name, added_at }` entry plus the access token
+  and surface the resulting snapshot on `V3SignInResult.driveSnapshot`.
+- **What changed**:
+  - Added: `driveSnapshot: V3DriveAppDataSnapshot | null` on
+    `V3SignInResult`.
+  - Added: `captureDriveAppDataSnapshot` call immediately after
+    `recordV3SignedIn`, wrapped in a defensive `.catch` that logs and
+    yields `null` — sign-in must never fail because of Drive.
+- **Conflict risk on rebase**: low — V3-owned file; existing callers
+  (`SignInButton.tsx`, `StartupSignInNudge.tsx`) use only `snapshot`
+  and `needsApproval` so the new field is additive.
+- **Last rebase verified**: 2026-04-19
+
+### `packages/client-runtime/package.json` (P2c update)
+
+- **Modified**: 2026-04-19 (P2c)
+- **V3 phase**: Phase 2c — Drive App Data client
+- **Reason**: The Drive client uses `Schema.decodeUnknownSync` for blob
+  validation, so `effect` becomes a direct (non-transitive) dependency.
+- **What changed**:
+  - Added dependency `"effect": "catalog:"`.
+- **Conflict risk on rebase**: low — additive.
+- **Last rebase verified**: 2026-04-19
+
+### `packages/client-runtime/src/index.ts` (P2c update)
+
+- **Modified**: 2026-04-19 (P2c) — V3-owned file.
+- **V3 phase**: Phase 2c — Drive App Data client
+- **Reason**: Re-export the new `drive/*` module from the package root.
+- **What changed**:
+  - Added: `export * from "./drive/index.ts";`.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/localApi.test.ts` + `apps/web/src/components/settings/SettingsPanels.browser.tsx` (P2c cleanup)
+
+- **Modified**: 2026-04-19 (P2c)
+- **V3 phase**: Phase 2c — Drive App Data client
+- **Reason**: Both files build a `DesktopBridge` mock for tests. P1d
+  added `openV3GoogleSignIn` to the contract but these two mocks were
+  missed, which left `bun run --cwd apps/web typecheck` flagging extra
+  errors beyond the documented `input.tsx` baseline. P2c's widening of
+  the return shape to `{ idToken, accessToken }` means we need to
+  touch these mocks anyway; adding a stable no-op stub here restores
+  the "only input.tsx fails" baseline and keeps future rebases quiet.
+- **What changed**:
+  - Added: `openV3GoogleSignIn: async () => ({ idToken: "mock-id-token", accessToken: "mock-access-token" })` in `localApi.test.ts`.
+  - Added: a `vi.fn()`-backed equivalent in `SettingsPanels.browser.tsx`.
+- **Conflict risk on rebase**: low — one-line inserts at the end of
+  each mock factory.
+- **Last rebase verified**: 2026-04-19
+
+**Test coverage**
+
+- Identity suite: still 38/38 (unchanged).
+- P2a suite: still 16/16 (unchanged).
+- P2b suite: still 8/8 + 1 `.todo` (unchanged).
+- New P2c suite: +15 (`packages/client-runtime/src/drive/appDataClient.test.ts`) + 6 (`apps/web/src/v3/auth/driveAppData.test.ts`). Desktop P1d suite grows from 7 → 8 cases (one new negative: Google token endpoint omits `access_token`). client-runtime targeted run is now 2 files / 20 pass (knownEnvironment 5 + appDataClient 15).
+- `bun run --cwd apps/server vitest run --reporter=dot src/identity src/config src/serverMode.test.ts src/persistence/PostgresMigrations.test.ts src/persistence/Layers/Postgres.test.ts` still shows 62 pass + 1 todo — no server-side behaviour changed in P2c.
