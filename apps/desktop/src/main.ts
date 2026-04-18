@@ -76,6 +76,7 @@ import {
 import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch.ts";
 import { resolveDesktopAppBranding } from "./appBranding.ts";
 import { getSharedV3GoogleAuthFlow } from "./v3GoogleAuthFlow.ts";
+import { registerV3SetupWizardIpc } from "./v3SetupWizard.ts";
 
 syncShellEnvironment();
 
@@ -1721,6 +1722,25 @@ function registerIpcHandlers(): void {
       throw new Error("V3 Google client id is empty.");
     }
     return getSharedV3GoogleAuthFlow().start({ clientId });
+  });
+
+  // V3 Phase 2d — server-node setup wizard. All probes + the TOML write
+  // go through a dedicated module (src/v3SetupWizard.ts) so the logic
+  // stays unit-tested without pulling in `electron`.
+  registerV3SetupWizardIpc({
+    ipcMain,
+    pickDataDirectory: async ({ initialPath }) => {
+      const owner = BrowserWindow.getFocusedWindow() ?? mainWindow;
+      const openDialogOptions: OpenDialogOptions = {
+        properties: ["openDirectory", "createDirectory"],
+        ...(initialPath ? { defaultPath: initialPath } : {}),
+      };
+      const result = owner
+        ? await dialog.showOpenDialog(owner, openDialogOptions)
+        : await dialog.showOpenDialog(openDialogOptions);
+      if (result.canceled) return null;
+      return result.filePaths[0] ?? null;
+    },
   });
 
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);

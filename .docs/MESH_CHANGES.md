@@ -642,3 +642,174 @@ implementation:
 - P2b suite: still 8/8 + 1 `.todo` (unchanged).
 - New P2c suite: +15 (`packages/client-runtime/src/drive/appDataClient.test.ts`) + 6 (`apps/web/src/v3/auth/driveAppData.test.ts`). Desktop P1d suite grows from 7 → 8 cases (one new negative: Google token endpoint omits `access_token`). client-runtime targeted run is now 2 files / 20 pass (knownEnvironment 5 + appDataClient 15).
 - `bun run --cwd apps/server vitest run --reporter=dot src/identity src/config src/serverMode.test.ts src/persistence/PostgresMigrations.test.ts src/persistence/Layers/Postgres.test.ts` still shows 62 pass + 1 todo — no server-side behaviour changed in P2c.
+
+### Phase 2d — Server-node setup wizard (renderer + Electron IPC + queued Drive publish)
+
+P2d is the operator-facing half of server-node mode. A renderer-hosted
+wizard at `/setup` walks through six steps (overview → pre-flight →
+exposure → data directory → auth → review → done) and writes
+`~/.v3-code-server/config.toml` via Electron IPC. The wizard queues its
+server URL + device entry into `localStorage.v3.pending-drive-publish`
+so the next successful Google sign-in promotes it into Drive App Data
+through the P2c client (sign-in is where access tokens live; the
+wizard never handles one itself). The mode resolver already picks up
+the written config on the next server launch via `serverMode.ts`.
+
+**Scoped out of P2d (explicitly queued as follow-on sub-phases)**:
+
+- **P2b-mig** — port upstream T3 migrations 001–025 to Postgres.
+  Required before server-node mode can actually boot against Postgres.
+  For now, server.ts still unconditionally provides SQLite; the
+  wizard's done screen calls this out.
+- **P2d-persist** — the mode-aware persistence swap in `server.ts` /
+  `bootstrap.ts`. Blocked by P2b-mig.
+- **P2d-cf** — cloudflared automation beyond the detection probe
+  (download binary + service install across Windows/macOS/Linux).
+- **Wizard entry point in the sidebar** — parked for P3's sidebar
+  rewrite, which already owns the signed-in nav surface.
+
+Per Lucas's P2d sub-decisions (2026-04-19):
+
+- **Q2d-1 (scope)**: full — wizard UI + IPC + Drive queue + mode
+  branch point in one commit; persistence swap deferred to P2b-mig
+  prerequisite.
+- **Q2d-2 (host)**: in-app React route at `/setup`; Electron IPC for
+  privileged ops. (No separate BrowserWindow.)
+- **Q2d-3 (cloudflared)**: detect + link to install docs; no
+  automation.
+- **Q2d-4 (post-wizard)**: success screen with restart instructions;
+  no auto-restart of the desktop shell.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `apps/desktop/src/v3SetupWizard.ts` (+ `.test.ts`) — main-process IPC
+  registration plus pure `probeDockerWith`, `probePortWith`,
+  `probeCloudflaredWith`, `probePathsWith`,
+  `writeServerNodeConfigWith`, `extractVersion`,
+  `resolveServerNodeConfigPath`, and `generateEncryptionKey` helpers.
+  Uses `node:child_process.spawn` (no shell, fixed arg vector) for
+  subprocess probes. Re-registers seven IPC channels under the
+  `desktop:v3-wizard-*` prefix. 17 tests covering version parsing,
+  each probe's success/missing/error branches, path resolution with
+  `V3CODE_SERVER_CONFIG_PATH` override, and the TOML write path.
+- `apps/web/src/routes/setup.tsx` — `/setup` route with all six wizard
+  screens inlined (Overview, Preflight, Exposure, DataDirectory, Auth,
+  Review, Done). Uses the existing `Alert`/`Button`/`Input`/`Label`/
+  `Textarea` primitives. Electron-only — the route renders a
+  `BrowserNotSupportedScreen` fallback when `window.desktopBridge?.v3Wizard`
+  is undefined. Drive publish is queued into
+  `localStorage.v3.pending-drive-publish` (exported constant
+  `V3_PENDING_DRIVE_PUBLISH_KEY` so P3 and future sign-in code can
+  consume it).
+- `apps/web/src/v3/setup/state.ts` (+ `.test.ts`) — pure reducer
+  - `V3SetupWizardState` type, `isPreflightReady` / `isExposureReady`
+    / `isAuthReady` gating helpers. 11 tests pinning step transitions,
+    preflight readiness with Docker + port + paths populated, and the
+    32-char encryption-key requirement.
+- `apps/web/src/v3/setup/tomlBuilder.ts` (+ `.test.ts`) — hand-rolled
+  TOML emitter matching `apps/server/src/config/serverNodeConfig.ts`.
+  Skips empty sections, lowercases/de-dupes authorized emails, emits a
+  commented header by default. 5 tests covering minimal document,
+  email normalization, section suppression, escape rules, and header
+  behavior.
+
+**Modified upstream files:**
+
+### `packages/contracts/src/ipc.ts` (P2d update on top of P2c)
+
+- **Modified**: 2026-04-19 (P2d)
+- **V3 phase**: Phase 2d — server-node setup wizard
+- **Reason**: The wizard UI in `apps/web` needs privileged Electron
+  operations (Docker probe, port probe, config.toml write) that have to
+  be exposed through the bridge. Kept under a single `v3Wizard` nested
+  object so the `DesktopBridge` flat surface does not balloon and the
+  renderer can pass the whole namespace as a dependency.
+- **What changed**:
+  - Added: `V3WizardProbeStatus`, `V3WizardDockerProbeResult`,
+    `V3WizardPortProbeResult`, `V3WizardCloudflaredProbeResult`,
+    `V3WizardPathsProbeResult`, `V3WizardWriteConfigInput`,
+    `V3WizardWriteConfigResult` type exports.
+  - Added: `DesktopBridge.v3Wizard` namespace with `probeDocker`,
+    `probePort`, `probeCloudflared`, `probePaths`, `pickDataDirectory`,
+    `writeServerNodeConfig`, `generateEncryptionKey`.
+- **Conflict risk on rebase**: low — all additions are V3-owned and
+  appear alongside the existing P1d/P2c openV3GoogleSignIn block.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/desktop/src/main.ts` (P2d update)
+
+- **Modified**: 2026-04-19 (P2d)
+- **V3 phase**: Phase 2d — server-node setup wizard
+- **Reason**: Register the wizard IPC handlers on window creation. The
+  implementation lives in `v3SetupWizard.ts`; main.ts just wires
+  Electron's `ipcMain` + a dialog-driven folder picker.
+- **What changed**:
+  - Added: `import { registerV3SetupWizardIpc } from "./v3SetupWizard.ts"`.
+  - Added: a single `registerV3SetupWizardIpc({ ipcMain, pickDataDirectory })`
+    call next to the existing V3 Google sign-in handler.
+- **Conflict risk on rebase**: low — V3 block in the IPC registration
+  section stays isolated. If upstream reflows `ipcMain` setup, re-anchor
+  on the existing V3 Google sign-in handler above.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/desktop/src/preload.ts` (P2d update)
+
+- **Modified**: 2026-04-19 (P2d)
+- **V3 phase**: Phase 2d — server-node setup wizard
+- **Reason**: Expose the seven wizard IPC channels on the
+  `window.desktopBridge.v3Wizard` namespace so the renderer sees the
+  same shape advertised by `DesktopBridge` in contracts.
+- **What changed**:
+  - Added: seven `V3_WIZARD_*_CHANNEL` constants.
+  - Added: `v3Wizard` object literal on the `contextBridge.exposeInMainWorld`
+    payload mapping each method to `ipcRenderer.invoke(...)`.
+- **Conflict risk on rebase**: low — the invocation block at the bottom
+  of `preload.ts` is additive.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/routeTree.gen.ts` (P2d update)
+
+- **Modified**: 2026-04-19 (P2d)
+- **V3 phase**: Phase 2d — server-node setup wizard
+- **Reason**: TanStack Router's auto-generated route tree does not yet
+  know about the new `/setup` route. Re-running the generator via
+  `vite build` will overwrite this file; the edits here are verbatim
+  the output the generator would produce, so the next regenerate is a
+  no-op.
+- **What changed**:
+  - Added: `SetupRouteImport` and `SetupRoute` references parallel to
+    `SettingsRoute`. The route is a top-level sibling of `/settings`.
+  - Added: `/setup` entries in `FileRoutesByFullPath`, `FileRoutesByTo`,
+    `FileRoutesById`, `FileRouteTypes` (full paths / to / id),
+    `RootRouteChildren`, and the `FileRoutesByPath` declaration block.
+- **Conflict risk on rebase**: medium — any upstream regenerate
+  clobbers these edits. The file has `@ts-nocheck` on top so the
+  generator is authoritative; re-run `vite build` on rebase.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/localApi.test.ts` + `apps/web/src/components/settings/SettingsPanels.browser.tsx` (P2d update)
+
+- **Modified**: 2026-04-19 (P2d)
+- **V3 phase**: Phase 2d — server-node setup wizard
+- **Reason**: `DesktopBridge` widened with the `v3Wizard` namespace, so
+  both test mocks need the new members or typecheck regresses. Same
+  "restore the documented input.tsx-only web-typecheck baseline" story
+  as the P2c mock fix.
+- **What changed**:
+  - Added: a stubbed `v3Wizard` object on the `makeDesktopBridge`
+    / settings mock factory with no-op return values for every method.
+- **Conflict risk on rebase**: low — one-field additions.
+- **Last rebase verified**: 2026-04-19
+
+**Test coverage**
+
+- Identity suite: still 38/38 (unchanged).
+- P2a suite: still 16/16 (unchanged).
+- P2b suite: still 8/8 + 1 `.todo` (unchanged).
+- P2c suites: still 15 (client-runtime appDataClient) + 6 (web
+  driveAppData) (unchanged).
+- New P2d suite: +17 (`apps/desktop/src/v3SetupWizard.test.ts`) + 16
+  (`apps/web/src/v3/setup/*.test.ts`, split 11 state + 5 tomlBuilder).
+- `bun run --cwd apps/server vitest run --reporter=dot src/identity src/config src/serverMode.test.ts src/persistence/PostgresMigrations.test.ts src/persistence/Layers/Postgres.test.ts` still shows 62 pass + 1 todo — no server-side behaviour changed in P2d either.
+- Desktop vitest full suite still 8/8 + 17 new = 25; web v3 suite is
+  now 19 (auth) + 16 (setup) = 35.

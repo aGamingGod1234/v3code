@@ -146,6 +146,58 @@ export interface PickFolderOptions {
   initialPath?: string | null;
 }
 
+// V3 (Phase 2d): shared shapes for the server-node setup wizard. The
+// wizard runs as React routes inside `apps/web` but all privileged ops
+// (Docker probe, port probe, file I/O, cloudflared detect) happen in
+// Electron's main process and are reached via `DesktopBridge.v3Wizard*`.
+// Each method returns a discriminated result so the renderer can render
+// pre-flight check rows uniformly.
+export type V3WizardProbeStatus = "ok" | "missing" | "error";
+
+export interface V3WizardDockerProbeResult {
+  readonly status: V3WizardProbeStatus;
+  readonly version: string | null;
+  readonly message: string | null;
+}
+
+export interface V3WizardPortProbeResult {
+  readonly port: number;
+  readonly available: boolean;
+  readonly message: string | null;
+}
+
+export interface V3WizardCloudflaredProbeResult {
+  readonly status: V3WizardProbeStatus;
+  readonly version: string | null;
+  readonly installDocsUrl: string;
+}
+
+export interface V3WizardPathsProbeResult {
+  // The full resolved path the server-node config.toml would be written
+  // to, taking `V3CODE_SERVER_CONFIG_PATH` override into account.
+  readonly configPath: string;
+  // True if a config.toml already exists at that path — lets the wizard
+  // warn before overwriting.
+  readonly configExists: boolean;
+  // Default data directory suggestion (~/.v3-code-server on POSIX,
+  // %USERPROFILE%\.v3-code-server on Windows).
+  readonly defaultDataDirectory: string;
+}
+
+export interface V3WizardWriteConfigInput {
+  // Full TOML document the wizard wants to persist. The main-process
+  // handler writes exactly these bytes (plus a trailing newline if
+  // missing) to the resolved `configPath`.
+  readonly contentToml: string;
+  // When `true`, create the target directory (recursive) before writing.
+  readonly createDirectories: boolean;
+}
+
+export interface V3WizardWriteConfigResult {
+  readonly path: string;
+  readonly bytesWritten: number;
+}
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
@@ -187,6 +239,23 @@ export interface DesktopBridge {
   openV3GoogleSignIn: (input: {
     clientId: string;
   }) => Promise<{ idToken: string; accessToken: string }>;
+  // V3 (Phase 2d): server-node setup wizard IPC. Grouped under a single
+  // object so the renderer can pass the whole namespace around as a
+  // dependency without the `DesktopBridge` surface exploding flat-list-
+  // style. All methods resolve to discriminated results (see
+  // V3Wizard*Result types above) rather than throwing — the wizard UI
+  // renders every step as a pass/fail row.
+  v3Wizard: {
+    readonly probeDocker: () => Promise<V3WizardDockerProbeResult>;
+    readonly probePort: (port: number) => Promise<V3WizardPortProbeResult>;
+    readonly probeCloudflared: () => Promise<V3WizardCloudflaredProbeResult>;
+    readonly probePaths: () => Promise<V3WizardPathsProbeResult>;
+    readonly pickDataDirectory: (options?: PickFolderOptions) => Promise<string | null>;
+    readonly writeServerNodeConfig: (
+      input: V3WizardWriteConfigInput,
+    ) => Promise<V3WizardWriteConfigResult>;
+    readonly generateEncryptionKey: () => Promise<string>;
+  };
 }
 
 /**
