@@ -199,6 +199,10 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  postgresUrl: Config.string("V3CODE_POSTGRES_URL").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
 });
 
 interface CliServerFlags {
@@ -412,6 +416,7 @@ export const resolveServerConfig = (
         env.authorizedEmails !== undefined
           ? parseAuthorizedEmails(env.authorizedEmails)
           : (tomlConfig?.auth?.authorized_emails ?? []).map((entry) => entry.trim().toLowerCase()),
+      postgresUrl: env.postgresUrl ?? tomlConfig?.database?.postgres_url,
     };
 
     return config;

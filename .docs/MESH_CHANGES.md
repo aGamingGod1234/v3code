@@ -391,3 +391,73 @@ change.
 
 - Server identity suite: still 38/38 (P1d unchanged).
 - New server suite: +16 tests (`serverMode.test.ts` 9 + `config/tomlLoader.test.ts` 7).
+
+### Phase 2b — Postgres persistence layer + V3 identity baseline migration
+
+Second slice of Phase 2. Adds `@effect/sql-pg` to the stack, creates the
+Postgres-flavored V3 identity baseline migration, and wires a
+`postgresUrl` field through config so future sub-phases can construct a
+real Postgres layer from `[database].postgres_url` in the server-node
+config.toml.
+
+**Scope boundary**: The layer factory + migration scaffolding land here,
+but `server.ts` / `bootstrap.ts` are NOT swapped. Server startup still
+unconditionally provides the SQLite layer because the upstream T3 tables
+(orchestration_events, projection_threads, auth_sessions, …) have not
+been ported to Postgres. Running Postgres as the only backend today
+would break every orchestration/auth service. Porting those 25 SQLite
+migrations to Postgres is scoped as a later P2 slice.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `apps/server/src/persistence/PostgresMigrations/001_V3IdentityBaseline.ts` — mirrors SQLite migration `026_V3UsersDevices.ts` in Postgres syntax (`BYTEA` for binary, `BOOLEAN` for the approved flag, partial index on `v3_devices` where `removed_at IS NULL`). Timestamps stay `TEXT` (ISO-8601) so `Schema.DateTimeUtcFromString` decodes identically on both backends. `v3_device_sessions.session_id` does NOT reference `auth_sessions` yet — that table has not been ported; FK lands in a follow-up migration once the upstream tables reach Postgres.
+- `apps/server/src/persistence/PostgresMigrations.ts` (+ `.test.ts`) — migration runner paralleling `Migrations.ts` for SQLite but with an independent id sequence. Exports `postgresMigrationEntries`, `makePostgresMigrationLoader`, `runPostgresMigrations`, `PostgresMigrationsLive`. 4 tests assert registry shape + constructor safety.
+- `apps/server/src/persistence/Layers/Postgres.ts` (+ `.test.ts`) — `makePostgresPersistenceLive({ connectionUrl, applicationName?, spanAttributes? })` factory wrapping `PgClient.layer` + `PostgresMigrationsLive`. `resolvePostgresPersistenceLive` Effect reads `ServerConfig` and fails with `PostgresNotConfiguredError` when `postgresUrl` is undefined. `layerConfig` wraps the resolver for layer-style composition (mirrors Sqlite.ts shape). 5 tests + 1 `.todo` placeholder for the real-Postgres integration test (lands in P2d with the setup-wizard smoke test).
+
+**Modified upstream files:**
+
+### `apps/server/src/config.ts` (P2b update on top of P2a)
+
+- **Modified**: 2026-04-18 (P2b)
+- **V3 phase**: Phase 2b — Postgres persistence layer
+- **Reason**: Carry the Postgres connection URL through the runtime config so the server-node layer can consume it.
+- **What changed**:
+  - Added to `ServerConfigShape`: `postgresUrl: string | undefined`.
+  - Added to `ServerConfig.layerTest` defaults: `postgresUrl: undefined`.
+- **Conflict risk on rebase**: medium — `ServerConfigShape` is an upstream hotspot. Sits next to the P1b-era `googleClientId`/`authorizedEmails` additions.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/cli.ts` (P2b update on top of P2a)
+
+- **Modified**: 2026-04-18 (P2b)
+- **V3 phase**: Phase 2b — Postgres persistence layer
+- **Reason**: Resolve `postgresUrl` from env (`V3CODE_POSTGRES_URL`) or TOML (`[database].postgres_url`) and stamp it onto the final `ServerConfigShape`.
+- **What changed**:
+  - `EnvServerConfig` adds `postgresUrl: Config.string("V3CODE_POSTGRES_URL")`.
+  - Final config literal adds `postgresUrl: env.postgresUrl ?? tomlConfig?.database?.postgres_url`.
+- **Conflict risk on rebase**: low — additive.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/cli.test.ts` + `cli-config.test.ts` + `environment/Layers/ServerEnvironment.test.ts` + `server.test.ts` (P2b update)
+
+- **Modified**: 2026-04-18 (P2b)
+- **V3 phase**: Phase 2b — Postgres persistence layer
+- **Reason**: Every inline `ServerConfigShape` literal now requires `postgresUrl` to satisfy the widened type. Added `postgresUrl: undefined` to each test fixture.
+- **Conflict risk on rebase**: low.
+- **Last rebase verified**: 2026-04-18
+
+### `package.json` + `apps/server/package.json` (P2b update)
+
+- **Modified**: 2026-04-18 (P2b)
+- **What changed**:
+  - Root `workspaces.catalog` gains `"@effect/sql-pg": "4.0.0-beta.45"` (alongside existing `@effect/sql-sqlite-bun`).
+  - `apps/server/package.json` dependencies adds `"@effect/sql-pg": "catalog:"`.
+- **Conflict risk on rebase**: low — catalog additions merge cleanly unless upstream restructures.
+- **Last rebase verified**: 2026-04-18
+
+**Test coverage**
+
+- Identity suite: still 38/38 (unchanged).
+- P2a suite: still 16/16 (unchanged).
+- New P2b suite: +8 tests (5 `persistence/Layers/Postgres.test.ts` + 4 `persistence/PostgresMigrations.test.ts`) + 1 `.todo` placeholder.
+- Full targeted run: 62 pass + 1 todo across 11 files.

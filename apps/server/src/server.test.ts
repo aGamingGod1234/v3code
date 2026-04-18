@@ -384,6 +384,7 @@ const buildAppUnderTest = (options?: {
       logWebSocketEvents: false,
       googleClientId: undefined,
       authorizedEmails: [],
+      postgresUrl: undefined,
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);

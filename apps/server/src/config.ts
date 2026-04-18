@@ -77,6 +77,12 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   // enable Google sign-in.
   readonly googleClientId: string | undefined;
   readonly authorizedEmails: ReadonlyArray<string>;
+  // V3 server-node mode (Phase 2b). Populated from `V3CODE_POSTGRES_URL`
+  // or `[database].postgres_url` in `~/.v3-code-server/config.toml`. The
+  // Postgres persistence layer at `persistence/Layers/Postgres.ts`
+  // refuses to construct when this is undefined. In desktop / web
+  // modes the SQLite layer ignores it entirely.
+  readonly postgresUrl: string | undefined;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -179,6 +185,7 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           startupPresentation: "browser",
           googleClientId: undefined,
           authorizedEmails: [],
+          postgresUrl: undefined,
         } satisfies ServerConfigShape;
       }),
     );
