@@ -68,6 +68,16 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
 
 const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
+// Parse `V3CODE_AUTHORIZED_EMAILS` as a comma-separated list, trimming and
+// lowercasing each entry. Empty string → empty allowlist.
+const parseAuthorizedEmails = (raw: string | undefined): ReadonlyArray<string> => {
+  if (raw === undefined) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+};
+
 const BootstrapEnvelopeSchema = Schema.Struct({
   mode: Schema.optional(RuntimeMode),
   port: Schema.optional(PortSchema),
@@ -171,6 +181,14 @@ const EnvServerConfig = Config.all({
     Config.map(Option.getOrUndefined),
   ),
   logWebSocketEvents: Config.boolean("V3CODE_LOG_WS_EVENTS").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  googleClientId: Config.string("V3CODE_GOOGLE_CLIENT_ID").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  authorizedEmails: Config.string("V3CODE_AUTHORIZED_EMAILS").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
@@ -365,6 +383,8 @@ export const resolveServerConfig = (
       desktopBootstrapToken,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
+      googleClientId: env.googleClientId,
+      authorizedEmails: parseAuthorizedEmails(env.authorizedEmails),
     };
 
     return config;

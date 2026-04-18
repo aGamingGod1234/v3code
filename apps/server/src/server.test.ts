@@ -105,6 +105,12 @@ import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
+import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
+import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
+import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
+import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
+import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
 
 const defaultProjectId = ProjectId.make("project-default");
 const defaultThreadId = ThreadId.make("thread-default");
@@ -213,6 +219,15 @@ const authTestLayer = ServerAuthLive.pipe(
   Layer.provide(SqlitePersistenceMemory),
   Layer.provide(ServerSecretStoreLive),
 );
+
+const v3IdentityTestLayer = Layer.mergeAll(
+  UserRepositoryLive,
+  DeviceRepositoryLive,
+  DeviceSessionRepositoryLive,
+  DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
+  GoogleIdentityServiceLive,
+  UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
+).pipe(Layer.provide(SqlitePersistenceMemory));
 
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
@@ -367,6 +382,8 @@ const buildAppUnderTest = (options?: {
       desktopBootstrapToken: defaultDesktopBootstrapToken,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,
+      googleClientId: undefined,
+      authorizedEmails: [],
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);
@@ -540,6 +557,7 @@ const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provideMerge(authTestLayer),
+      Layer.provideMerge(v3IdentityTestLayer),
       Layer.provide(workspaceAndProjectServicesLayer),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provide(layerConfig),

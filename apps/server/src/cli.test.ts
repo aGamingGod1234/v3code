@@ -76,6 +76,8 @@ const makeCliTestServerConfig = (baseDir: string) =>
       desktopBootstrapToken: undefined,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,
+      googleClientId: undefined,
+      authorizedEmails: [],
     } satisfies ServerConfigShape;
   });
 

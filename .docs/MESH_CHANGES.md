@@ -33,12 +33,6 @@ CI enforces that any file listed below must have its **Last rebase verified** bu
 - **Cadence**: monthly `upstream-sync/<YYYY-MM>` integration branch → rebase upstream into it → merge to `v3-dev` → release to `main`
 - **Hard-fork decision gate**: End of Phase 4 (week 20) — if upstream has diverged in ways that make rebase cost exceed its value, declare V3 independent and stop tracking.
 
-## Entries
-
-(None yet. Phase 0 hasn't modified upstream files.)
-
----
-
 ## Known-risk files (from research)
 
 Anticipated high-churn / high-conflict-risk upstream files V3 must modify. Listed for rebase vigilance before any modifications land:
@@ -78,6 +72,134 @@ Anticipated high-churn / high-conflict-risk upstream files V3 must modify. Liste
 
 All 406 files touched by the codemod are implicit entries — see `scripts/upstream-rebase.ts` `RENAME_MAPPINGS` for the canonical list. No per-file entries needed until upstream files receive **hand-written** V3 edits (Phase 1+).
 
+### Phase 1a — identity services (server-only, additive)
+
+All changes below are NEW files in V3-owned subtrees or additive entries in upstream-owned indexes. No upstream files were hand-modified.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `packages/contracts/src/identity.ts` — Effect Schema types for `GoogleSub`, `UserId`, `DeviceId`, `DevicePlatform`, `DeviceKind`, `DeviceCapability`, `UserInfo`, `DeviceInfo`, `VerifiedGoogleIdentity`, `GoogleBootstrapInput/Result`.
+- `apps/server/src/persistence/Migrations/026_V3UsersDevices.ts` — adds `v3_users`, `v3_devices`, `v3_device_sessions` tables (prefixed `v3_` to keep V3 additions visually separate from upstream tables).
+- `apps/server/src/identity/Errors.ts`
+- `apps/server/src/identity/tokenEncryption.ts` (+ `.test.ts`) — AES-256-GCM helpers for at-rest encryption of GitHub / provider tokens.
+- `apps/server/src/identity/Services/{UserRepository,DeviceRepository,GoogleIdentityService}.ts`
+- `apps/server/src/identity/Layers/{UserRepository,DeviceRepository,GoogleIdentityService}.ts` (+ `.test.ts` each)
+
+**Modified upstream files (each needs MESH_CHANGES review on rebase):**
+
+### `packages/contracts/src/index.ts`
+
+- **First modified**: P1a bootstrap (2026-04-18)
+- **V3 phase**: Phase 1a — identity services
+- **Reason**: Re-export the new V3 `identity` module alongside the existing upstream exports.
+- **What changed**:
+  - Added: `export * from "./identity.ts";` after the auth re-export.
+- **Conflict risk on rebase**: low — append-only addition in a stable index file.
+- **Upstream signals to watch**: upstream may reorder or split this index; re-apply V3 line in the new location.
+- **Last rebase verified**: 2026-04-18 (t3code v0.0.20 + 2 upstream commits)
+
+### `apps/server/src/persistence/Migrations.ts`
+
+- **First modified**: P1a bootstrap (2026-04-18)
+- **V3 phase**: Phase 1a — identity services
+- **Reason**: Register migration 026 in the statically-imported migration loader.
+- **What changed**:
+  - Added: `import Migration0026 from "./Migrations/026_V3UsersDevices.ts";`
+  - Added: `[26, "V3UsersDevices", Migration0026],` as the last entry of `migrationEntries`.
+- **Conflict risk on rebase**: medium — upstream will keep adding migrations 027, 028, ...; every V3 rebase will need to slot V3 migrations at the tail and renumber if upstream grabs the same id.
+- **Upstream signals to watch**: a new upstream migration with id 26 → V3 renumbers to the next free id and updates both the migration filename and the `migrationEntries` entry.
+- **Last rebase verified**: 2026-04-18 (t3code v0.0.20 + 2 upstream commits)
+
+### `apps/server/package.json`
+
+- **First modified**: P1a bootstrap (2026-04-18)
+- **V3 phase**: Phase 1a — identity services
+- **Reason**: Add `jose ^5.10.0` for Google ID-token JWKS verification.
+- **What changed**:
+  - Added dependency `"jose": "^5.10.0"`.
+- **Conflict risk on rebase**: low — dependency-set additions merge cleanly unless upstream reshuffles the dependencies block.
+- **Upstream signals to watch**: new upstream deps in alphabetical order may shift line numbers but won't conflict.
+- **Last rebase verified**: 2026-04-18 (t3code v0.0.20 + 2 upstream commits)
+
 ## Known upstream gaps inherited at fork time (v0.0.20 / 9df3c640)
 
 - `apps/web/src/components/ui/input.tsx:44` — pre-existing `tsc` error on the `style` prop where Base UI's state-callback `CSSProperties` shape doesn't assign to React's native `CSSProperties`. Confirmed present on pristine upstream before any V3 edits. Do NOT patch as part of V3 — either wait for upstream fix or file upstream bug. Current `bun run typecheck` exits non-zero on `@v3tools/web` because of this, but all 7 other packages typecheck clean.
+- `apps/server/src/auth/Layers/ServerSecretStore.test.ts > "uses restrictive permissions for the secret directory and files"` — asserts `chmod 0o700`/`0o600` calls were made, but Windows NTFS is a no-op for `chmod` so the recording file-system layer records zero calls on Windows. Platform bug in the test, not in production code. All other secret-store tests pass. Skip on Windows dev boxes; Linux CI passes.
+- `apps/server/src/server.test.ts > "subscribeServerConfig streams snapshot then update"` and `"projects.searchEntries errors"` — two of 61 integration tests flake on Windows, reproduced on pristine P1a state before any P1b changes. Not caused by V3 code. Linux CI presumably passes.
+
+### Phase 1b — Google bootstrap route + DeviceApprovalService (additive)
+
+**New files (V3-owned):**
+
+- `apps/server/src/identity/Services/DeviceSessionRepository.ts` (+ `Layers/DeviceSessionRepository.ts` + `.test.ts`) — `v3_device_sessions` table access (link a session to a device, lookup by session id). 3 tests.
+- `apps/server/src/identity/Services/DeviceApprovalService.ts` (+ `Layers/DeviceApprovalService.ts` + `.test.ts`) — `registerOrResume` (first-device auto-approve, subsequent devices need approval), `approve`, `remove`, PubSub event stream. 7 tests.
+- `apps/server/src/identity/http.ts` — `POST /api/auth/google/bootstrap` route. Verifies ID token, enforces `authorizedEmails` allowlist, upserts user, registers device via approval service, issues browser-session-cookie via existing `SessionCredentialService`, links session ↔ device, returns `GoogleBootstrapResult` with `Set-Cookie`.
+
+**Modified upstream files:**
+
+### `apps/server/src/config.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Carry Google OAuth client id and the email allowlist through the runtime config.
+- **What changed**:
+  - Added to `ServerConfigShape`: `googleClientId: string | undefined`, `authorizedEmails: ReadonlyArray<string>`.
+  - Added to `ServerConfig.layerTest` defaults: both fields set to absent / empty.
+- **Conflict risk on rebase**: medium — `ServerConfigShape` is a hotspot upstream.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/cli.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Load Google config from env (`V3CODE_GOOGLE_CLIENT_ID`, `V3CODE_AUTHORIZED_EMAILS`) and populate `ServerConfigShape`.
+- **What changed**:
+  - `EnvServerConfig` gains `googleClientId` and `authorizedEmails` entries.
+  - `config` struct populates both fields; `parseAuthorizedEmails` helper added.
+- **Conflict risk on rebase**: medium.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/server.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Wire the V3 identity Live layers into `RuntimeDependenciesLive` and register `googleBootstrapRouteLayer` in `makeRoutesLayer`.
+- **What changed**:
+  - New `V3IdentityLayerLive` composed from the 5 identity Live layers, provided via `PersistenceLayerLive`.
+  - `RuntimeDependenciesLive` adds `Layer.provideMerge(V3IdentityLayerLive)` right after `AuthLayerLive`.
+  - `makeRoutesLayer` adds `googleBootstrapRouteLayer`.
+- **Conflict risk on rebase**: medium — `RuntimeDependenciesLive` and `makeRoutesLayer` are both hotspots.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/server.test.ts` + `cli.test.ts` + `environment/Layers/ServerEnvironment.test.ts`
+
+- **Modified**: 2026-04-18 (P1b)
+- **V3 phase**: Phase 1b — Google bootstrap route
+- **Reason**: Existing tests construct `ServerConfigShape` inline; they need the two new fields.
+  `server.test.ts` additionally provides the V3 identity Live layers via a new `v3IdentityTestLayer` composition so the test harness can build when `googleBootstrapRouteLayer` is in `makeRoutesLayer`.
+- **Conflict risk on rebase**: low for cli/environment (field addition). Medium for server.test.ts (two edits: config literal + layer composition).
+- **Last rebase verified**: 2026-04-18
+
+### Phase 1c — UserContextResolver (session → user+device resolver)
+
+**New files (V3-owned):**
+
+- `apps/server/src/identity/Services/UserContextResolver.ts` (+ `Layers/UserContextResolver.ts` + `.test.ts`) — `resolve(sessionId) → Effect<Option<{userId, deviceId}>>`. Walks `auth_sessions → v3_device_sessions → v3_devices`. Returns `None` for classic T3 pairing sessions (no V3 link) or sessions whose device has been soft-removed. 4 tests.
+
+**Modified upstream files (second P1 touch):**
+
+### `apps/server/src/server.ts` (P1c update on top of P1b)
+
+- **Modified**: 2026-04-18 (P1c)
+- **V3 phase**: Phase 1c — UserContextResolver
+- **Reason**: Add `UserContextResolverLive` to `V3IdentityLayerLive` via `Layer.provide(DeviceSessionRepositoryLive)` (Layer.mergeAll doesn't satisfy intra-merge deps).
+- **Conflict risk on rebase**: low — inside V3-owned composition block.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/server.test.ts` (P1c update on top of P1b)
+
+- **Modified**: 2026-04-18 (P1c)
+- **V3 phase**: Phase 1c — UserContextResolver
+- **Reason**: Mirror `v3IdentityTestLayer` composition.
+- **Conflict risk on rebase**: low.
+- **Last rebase verified**: 2026-04-18

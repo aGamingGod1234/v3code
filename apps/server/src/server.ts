@@ -66,6 +66,13 @@ import {
 } from "./auth/http.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
+import { googleBootstrapRouteLayer } from "./identity/http.ts";
+import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
+import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
+import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
+import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
+import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import {
   clearPersistedServerRuntimeState,
@@ -218,6 +225,18 @@ const AuthLayerLive = ServerAuthLive.pipe(
   Layer.provide(ServerSecretStoreLive),
 );
 
+// V3 identity layer (Phase 1+). Additive to AuthLayerLive; does not touch
+// ServerAuth's existing shape. Provides Google ID-token verification, user /
+// device repositories, and the device approval service + bus.
+const V3IdentityLayerLive = Layer.mergeAll(
+  UserRepositoryLive,
+  DeviceRepositoryLive,
+  DeviceSessionRepositoryLive,
+  DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
+  GoogleIdentityServiceLive,
+  UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
+).pipe(Layer.provideMerge(PersistenceLayerLive));
+
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
@@ -238,6 +257,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
+  Layer.provideMerge(V3IdentityLayerLive),
 
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
@@ -260,6 +280,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   authPairingCredentialRouteLayer,
   authSessionRouteLayer,
   authWebSocketTokenRouteLayer,
+  googleBootstrapRouteLayer,
   attachmentsRouteLayer,
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,

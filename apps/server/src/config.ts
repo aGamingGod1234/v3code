@@ -65,6 +65,13 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly desktopBootstrapToken: string | undefined;
   readonly autoBootstrapProjectFromCwd: boolean;
   readonly logWebSocketEvents: boolean;
+  // V3 identity (Phase 1+). When `googleClientId` is undefined the V3 Google
+  // sign-in layer is still constructible but will reject all verify attempts
+  // with `not-configured`. `authorizedEmails` is an allowlist; an empty list
+  // rejects every email, so the resolver must provide at least one entry to
+  // enable Google sign-in.
+  readonly googleClientId: string | undefined;
+  readonly authorizedEmails: ReadonlyArray<string>;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -165,6 +172,8 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           devUrl,
           noBrowser: false,
           startupPresentation: "browser",
+          googleClientId: undefined,
+          authorizedEmails: [],
         } satisfies ServerConfigShape;
       }),
     );
