@@ -1,8 +1,8 @@
 # V3 Code — Continuation Prompt
 
 **For:** a fresh Claude Code session picking up V3 Code mid-implementation.
-**Last shipped:** Phase 1c (UserContextResolver) on `v3-dev` branch, commit `3d1fcf31`.
-**Resume point:** Phase 1d — client-side Google sign-in UI + Electron `v3://` scheme handler.
+**Last shipped:** Phase 2b (Postgres persistence layer + V3 identity baseline migration) on `v3-dev` branch, commit `249ee128`.
+**Resume point:** Phase 2c — Drive App Data client (`packages/client-runtime/src/drive/appDataClient.ts` + `schema.ts`) for multi-device server-url discovery.
 
 ---
 
@@ -14,7 +14,7 @@
 > 2. **`.docs/v3-master-plan.md`** — the engineering execution plan (synthesized from 10 Opus 4.7 research agents on 2026-04-18). Design decisions D1–D15 are already locked by Lucas; do not re-open them.
 > 3. **`.docs/v3-continuation-prompt.md`** — this file. It captures everything the previous session did, the current git state, the exact gate commands, and what comes next.
 >
-> **Read all three, in that order.** Then resume at the section titled "Phase 1d — Start here". Keep commits on the `v3-dev` branch. Follow the gate + commit rules in §7 of this file exactly.
+> **Read all three, in that order.** Then resume at the section titled "Phase 2c — Start here". Keep commits on the `v3-dev` branch. Follow the gate + commit rules in §7 of this file exactly.
 >
 > Lucas is on Windows 11 with bun at `C:\Users\lucas\AppData\Roaming\npm\bun` and git configured for `aGamingGod1234`. The GitHub repo is `https://github.com/aGamingGod1234/v3code` (private).
 
@@ -40,12 +40,16 @@ upstream   https://github.com/pingdotgg/t3code.git        (track tagged releases
 
 branches:
   main       — P0 end (commits 859aabd8, eba1efd7, 2de09442, 6cebd19e, c5647267 on top of upstream 9df3c640)
-  v3-dev     — active work (currently at 3d1fcf31 after P1a/b/c)
+  v3-dev     — active work (currently at 249ee128 after P0 + P1a/b/c/d + P2a/b)
 ```
 
 Latest v3-dev history (most recent first):
 
 ```
+249ee128 feat(v3): phase 2b — Postgres persistence layer + V3 identity baseline migration
+673c54d1 feat(v3): phase 2a — server-node mode foundations (RuntimeMode + config.toml loader)
+a334cf6d feat(v3): phase 1d — client Google sign-in (Electron + renderer overlay)
+7078ade6 docs(v3): add continuation prompt for next Claude Code session
 3d1fcf31 docs(v3): MESH_CHANGES entry for P1c — UserContextResolver
 b6293b3a feat(v3): phase 1c — UserContextResolver (session → user+device)
 5915f906 feat(v3): phase 1b — Google bootstrap HTTP route + device approval service
@@ -66,18 +70,24 @@ A sibling backup directory exists at `C:\Users\lucas\Desktop\Projects\V3 code.pr
 
 ```bash
 cd "C:/Users/lucas/Desktop/Projects/V3 code"
-bun install                                                  # should be fast (no-op if lockfile matches)
+bun install                                                  # fast; locks @effect/sql-pg + smol-toml installed in P2a/P2b
 bun run fmt                                                  # autoformat
-bun run lint                                                 # expect 0 errors + ~12 pre-existing warnings
+bun run lint                                                 # expect 0 errors + pre-existing warnings
 bun run --cwd apps/server typecheck                          # should pass cleanly
-bun run --cwd apps/server vitest run --reporter=dot src/identity    # 38/38 tests pass
+bun run --cwd apps/server vitest run --reporter=dot src/identity src/config src/serverMode.test.ts src/persistence/PostgresMigrations.test.ts src/persistence/Layers/Postgres.test.ts
+# Expect: 62 pass + 1 todo (38 identity + 16 P2a + 8 P2b)
 ```
 
-If the full `bun run typecheck` is run, it will fail on `apps/web/src/components/ui/input.tsx:44` — a **pre-existing upstream bug** documented in `.docs/MESH_CHANGES.md` under "Known upstream gaps". Do NOT patch it.
+Known flakes / gaps (do NOT patch):
+
+- `apps/web/src/components/ui/input.tsx:44` — pre-existing upstream `tsc` error. Run server-only typecheck.
+- `apps/server/src/cli-config.test.ts` 3 Windows-only EBADF failures on the `bootstrap-fd` code path (reproduced on pristine state pre-P2a; Linux CI assumed clean).
+- `apps/server/src/auth/Layers/ServerSecretStore.test.ts > "uses restrictive permissions"` — `chmod` is a no-op on NTFS.
+- `apps/server/src/server.test.ts > "subscribeServerConfig streams snapshot then update"` and `"projects.searchEntries errors"` — 2/61 Windows flakes (pre-existing).
 
 ---
 
-## 3. What's shipped (phases P0 + P1a + P1b + P1c)
+## 3. What's shipped (phases P0 + P1a + P1b + P1c + P1d + P2a + P2b)
 
 ### P0 — Foundation (complete, merged to both `main` and `v3-dev`)
 
@@ -111,6 +121,38 @@ If the full `bun run typecheck` is run, it will fail on `apps/web/src/components
 - **Wiring:** added to `V3IdentityLayerLive` via `Layer.provide(DeviceSessionRepositoryLive)` (Layer.mergeAll doesn't satisfy intra-merge deps).
 - **Tests:** 38/38 identity pass (4 new).
 
+### P1d — Client Google sign-in (Electron + renderer overlay)
+
+- **Electron:** [v3GoogleAuthFlow.ts](apps/desktop/src/v3GoogleAuthFlow.ts) — PKCE S256 factory, system-browser open, `v3://auth/google/callback` deep-link capture, code → id_token exchange. `setAsDefaultProtocolClient("v3")` + single-instance lock + `open-url`/`second-instance` listeners in `main.ts`. New IPC channel `desktop:v3-open-google-signin`.
+- **Renderer:** [apps/web/src/v3/auth/\*](apps/web/src/v3/auth/) — `deviceId.ts` (localStorage UUID), `signInState.ts` (client-side snapshot + nudge dismissal), `googleSignIn.ts` (orchestrator hitting `/api/auth/google/config` + `/api/auth/google/bootstrap`).
+- **UI:** [SignInButton.tsx](apps/web/src/v3/ui/SignInButton.tsx) top-right always-visible chip, [StartupSignInNudge.tsx](apps/web/src/v3/ui/StartupSignInNudge.tsx) soft toast, [DeviceApprovalToast.tsx](apps/web/src/v3/ui/DeviceApprovalToast.tsx). Mounted in `__root.tsx` via `V3SignInOverlay`.
+- **New server route:** `GET /api/auth/google/config` returns `{ available, clientId }` so renderer knows whether sign-in is configured without a 500 dance.
+- **OAuth Client ID status:** Lucas plans to provision via Claude.ai web signed in as `agaminggod12345@gmail.com`. Until then `V3CODE_GOOGLE_CLIENT_ID` is unset and the button shows a "not configured" disabled state. Redirect URI to register: `v3://auth/google/callback`.
+- **Tests:** 7 desktop (`v3GoogleAuthFlow.test.ts`) + 13 web (`deviceId` 4 + `signInState` 9). Identity suite unchanged at 38/38.
+- **Deferred:** Browser-only flow (requires server-hosted callback with client secret) — lands in P7 web-cloud-mode.
+
+### P2a — Server-node mode foundations (runtime mode + config.toml)
+
+- **`RuntimeMode`** literal extended: `web | desktop | server-node` ([apps/server/src/config.ts](apps/server/src/config.ts)).
+- **[serverMode.ts](apps/server/src/serverMode.ts):** `resolveServerNodeConfigPath` (`V3CODE_SERVER_CONFIG_PATH` override + `~/.v3-code-server/config.toml` default), `hasServerNodeConfig`, pure `resolveServerMode` precedence resolver.
+- **[config/serverNodeConfig.ts](apps/server/src/config/serverNodeConfig.ts):** Schema mirroring master-plan §10.4 TOML surface — `[server]`, `[auth]`, `[database]`, `[cloud_env]`, `[limits]`. Every section optional.
+- **[config/tomlLoader.ts](apps/server/src/config/tomlLoader.ts):** smol-toml parse + Schema decode returning `Option<ServerNodeConfig>`. `ServerNodeConfigError` carries discriminated `reason: read | parse | schema`.
+- **cli.ts wiring:** when mode resolves to server-node AND config.toml exists, TOML values become the lowest-precedence layer in port/host/googleClientId/authorizedEmails merging.
+- **Dependencies:** `smol-toml@^1.3.1` added to root catalog + `apps/server` deps.
+- **`auth/utils.ts` widened:** `resolveSessionCookieName` mode parameter now accepts `"server-node"` (falls through the non-desktop branch — same cookie strategy as web).
+- **Tests:** 9 `serverMode.test.ts` + 7 `config/tomlLoader.test.ts`. Also fix-forwarded 7→5 passing tests in `cli-config.test.ts` (P1b oversight — missing googleClientId/authorizedEmails fields).
+
+### P2b — Postgres persistence layer + V3 identity baseline migration
+
+- **Dependencies:** `@effect/sql-pg@4.0.0-beta.45` added to catalog + `apps/server` deps (51 transitive installs incl. `pg`).
+- **[Layers/Postgres.ts](apps/server/src/persistence/Layers/Postgres.ts):** `makePostgresPersistenceLive({ connectionUrl, applicationName?, spanAttributes? })` factory wrapping `PgClient.layer` + `PostgresMigrationsLive`. `resolvePostgresPersistenceLive` Effect reads ServerConfig and fails with `PostgresNotConfiguredError` when `postgresUrl` is unset. `layerConfig` wraps the resolver for layer-style composition.
+- **[PostgresMigrations.ts](apps/server/src/persistence/PostgresMigrations.ts):** migration runner paralleling `Migrations.ts` (SQLite). Independent id sequence — the V3 Postgres baseline is a new deployment shape, not a continuation of the 26-migration SQLite history.
+- **[PostgresMigrations/001_V3IdentityBaseline.ts](apps/server/src/persistence/PostgresMigrations/001_V3IdentityBaseline.ts):** mirrors SQLite migration 026 in PG syntax. `BLOB → BYTEA`, `INTEGER (boolean) → BOOLEAN`, partial index on `v3_devices WHERE removed_at IS NULL`. Timestamps stay TEXT (ISO-8601) so `Schema.DateTimeUtcFromString` decodes identically on both backends.
+- **`ServerConfigShape.postgresUrl`:** populated from `V3CODE_POSTGRES_URL` (env) or `[database].postgres_url` (TOML).
+- **SCOPE BOUNDARY (read carefully):** The Postgres layer is NOT yet wired into `server.ts` / `bootstrap.ts`. Server startup still unconditionally provides the SQLite layer because the 25 upstream T3 migrations (orchestration_events, projection_threads, auth_sessions, …) have not been ported to Postgres. Running Postgres as the only backend today would break every orchestration/auth service at startup. Porting those migrations is a **separate future sub-phase** (call it P2b-migrate) and is NOT part of P2c.
+- **Forward compat in migration 001:** `v3_device_sessions.session_id` does NOT yet reference `auth_sessions` because that table has not been ported. A follow-up migration adds the FK once the upstream tables reach PG.
+- **Tests:** 5 `Layers/Postgres.test.ts` + 4 `PostgresMigrations.test.ts` + 1 `.todo` placeholder for the real-Postgres integration test (lands in P2d with the setup-wizard smoke test).
+
 ---
 
 ## 4. Locked design decisions (do NOT revisit)
@@ -137,67 +179,150 @@ Lucas picked these on 2026-04-18. They shape every subsequent phase.
 
 ---
 
-## 5. Phase 1d — START HERE
+## 5. Phase 2c — START HERE
 
-P1d is the **client-side half of Phase 1**. Server can already accept Google bootstrap (P1b) and resolve user context (P1c); P1d makes the Electron / web client actually send an ID token.
+P2c is the **Drive App Data client**. It's how V3 devices auto-discover
+each other's server node after Google sign-in without manually typing a
+URL: on sign-in, the client reads/writes a tiny JSON blob in the user's
+Google Drive App Data folder (`appDataFolder`, per-app quota of ~10MB,
+invisible to the user). The blob holds `{ server_url, server_version,
+device_list[] }` — subsequent devices on the same Google account read
+it on sign-in and connect to `server_url` without operator ceremony.
+
+Drive App Data is intentionally client-side only. The server never
+touches Drive; only the renderer holds the Google access token scope
+for it.
 
 ### 5.1 Scope
 
-1. **Electron `v3://` custom-protocol handler** — Google OAuth in Electron needs a deep link back into the app after the user consents in their system browser. Add `v3://auth/google/callback` alongside the existing `t3://`.
-2. **Client-side Google sign-in module** — opens the system browser at `https://accounts.google.com/o/oauth2/v2/auth?...` with `redirect_uri=v3://auth/google/callback`, awaits the deep link, posts the ID token to `/api/auth/google/bootstrap`, stores the resulting session cookie.
-3. **`deviceId` persistence** — each V3 client device has a persistent UUID (spec §3.3). Generate on first launch, store via Electron `safeStorage` (desktop) or `localStorage` (web fallback).
-4. **Sign-in UI** — minimal "Sign in with Google" button at the top of the app, visible when `ServerAuthPolicy` indicates the V3 Google flow is available. A full-featured UI can wait for P3 sidebar rewrite; P1d should just unblock the flow.
-5. **Defer to P1e:** GitHub App integration (`/api/auth/github/start` + `/api/auth/github/callback` routes on server, "Connect GitHub" button on client). It's orthogonal to Google and only needed for Cloud env (P8).
+1. **`packages/client-runtime/src/drive/schema.ts`** — Schema for the
+   `v3_config` blob (master plan §3.4 and §7.3 reproduced below).
+2. **`packages/client-runtime/src/drive/appDataClient.ts`** — pure-
+   `fetch` client: read/write/delete the single `v3_config.json` file
+   inside `appDataFolder`. Typed errors for auth failures, quota
+   exhaustion, network errors, and schema mismatches.
+3. **Hook the client into the V3 sign-in flow** — after a successful
+   `/api/auth/google/bootstrap`, read Drive App Data to discover a
+   pre-registered server URL; if found, display it in the sidebar's
+   upcoming "Multiple devices detected" banner (P3). For P2c the
+   banner itself is NOT built — the read just happens and writes to
+   `localStorage.v3_drive_app_data_snapshot` so P3 can consume it
+   without a round-trip.
+4. **Device list append** — when the renderer completes Google sign-in,
+   append this device's `{ device_id, name, added_at }` to
+   `device_list` and write back. De-dup by `device_id`; no writes in
+   single-device mode (no server URL = no mesh).
+5. **Tests** — mock fetch, verify request shape (query params for
+   file search, multipart body for create, JSON body for update).
 
-### 5.2 Open sub-decisions for P1d
+### 5.2 Open sub-decisions for P2c
 
-When you start, ask Lucas (via `AskUserQuestion`) for:
+Ask Lucas via `AskUserQuestion` before starting:
 
-- **Q1d-1:** Should the "Sign in with Google" button be visible in **desktop+single-device** mode too (where `ServerAuthPolicy` is `desktop-managed-local`), or only in `server-node`/`loopback-browser`/`remote-reachable`? (Recommendation: hide in `desktop-managed-local` — Google is only useful for multi-device which requires server-node.)
-- **Q1d-2:** Does Lucas have a Google Cloud Console project for V3 already with an OAuth 2.0 Client ID? If not, P1d can stub with a test client ID and Lucas sets up the real one before first shipping the UI to users.
+- **Q2c-1:** Drive scope already requested in P1d Google sign-in is
+  `openid email profile`. For App Data we also need
+  `https://www.googleapis.com/auth/drive.appdata`. Add that scope
+  now (users get prompted on next sign-in) or gate it behind a
+  "Enable multi-device sync" action the user takes explicitly in
+  Settings? Recommendation: add now — the scope is narrow (app's own
+  data only, not user's Drive) and getting consent once beats a
+  second prompt later.
+- **Q2c-2:** Behavior when Drive App Data quota is exhausted (10MB) —
+  surface as a blocking toast, log+ignore, or silently fall back to
+  `localStorage`-only? Recommendation: log+ignore in P2c, revisit
+  when the device list grows large enough to warrant eviction rules.
 
-Don't ask about the broader design decisions — those are locked (§4).
+### 5.3 P2c file list
 
-### 5.3 P1d file list (greenfield)
+**New files (V3-owned):**
 
-**New files (all V3-owned, no upstream conflict risk):**
+- `packages/client-runtime/src/drive/schema.ts` — `V3DriveConfig`
+  schema, DeviceEntry, strict decoding via Effect Schema.
+- `packages/client-runtime/src/drive/appDataClient.ts` — fetch wrapper
+  with `read`, `write`, `readOrInit`, `appendDevice` helpers. All
+  methods take the Google access token as an explicit param (no
+  singleton storage; tests pass stubs).
+- `packages/client-runtime/src/drive/appDataClient.test.ts` — mocked
+  `fetch`, covers create-if-missing, read-existing, append-device
+  idempotency, quota-exceeded handling, malformed-blob handling.
+- `packages/client-runtime/src/drive/index.ts` — barrel export (or
+  add `drive/*` to the existing client-runtime entry).
 
-- `apps/desktop/src/v3GoogleAuthFlow.ts` — Electron main-process helper: opens `shell.openExternal(authUrl)`, awaits `v3://auth/google/callback?code=…` via `app.on("open-url")` (macOS) + `app.on("second-instance")` (Win/Linux), exchanges the auth code for tokens via `POST https://oauth2.googleapis.com/token`, returns ID token to renderer over a new IPC channel.
-- `apps/web/src/v3/auth/googleSignIn.ts` — browser-side entry. Electron: calls `window.desktopBridge.openV3GoogleSignIn()`. Browser: redirects the whole page to Google's consent screen with `redirect_uri` pointing at a server-hosted `/api/auth/google/browser-callback` (new) that posts back to `/api/auth/google/bootstrap` and returns an HTML that `window.close()`s the popup or replaces with the signed-in state.
-- `apps/web/src/v3/auth/deviceId.ts` — `resolveDeviceId()`: reads `localStorage.v3_device_id`, generates `crypto.randomUUID()` if absent, returns branded `DeviceId`.
-- `apps/web/src/v3/auth/tokenStore.ts` — wraps `window.desktopBridge.encryptString/decryptString` (already exposed on Electron via `safeStorage`) or falls back to `localStorage` for browser.
-- `apps/web/src/v3/ui/SignInButton.tsx` — minimal React button. Placeholder visual; polished UI lands in P3.
-- `apps/web/src/v3/ui/DeviceApprovalToast.tsx` — receives `needsApproval` from the bootstrap response and surfaces "Your device is pending approval from another signed-in device" state.
+**Modified upstream files** (each needs a MESH_CHANGES entry — §7.4):
 
-**Modified upstream files** (each needs a MESH_CHANGES entry — see §7.4):
+- `apps/web/src/v3/auth/googleSignIn.ts` — on successful bootstrap,
+  store the access token (NEW; it's currently only id_token that
+  flows to the server), then read Drive App Data. If found AND the
+  server_url doesn't match the current backend, cache the snapshot
+  into localStorage so P3 can render the "Configure server" banner.
+- `apps/desktop/src/v3GoogleAuthFlow.ts` — the token exchange
+  currently discards the access_token. Add it to the return value
+  so the renderer can call Drive APIs.
+- `packages/contracts/src/ipc.ts` — `openV3GoogleSignIn` now returns
+  `{ idToken, accessToken }` instead of `{ idToken }`. Callers in
+  `apps/desktop/src/preload.ts` propagate automatically.
 
-- `apps/desktop/src/main.ts` — `app.setAsDefaultProtocolClient("v3")`, add `open-url`/`second-instance` listeners, new IPC channel `V3_OPEN_GOOGLE_SIGNIN_CHANNEL`.
-- `apps/desktop/src/preload.ts` — expose `openV3GoogleSignIn()` on `window.desktopBridge`.
-- `apps/web/src/main.tsx` — on boot, if `authPolicy` is V3-ish, render `<SignInButton>` until authenticated, then mount the router as today.
+### 5.4 Ground rules for P2c
 
-### 5.4 Ground rules for P1d
+- **Client-side only.** Server never sees the Drive access token.
+- **No write on empty device list.** If only one device exists (this
+  one), skip the Drive write — single-device users don't need the
+  App Data blob at all. Only write when a second device joins.
+- **Do NOT wire the server-node setup wizard yet** (P2d). P2c makes
+  discovery work; P2d makes initial setup work.
+- **Do NOT fix the EBADF flakes in `cli-config.test.ts`.** Those are
+  pre-existing Windows fd-lifecycle bugs on the `bootstrap-fd` code
+  path. Linux CI is presumed clean.
+- Consult `packages/client-runtime/src/` before dropping files — it
+  has existing conventions around exports and entry points.
 
-- **Do NOT** touch `apps/server/src/ws.ts` yet. The WS handshake extension to consume `UserContextResolver` lands in **P4** (chat sync), not P1d.
-- **Do NOT** extend `AuthenticatedSession` with `userId/deviceId`. Same reason — P4.
-- **Do NOT** add the `"v3-google-managed"` literal to `ServerAuthPolicy` yet — wait until the client UI actually needs to branch on it. Adding a contract literal now and not using it would bloat the auth contract unnecessarily.
-- Consult `.docs/remote-architecture.md` before touching Electron stuff — there's an existing model you should extend, not bypass.
+### 5.5 Drive App Data reference (from master plan §3.4 + §7.3)
+
+Blob path: `appDataFolder/v3_config.json` (~5 KB when populated).
+
+```json
+{
+  "v3_config": {
+    "server_url": "https://v3.agaminggod.com",
+    "server_version_installed": "0.1.0",
+    "setup_at": "2026-04-18T10:00:00Z",
+    "device_list": [{ "device_id": "uuid", "name": "Desktop", "added_at": "..." }]
+  }
+}
+```
+
+Google Drive REST endpoints P2c uses:
+
+- `GET https://www.googleapis.com/drive/v3/files?q=name='v3_config.json' and 'appDataFolder' in parents&spaces=appDataFolder` — find the blob.
+- `GET https://www.googleapis.com/drive/v3/files/{id}?alt=media` — read it.
+- `POST https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart` with parent=appDataFolder — create it.
+- `PATCH https://www.googleapis.com/upload/drive/v3/files/{id}?uploadType=media` — update it.
+
+All with `Authorization: Bearer ${access_token}`.
 
 ---
 
 ## 6. Subsequent phases (from the master plan)
 
-| Phase   | Title                                            | Size                       | Key deliverable                                                                                                                                                                                                                                                                                    |
-| ------- | ------------------------------------------------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **P2**  | Server-node mode + Drive App Data + setup wizard | 5 weeks                    | `V3CODE_MODE=server-node` runtime detection, `~/.v3-code-server/config.toml` loader, `@effect/sql-pg` Postgres layer, self-host wizard (6 screens) including cloudflared install, in-app Fly.io + Railway deploy scaffolding, `/admin` panel route, Drive App Data client                          |
-| **P3**  | Device model + sidebar rewrite                   | 2 weeks                    | `packages/contracts/src/mesh/device.ts`, `DeviceSidebar` tree replacing signed-in branch of `Sidebar.tsx`, `ConfigureServerBanner`, Settings → Devices panel                                                                                                                                       |
-| **P4**  | Chat sync v1                                     | 8 weeks                    | `ChatSubscriptionManager` Effect Layer, `mesh.subscribeChat`/`mesh.publishEvent` RPCs with server-assigned seq, gap detection client-side, `MeshPublisher`. **This is the big one** — includes extending `ws.ts` to use `UserContextResolver`. Perf gates: 1000-event replay <500ms, gap-fill <2s. |
-| **P5**  | Cross-device prompts                             | 2 weeks                    | `mesh.sendPrompt` RPC, `PromptRouter`, `PromptAttribution` badge                                                                                                                                                                                                                                   |
-| **P6**  | Fork chat                                        | 2 weeks                    | `chat.fork` command, SQL event-log copy preserving stream_version, two-phase UI                                                                                                                                                                                                                    |
-| **P7**  | Web app cloud mode                               | 3 weeks                    | `VITE_V3_CLOUD_MODE` build flag, GitHub repo browser                                                                                                                                                                                                                                               |
-| **P8**  | Cloud env (Docker)                               | 6 weeks                    | `apps/cloud-env-image/`, `ContainerManager` with Docker+Fly backends, preview proxy, GitHub App token minting — uses P1e's user-owned GitHub App                                                                                                                                                   |
-| **P9**  | Android app + FCM                                | 5 weeks (parallel, w23–34) | `apps/mobile/` Capacitor 6, FCM, foreground service                                                                                                                                                                                                                                                |
-| **P10** | Subagent UI + polish                             | 2 weeks                    | `SubagentCard`, `AgentsTab`, PreviewPane                                                                                                                                                                                                                                                           |
-| **P11** | Public launch prep                               | 2 weeks                    | Landing page, docs site, deploy templates, README polish                                                                                                                                                                                                                                           |
+| Phase       | Title                                                  | Size                       | Key deliverable                                                                                                                                                                                                                                                                                    |
+| ----------- | ------------------------------------------------------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P2a**     | RuntimeMode + config.toml loader                       | ✅ Shipped `673c54d1`      | `web \| desktop \| server-node` literal, smol-toml loader, precedence wiring                                                                                                                                                                                                                       |
+| **P2b**     | Postgres persistence layer + V3 identity migration 001 | ✅ Shipped `249ee128`      | `@effect/sql-pg`, `PostgresMigrations/001_V3IdentityBaseline.ts`, `postgresUrl` config. NOT wired into `server.ts` yet (upstream T3 migrations unported)                                                                                                                                           |
+| **P2c**     | Drive App Data client (**START HERE**)                 | 🟡 Next                    | `packages/client-runtime/src/drive/{appDataClient,schema}.ts`, read/write `v3_config.json` in Drive `appDataFolder`, hook after Google bootstrap                                                                                                                                                   |
+| **P2b-mig** | Port upstream T3 migrations to Postgres                | ⏸ Backlog                  | Replay the 25 upstream SQLite migrations (orchestration_events, projection_threads, auth_sessions, …) as Postgres 002+. Prerequisite to actually running server-node with Postgres.                                                                                                                |
+| **P2d**     | Self-host setup wizard (6 screens)                     | ⏸ Queued                   | `apps/desktop/src/wizard/*`, `apps/web/src/routes/setup/*`, cloudflared installer, mode-aware persistence swap in `server.ts`                                                                                                                                                                      |
+| **P2e**     | One-click deploy templates                             | ⏸ Queued                   | `deploy/flyio/*`, `deploy/railway/*`, in-app deploy scaffolding                                                                                                                                                                                                                                    |
+| **P2g**     | Admin panel (`/admin` route)                           | ⏸ Queued                   | `apps/web/src/routes/admin.tsx` + sub-routes, guarded by `useServerMode()==="server-node"`                                                                                                                                                                                                         |
+| **P2h**     | hello / heartbeat / presence_update RPCs               | ⏸ Queued                   | `packages/contracts/src/mesh/{hello,heartbeat,presence}.ts`, presence over extended `SessionCredentialService.streamChanges`                                                                                                                                                                       |
+| **P3**      | Device model + sidebar rewrite                         | 2 weeks                    | `packages/contracts/src/mesh/device.ts`, `DeviceSidebar` tree replacing signed-in branch of `Sidebar.tsx`, `ConfigureServerBanner`, Settings → Devices panel                                                                                                                                       |
+| **P4**      | Chat sync v1                                           | 8 weeks                    | `ChatSubscriptionManager` Effect Layer, `mesh.subscribeChat`/`mesh.publishEvent` RPCs with server-assigned seq, gap detection client-side, `MeshPublisher`. **This is the big one** — includes extending `ws.ts` to use `UserContextResolver`. Perf gates: 1000-event replay <500ms, gap-fill <2s. |
+| **P5**      | Cross-device prompts                                   | 2 weeks                    | `mesh.sendPrompt` RPC, `PromptRouter`, `PromptAttribution` badge                                                                                                                                                                                                                                   |
+| **P6**      | Fork chat                                              | 2 weeks                    | `chat.fork` command, SQL event-log copy preserving stream_version, two-phase UI                                                                                                                                                                                                                    |
+| **P7**      | Web app cloud mode                                     | 3 weeks                    | `VITE_V3_CLOUD_MODE` build flag, GitHub repo browser                                                                                                                                                                                                                                               |
+| **P8**      | Cloud env (Docker)                                     | 6 weeks                    | `apps/cloud-env-image/`, `ContainerManager` with Docker+Fly backends, preview proxy, GitHub App token minting — uses P1e's user-owned GitHub App                                                                                                                                                   |
+| **P9**      | Android app + FCM                                      | 5 weeks (parallel, w23–34) | `apps/mobile/` Capacitor 6, FCM, foreground service                                                                                                                                                                                                                                                |
+| **P10**     | Subagent UI + polish                                   | 2 weeks                    | `SubagentCard`, `AgentsTab`, PreviewPane                                                                                                                                                                                                                                                           |
+| **P11**     | Public launch prep                                     | 2 weeks                    | Landing page, docs site, deploy templates, README polish                                                                                                                                                                                                                                           |
 
 Detailed per-phase file lists live in `.docs/v3-master-plan.md` §13 (critical files to create) and §14 (critical files to modify).
 
@@ -344,7 +469,30 @@ Read these before making design decisions — they shortcut days of re-explorati
 | `apps/server/src/identity/Services/DeviceApprovalService.ts`   | + Layer, + test — first-device auto-approval + PubSub                 |
 | `apps/server/src/identity/Services/GoogleIdentityService.ts`   | + Layer, + test — jose JWKS verifier                                  |
 | `apps/server/src/identity/Services/UserContextResolver.ts`     | + Layer, + test — session → {userId, deviceId}                        |
-| `apps/server/src/identity/http.ts`                             | `/api/auth/google/bootstrap` route                                    |
+| `apps/server/src/identity/http.ts`                             | `/api/auth/google/bootstrap` + `/api/auth/google/config` routes       |
+
+### V3 client sign-in module (P1d, read before extending)
+
+| File                                         | Purpose                                                                                       |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `apps/desktop/src/v3GoogleAuthFlow.ts`       | Electron main-process PKCE OAuth flow (factory takes `{ openExternal, fetch }` deps for test) |
+| `apps/web/src/v3/auth/deviceId.ts`           | `resolveDeviceId()` — localStorage UUID                                                       |
+| `apps/web/src/v3/auth/signInState.ts`        | Non-sensitive client snapshot + nudge dismissal                                               |
+| `apps/web/src/v3/auth/googleSignIn.ts`       | Orchestrator: `fetchGoogleClientConfig` + `startV3GoogleSignIn`                               |
+| `apps/web/src/v3/ui/SignInButton.tsx`        | Top-right overlay chip mounted from `__root.tsx`                                              |
+| `apps/web/src/v3/ui/StartupSignInNudge.tsx`  | Soft startup toast                                                                            |
+| `apps/web/src/v3/ui/DeviceApprovalToast.tsx` | Reads `pendingApproval` from snapshot                                                         |
+
+### V3 server-node mode foundations (P2a–b, read before extending)
+
+| File                                                                       | Purpose                                                                            |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `apps/server/src/serverMode.ts`                                            | Mode precedence + `~/.v3-code-server/config.toml` path resolution                  |
+| `apps/server/src/config/serverNodeConfig.ts`                               | Schema for the TOML: `[server]`, `[auth]`, `[database]`, `[cloud_env]`, `[limits]` |
+| `apps/server/src/config/tomlLoader.ts`                                     | smol-toml + Schema decode + `ServerNodeConfigError`                                |
+| `apps/server/src/persistence/Layers/Postgres.ts`                           | `makePostgresPersistenceLive` factory + `resolvePostgresPersistenceLive` Effect    |
+| `apps/server/src/persistence/PostgresMigrations.ts`                        | Migration runner registry (parallel to `Migrations.ts`)                            |
+| `apps/server/src/persistence/PostgresMigrations/001_V3IdentityBaseline.ts` | PG port of SQLite migration 026 (v3_users / v3_devices / v3_device_sessions)       |
 
 ### Existing T3 auth (extend, don't replace)
 
@@ -382,7 +530,7 @@ All in `C:\Users\lucas\.claude\plans\` with the long dynamic-boole-agent-\* pref
 
 ---
 
-## 9. Common pitfalls encountered in P0–P1c
+## 9. Common pitfalls encountered in P0–P2b
 
 1. **`mv` fails on the project root** — editor has files open. Empty and copy instead.
 2. **bun not in PATH** — `npm install -g bun` to put it at `~/AppData/Roaming/npm/bun`. Version 1.3.12 works for the `^1.3.11` engines requirement.
@@ -391,20 +539,25 @@ All in `C:\Users\lucas\.claude\plans\` with the long dynamic-boole-agent-\* pref
 5. **`Layer.mergeAll` dependency failures** — "Missing X in the expected Layer context". Fix by `Layer.provide`ing the dep into the dependent layer before the merge.
 6. **SQLite UNIQUE on shared test state** — within one `it.layer` block, successive `it.effect` cases share the DB. Use distinct ids per test.
 7. **Effect Schema warnings about `instanceof`** — replace with `Schema.is(Error)(cause)`.
-8. **ON CONFLICT + RETURNING weirdness on bun's SQLite driver** — if a boolean-ish column doesn't round-trip through RETURNING, split into INSERT + separate SELECT, or use only fields you control explicitly (P1a's DeviceRepository.register initially passed `approved` through ON CONFLICT RETURNING and it silently returned 0; fix was to remove `approved` from the INSERT and always set it to 0, then flip it via `setApproved`).
+8. **ON CONFLICT + RETURNING weirdness on bun's SQLite driver** — if a boolean-ish column doesn't round-trip through RETURNING, split into INSERT + separate SELECT, or use only fields you control explicitly.
 9. **`process.env.V3CODE_*` reads happen at Live construction, not at runtime** — so tests that want to exercise a different config value must re-build the Live layer with a `ServerConfig.layerTest` that overrides those fields.
 10. **Scheduled wakeups** — these can fire into a new Claude session. If you set one and a notification arrives for a task that's already done, acknowledge and continue — the scheduled prompt may be stale.
+11. **`Effect 4.0-beta` schema decode API** — use `Schema.decodeUnknownEffect` / `Schema.decodeEffect`, NOT `Schema.decodeUnknown`. See P2a `tomlLoader.ts`.
+12. **`Schema.refine` expects a type predicate, not a plain boolean predicate** — prefer `Schema.isNonEmpty()` / `TrimmedNonEmptyString` from `@v3tools/contracts` over hand-rolled refinements.
+13. **`Layer.fail` does NOT exist in Effect 4** — use `yield* new MyTaggedError({...})` inside an `Effect.gen` wrapped by `Layer.unwrap`. See P2b `persistence/Layers/Postgres.ts`.
+14. **`@effect/vitest` inline layer pattern** — prefer `const layer = it.layer(stack); layer("name", (it) => { it.effect(...) })` over `it.layer(stack)("name", ...)`. The inline form can trip the vitest fixture parser on the first `it.effect` call (P2b `tomlLoader.test.ts` hit this).
+15. **`ServerConfigShape` is additive — every test fixture needs the new field** — P1b missed `cli-config.test.ts`, P2a partially fixed it, P2b added `postgresUrl: undefined` to the remaining fixtures. Next shape widening: audit all 4 fixture locations (`cli.test.ts`, `cli-config.test.ts`, `environment/Layers/ServerEnvironment.test.ts`, `server.test.ts`).
 
 ---
 
 ## 10. What to do first in the new session
 
-1. `cd "C:/Users/lucas/Desktop/Projects/V3 code" && git status && git log --oneline -5` — sanity check repo state.
-2. Read `V3_CODE_SPEC.md`, `.docs/v3-master-plan.md`, `.docs/MESH_CHANGES.md`, and this file.
-3. Skim the V3 identity module (§8 file map) so the patterns are fresh.
-4. `bun install` + run the gate commands from §2.4.
-5. Ask Lucas the two P1d sub-decisions from §5.2 via `AskUserQuestion`.
-6. Start P1d per §5.3.
+1. `cd "C:/Users/lucas/Desktop/Projects/V3 code" && git status && git log --oneline -5` — expect `249ee128` (P2b) on top of clean `v3-dev`.
+2. Read `V3_CODE_SPEC.md`, `.docs/v3-master-plan.md`, `.docs/MESH_CHANGES.md`, and this file (in that order).
+3. Skim the V3 identity module (§8 file map) + the P2a/P2b files introduced at `apps/server/src/{config,serverMode,persistence}` so the patterns are fresh.
+4. `bun install` + run the gate commands from §2.4 — expect 62 pass + 1 todo.
+5. Ask Lucas the two P2c sub-decisions from §5.2 via `AskUserQuestion`.
+6. Start P2c per §5.3.
 
 ---
 
