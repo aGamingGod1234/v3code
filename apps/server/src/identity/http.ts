@@ -3,6 +3,7 @@ import {
   DeviceInfo,
   GoogleBootstrapInput,
   GoogleBootstrapResult,
+  GoogleClientPublicConfig,
   UserId,
   UserInfo,
   type VerifiedGoogleIdentity,
@@ -233,4 +234,27 @@ export const googleBootstrapRouteLayer = HttpRouter.add(
       }),
     ),
   ),
+);
+
+// GET /api/auth/google/config
+//
+// Public, unauthenticated. Returns the OAuth Client ID the operator has
+// configured for V3, or `{ available: false, clientId: null }` if Google
+// sign-in is not enabled on this server. Renderers call this on boot to
+// decide whether to show the V3 sign-in affordance and to build the OAuth
+// authorization URL. The Client ID is intentionally not a secret — installed
+// apps authenticate to Google with PKCE rather than a client secret.
+export const googleConfigRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/auth/google/config",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig;
+    const available = typeof config.googleClientId === "string" && config.googleClientId.length > 0;
+    const body: GoogleClientPublicConfig = {
+      available,
+      clientId: available ? (config.googleClientId as GoogleClientPublicConfig["clientId"]) : null,
+    };
+    const encoded = Schema.encodeSync(GoogleClientPublicConfig)(body);
+    return HttpServerResponse.jsonUnsafe(encoded, { status: 200 });
+  }),
 );

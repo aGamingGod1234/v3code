@@ -203,3 +203,101 @@ All changes below are NEW files in V3-owned subtrees or additive entries in upst
 - **Reason**: Mirror `v3IdentityTestLayer` composition.
 - **Conflict risk on rebase**: low.
 - **Last rebase verified**: 2026-04-18
+
+### Phase 1d — Client-side Google sign-in (renderer + Electron + public config route)
+
+P1d completes the bootstrap loop wired in P1a–P1c by giving the renderer a way
+to actually obtain a Google ID token and forward it to the existing
+`/api/auth/google/bootstrap` route. Lucas's Q1d-1 answer (top-right always-
+visible button + soft startup nudge) is realised by mounting a single overlay
+in `__root.tsx`. Q1d-2 is satisfied by leaving `V3CODE_GOOGLE_CLIENT_ID`
+unset in dev — the new `GET /api/auth/google/config` route surfaces a
+"not configured" state so the button shows but stays disabled until Lucas
+provisions the OAuth Client ID via the Google Cloud Console.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `apps/desktop/src/v3GoogleAuthFlow.ts` (+ `.test.ts`) — pure factory `createV3GoogleAuthFlow({ openExternal, fetch })`. Generates state + PKCE S256, opens the system browser, awaits the matching `v3://auth/google/callback` deep link via `handleDeepLink(url)`, exchanges the code at `https://oauth2.googleapis.com/token`, returns `{ idToken }`. `getSharedV3GoogleAuthFlow()` lazily wires Electron's `shell` so the test exercises the factory without a vitest electron mock. 7 tests cover the success path, empty client id, state mismatch, scheme/path filtering, explicit Google `error` param, token-endpoint failure, and supersede-by-new-flow cancellation.
+- `apps/web/src/v3/auth/deviceId.ts` (+ `.test.ts`) — `resolveDeviceId()` reads `localStorage["v3.device-id"]`, mints a UUID v4 via `crypto.randomUUID()` if absent or malformed, returns the branded `DeviceId`. 4 tests cover mint-on-empty, idempotency, regeneration on malformed entry, and graceful behaviour when storage `setItem` throws.
+- `apps/web/src/v3/auth/signInState.ts` (+ `.test.ts`) — non-sensitive client store: `recordV3SignedIn`, `clearV3SignedIn`, `useV3SignInSnapshot`, `dismissStartupNudge`, `dismissStartupNudgePermanently`, `shouldShowStartupNudge`. Snapshot carries `{ email, displayName, avatarUrl, pendingApproval }`. Cross-tab updates via `storage` event. 9 tests cover snapshot lifecycle, 7-day soft-dismissal window, permanent dismissal, and malformed-entry tolerance.
+- `apps/web/src/v3/auth/googleSignIn.ts` — orchestrator. `fetchGoogleClientConfig()` hits the new server route. `startV3GoogleSignIn()` requires Electron in P1d (browser-only flow deferred to P7), invokes `desktopBridge.openV3GoogleSignIn`, POSTs id_token + device metadata to `/api/auth/google/bootstrap`, decodes the result via the `GoogleBootstrapResult` schema, and writes the snapshot. Throws a `V3SignInError` carrying a discriminated `code`.
+- `apps/web/src/v3/ui/SignInButton.tsx` — three states: signed-in chip with email + local sign-out, configured-and-signed-out primary button, "not configured" disabled affordance with tooltip explaining the operator hasn't set `V3CODE_GOOGLE_CLIENT_ID`.
+- `apps/web/src/v3/ui/StartupSignInNudge.tsx` — fires a single dismissible info toast on first authenticated mount when sign-in is configured but this device hasn't signed in yet. Auto-dismisses for 7 days on first show.
+- `apps/web/src/v3/ui/DeviceApprovalToast.tsx` — fires a warning toast when the snapshot reports `pendingApproval: true`. P3 wires the WS push that clears it.
+
+**Modified upstream files:**
+
+### `packages/contracts/src/identity.ts` (V3-owned, additive)
+
+- **Modified**: 2026-04-18 (P1d) — V3-owned file; no rebase risk.
+- **What changed**: added `GoogleClientPublicConfig = Schema.Struct({ available: Boolean, clientId: NullOr(TrimmedNonEmptyString) })`. Used by both the new server route and the renderer.
+
+### `apps/server/src/identity/http.ts` (V3-owned, additive)
+
+- **Modified**: 2026-04-18 (P1d) — V3-owned file; no rebase risk.
+- **What changed**: appended `googleConfigRouteLayer` exporting `GET /api/auth/google/config`. Reads `ServerConfig.googleClientId`; returns `{ available, clientId }`. Public, unauthenticated — the Client ID is intentionally not a secret (installed-app PKCE).
+
+### `apps/server/src/server.ts` (P1d update on top of P1b/P1c)
+
+- **Modified**: 2026-04-18 (P1d)
+- **V3 phase**: Phase 1d — client Google sign-in
+- **Reason**: Register the public `googleConfigRouteLayer` alongside the bootstrap route.
+- **What changed**:
+  - Added `googleConfigRouteLayer` to the existing `./identity/http.ts` import.
+  - Inserted into `makeRoutesLayer` immediately after `googleBootstrapRouteLayer`.
+- **Conflict risk on rebase**: medium — `makeRoutesLayer` is a hotspot. Both V3 entries sit together so a rename/move conflict surfaces in one location.
+- **Last rebase verified**: 2026-04-18
+
+### `packages/contracts/src/ipc.ts`
+
+- **Modified**: 2026-04-18 (P1d)
+- **V3 phase**: Phase 1d — client Google sign-in
+- **Reason**: Expose the renderer-facing `openV3GoogleSignIn` method that drives the Electron-side OAuth flow.
+- **What changed**:
+  - Added one method to `DesktopBridge`: `openV3GoogleSignIn(input: { clientId: string }): Promise<{ idToken: string }>`. Resolves with the Google id_token; rejects on cancel/timeout/network/misconfiguration.
+- **Conflict risk on rebase**: low — DesktopBridge is V3-friendly (additive method on an interface). Watch for upstream renaming the bridge.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/desktop/src/preload.ts`
+
+- **Modified**: 2026-04-18 (P1d)
+- **V3 phase**: Phase 1d — client Google sign-in
+- **Reason**: Wire the new bridge method into the renderer.
+- **What changed**:
+  - Added channel constant `V3_OPEN_GOOGLE_SIGNIN_CHANNEL = "desktop:v3-open-google-signin"`.
+  - Added one method to the `contextBridge.exposeInMainWorld("desktopBridge", …)` object: `openV3GoogleSignIn: (input) => ipcRenderer.invoke(V3_OPEN_GOOGLE_SIGNIN_CHANNEL, input)`.
+- **Conflict risk on rebase**: low — append-only.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/desktop/src/main.ts`
+
+- **Modified**: 2026-04-18 (P1d)
+- **V3 phase**: Phase 1d — client Google sign-in
+- **Reason**: Drive the OAuth deep-link flow from the main process: register `v3` as a default protocol handler, acquire the single-instance lock so OS-spawned callback processes forward to the running V3, listen for `open-url` (macOS) / `second-instance` (Win/Linux), and expose the IPC entry point.
+- **What changed**:
+  - Added imports: `getSharedV3GoogleAuthFlow` from `./v3GoogleAuthFlow.ts`.
+  - Added channel constants `V3_OPEN_GOOGLE_SIGNIN_CHANNEL` and `V3_DEEP_LINK_SCHEME` near the existing channel constants.
+  - Inserted module-level setup after the constants: `app.setAsDefaultProtocolClient("v3", …)` (with execPath + script path in dev), `app.requestSingleInstanceLock()` (quits the second instance), helpers `isV3DeepLink`/`findV3DeepLinkInArgv`.
+  - Added `ipcMain.handle(V3_OPEN_GOOGLE_SIGNIN_CHANNEL, …)` inside `registerIpcHandlers()` between the server-exposure and pick-folder handlers — validates shape and delegates to `getSharedV3GoogleAuthFlow().start({ clientId })`.
+  - Inside the `app.whenReady().then(…)` block, attached `app.on("second-instance", …)` and `app.on("open-url", …)` listeners that forward `v3://…` URLs into `getSharedV3GoogleAuthFlow().handleDeepLink` and surface the existing window via `revealWindow`.
+- **Conflict risk on rebase**: medium — main.ts is large and upstream rearranges init ordering. The V3 changes cluster in three places (constants, IPC handler block, whenReady listeners) and reuse existing helpers (`revealWindow`, `mainWindow`, `BrowserWindow.getAllWindows`).
+- **Behaviour change for upstream-aware rebase**: V3 now requires a single-instance lock for OAuth deep-link forwarding to work. T3 today does not call `requestSingleInstanceLock`; if upstream adds its own single-instance handling, merge the two.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/web/src/routes/__root.tsx`
+
+- **Modified**: 2026-04-18 (P1d)
+- **V3 phase**: Phase 1d — client Google sign-in
+- **Reason**: Mount the V3 sign-in surfaces inside the existing authenticated layout so they appear in every route after the auth gate resolves. Lucas Q1d-1 answer: top-right corner, always visible.
+- **What changed**:
+  - Added imports: `V3SignInButton`, `V3StartupSignInNudge`, `V3DeviceApprovalToast` from `../v3/ui/*`.
+  - Added an inline `V3SignInOverlay` wrapper that pins the button to `fixed top-2 right-2 z-50` so it sits above the existing layout chrome without consuming layout space.
+  - Inside `RootRouteView`'s authenticated branch, mounted `<V3SignInOverlay />`, `<V3StartupSignInNudge />`, and `<V3DeviceApprovalToast />` as sibling tail nodes inside the `AnchoredToastProvider`.
+- **Conflict risk on rebase**: medium — `__root.tsx` is on the known-risk list and upstream actively edits the authenticated branch's children. The V3 mounts are tail siblings so they survive most upstream churn unless the provider tree reshuffles.
+- **Last rebase verified**: 2026-04-18
+
+**Test coverage**
+
+- Server identity suite: still 38/38 (no new tests landed there in P1d — the new `googleConfigRouteLayer` is intentionally minimal and exercised end-to-end by the renderer flow).
+- Desktop: +7 tests in `apps/desktop/src/v3GoogleAuthFlow.test.ts`.
+- Web: +13 tests across `apps/web/src/v3/auth/{deviceId,signInState}.test.ts`.

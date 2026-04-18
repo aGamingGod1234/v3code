@@ -123,3 +123,20 @@ export const GoogleBootstrapResult = Schema.Struct({
   needsApproval: Schema.Boolean,
 });
 export type GoogleBootstrapResult = typeof GoogleBootstrapResult.Type;
+
+// ---------------------------------------------------------------------------
+// Public client config for Google sign-in (P1d wire shape)
+// ---------------------------------------------------------------------------
+
+// Read by client devices on boot to decide whether to surface the V3 sign-in
+// affordance and which OAuth client to authenticate against. The client_id is
+// the OAuth Client ID registered in the operator's Google Cloud Console
+// project. It is intentionally not a secret — public installed-app clients
+// authenticate with PKCE rather than a client secret. When `available` is
+// false, `clientId` is null and the sign-in UI surfaces a "not configured"
+// state instead of attempting the OAuth dance.
+export const GoogleClientPublicConfig = Schema.Struct({
+  available: Schema.Boolean,
+  clientId: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type GoogleClientPublicConfig = typeof GoogleClientPublicConfig.Type;

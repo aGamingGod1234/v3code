@@ -175,6 +175,13 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  // V3 (Phase 1d): drive Google sign-in via the system browser. Resolves
+  // with the `id_token` returned by Google's token endpoint after the user
+  // consents and the `v3://auth/google/callback` deep link fires. Rejects
+  // on cancellation, timeout, network failure, or a misconfigured client.
+  // The renderer is expected to forward `idToken` to the V3 server's
+  // /api/auth/google/bootstrap route together with this device's metadata.
+  openV3GoogleSignIn: (input: { clientId: string }) => Promise<{ idToken: string }>;
 }
 
 /**

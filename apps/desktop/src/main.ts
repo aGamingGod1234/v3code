@@ -75,6 +75,7 @@ import {
 } from "./updateMachine.ts";
 import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch.ts";
 import { resolveDesktopAppBranding } from "./appBranding.ts";
+import { getSharedV3GoogleAuthFlow } from "./v3GoogleAuthFlow.ts";
 
 syncShellEnvironment();
 
@@ -101,6 +102,44 @@ const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secr
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
+// V3 Phase 1d — Google sign-in via the system browser. The matching
+// renderer wiring lives in apps/desktop/src/preload.ts and the actual
+// flow logic in apps/desktop/src/v3GoogleAuthFlow.ts.
+const V3_OPEN_GOOGLE_SIGNIN_CHANNEL = "desktop:v3-open-google-signin";
+const V3_DEEP_LINK_SCHEME = "v3";
+
+// V3 Phase 1d — register the OS as the default handler for v3:// deep links
+// and acquire the single-instance lock. The OS spawns a fresh process when
+// a v3://auth/google/callback URL fires; that process must forward the URL
+// to the user's running V3 instance via the `second-instance` event rather
+// than start its own backend / window. macOS uses `open-url` instead and
+// does not spawn a second process, but the lock is still required so the
+// first launch can claim it.
+if (process.defaultApp && process.argv.length >= 2) {
+  // Dev mode: include execPath + script path so the OS knows how to relaunch us.
+  app.setAsDefaultProtocolClient(V3_DEEP_LINK_SCHEME, process.execPath, [
+    Path.resolve(process.argv[1] ?? ""),
+  ]);
+} else {
+  app.setAsDefaultProtocolClient(V3_DEEP_LINK_SCHEME);
+}
+
+const isV3DeepLink = (raw: string): boolean => raw.startsWith(`${V3_DEEP_LINK_SCHEME}://`);
+
+const findV3DeepLinkInArgv = (argv: ReadonlyArray<string>): string | null => {
+  for (const entry of argv) {
+    if (isV3DeepLink(entry)) return entry;
+  }
+  return null;
+};
+
+const acquiredV3InstanceLock = app.requestSingleInstanceLock();
+if (!acquiredV3InstanceLock) {
+  // The OAuth deep link landed on a freshly spawned process; the running
+  // primary instance will pick it up via its `second-instance` listener.
+  app.quit();
+}
+
 const BASE_DIR = process.env.V3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
@@ -1668,6 +1707,22 @@ function registerIpcHandlers(): void {
     return nextState;
   });
 
+  ipcMain.removeHandler(V3_OPEN_GOOGLE_SIGNIN_CHANNEL);
+  ipcMain.handle(V3_OPEN_GOOGLE_SIGNIN_CHANNEL, async (_event, rawInput: unknown) => {
+    if (
+      typeof rawInput !== "object" ||
+      rawInput === null ||
+      typeof (rawInput as { clientId?: unknown }).clientId !== "string"
+    ) {
+      throw new Error("Invalid V3 Google sign-in input.");
+    }
+    const clientId = (rawInput as { clientId: string }).clientId.trim();
+    if (clientId.length === 0) {
+      throw new Error("V3 Google client id is empty.");
+    }
+    return getSharedV3GoogleAuthFlow().start({ clientId });
+  });
+
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
   ipcMain.handle(PICK_FOLDER_CHANNEL, async (_event, rawOptions: unknown) => {
     const owner = BrowserWindow.getFocusedWindow() ?? mainWindow;
@@ -2137,6 +2192,26 @@ app
         return;
       }
       ensureInitialBackendWindowOpen();
+    });
+
+    // V3 Phase 1d — forward OAuth deep links to the in-flight flow.
+    // `second-instance` (Win/Linux): a fresh OS-spawned process tried to
+    // launch us with a v3:// URL in argv after the user consented in their
+    // browser; we forward that URL into the flow then surface our window.
+    // `open-url` (macOS): the OS routes the v3:// URL directly without
+    // spawning a second process.
+    app.on("second-instance", (_event, argv) => {
+      const link = findV3DeepLinkInArgv(argv);
+      if (link !== null) {
+        getSharedV3GoogleAuthFlow().handleDeepLink(link);
+      }
+      const existing = mainWindow ?? BrowserWindow.getAllWindows()[0];
+      if (existing) revealWindow(existing);
+    });
+    app.on("open-url", (event, url) => {
+      if (!isV3DeepLink(url)) return;
+      event.preventDefault();
+      getSharedV3GoogleAuthFlow().handleDeepLink(url);
     });
   })
   .catch((error) => {
