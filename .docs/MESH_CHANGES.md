@@ -71,3 +71,13 @@ Anticipated high-churn / high-conflict-risk upstream files V3 must modify. Liste
 - `packages/contracts/src/orchestration.ts` (HIGH — new event + command variants)
 - `package.json` (MEDIUM — catalog additions, namespace rename)
 - `turbo.json` (LOW — globalEnv rename)
+
+## Entries
+
+### Phase 0 codemod (commit 859aabd8)
+
+All 406 files touched by the codemod are implicit entries — see `scripts/upstream-rebase.ts` `RENAME_MAPPINGS` for the canonical list. No per-file entries needed until upstream files receive **hand-written** V3 edits (Phase 1+).
+
+## Known upstream gaps inherited at fork time (v0.0.20 / 9df3c640)
+
+- `apps/web/src/components/ui/input.tsx:44` — pre-existing `tsc` error on the `style` prop where Base UI's state-callback `CSSProperties` shape doesn't assign to React's native `CSSProperties`. Confirmed present on pristine upstream before any V3 edits. Do NOT patch as part of V3 — either wait for upstream fix or file upstream bug. Current `bun run typecheck` exits non-zero on `@v3tools/web` because of this, but all 7 other packages typecheck clean.
