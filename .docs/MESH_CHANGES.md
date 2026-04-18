@@ -179,3 +179,27 @@ All changes below are NEW files in V3-owned subtrees or additive entries in upst
   `server.test.ts` additionally provides the V3 identity Live layers via a new `v3IdentityTestLayer` composition so the test harness can build when `googleBootstrapRouteLayer` is in `makeRoutesLayer`.
 - **Conflict risk on rebase**: low for cli/environment (field addition). Medium for server.test.ts (two edits: config literal + layer composition).
 - **Last rebase verified**: 2026-04-18
+
+### Phase 1c — UserContextResolver (session → user+device resolver)
+
+**New files (V3-owned):**
+
+- `apps/server/src/identity/Services/UserContextResolver.ts` (+ `Layers/UserContextResolver.ts` + `.test.ts`) — `resolve(sessionId) → Effect<Option<{userId, deviceId}>>`. Walks `auth_sessions → v3_device_sessions → v3_devices`. Returns `None` for classic T3 pairing sessions (no V3 link) or sessions whose device has been soft-removed. 4 tests.
+
+**Modified upstream files (second P1 touch):**
+
+### `apps/server/src/server.ts` (P1c update on top of P1b)
+
+- **Modified**: 2026-04-18 (P1c)
+- **V3 phase**: Phase 1c — UserContextResolver
+- **Reason**: Add `UserContextResolverLive` to `V3IdentityLayerLive` via `Layer.provide(DeviceSessionRepositoryLive)` (Layer.mergeAll doesn't satisfy intra-merge deps).
+- **Conflict risk on rebase**: low — inside V3-owned composition block.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/server.test.ts` (P1c update on top of P1b)
+
+- **Modified**: 2026-04-18 (P1c)
+- **V3 phase**: Phase 1c — UserContextResolver
+- **Reason**: Mirror `v3IdentityTestLayer` composition.
+- **Conflict risk on rebase**: low.
+- **Last rebase verified**: 2026-04-18
