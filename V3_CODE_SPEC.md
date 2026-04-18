@@ -76,12 +76,12 @@ V3 Code is a fork of T3 Code that turns it from a single-device coding agent GUI
 
 Users pick one at server-node setup time:
 
-| Mode | Description | Best for |
-|---|---|---|
+| Mode                 | Description                                                                                | Best for                      |
+| -------------------- | ------------------------------------------------------------------------------------------ | ----------------------------- |
 | **Personal machine** | User installs V3 in "server-node mode" on a home PC/Mini PC, exposes via Cloudflare Tunnel | Users with always-on hardware |
-| **Fly.io deploy** | One-click deploy from V3 app, runs Docker-in-Docker, user pays Fly.io | Users without home server |
-| **Railway deploy** | One-click deploy, Nixpacks for Node parts, limited Cloud env support | Users who want simple |
-| **VPS (DIY)** | Advanced users follow docs to install on Hetzner/DigitalOcean/etc | Power users |
+| **Fly.io deploy**    | One-click deploy from V3 app, runs Docker-in-Docker, user pays Fly.io                      | Users without home server     |
+| **Railway deploy**   | One-click deploy, Nixpacks for Node parts, limited Cloud env support                       | Users who want simple         |
+| **VPS (DIY)**        | Advanced users follow docs to install on Hetzner/DigitalOcean/etc                          | Power users                   |
 
 ### 1.3 Inherited from T3 Code (unchanged)
 
@@ -442,52 +442,52 @@ All messages have this envelope:
 
 ```ts
 interface Message {
-  id: string;           // UUID for this message
-  type: string;         // see below
-  ref?: string;         // if this is a reply, the id of the message being replied to
-  timestamp: string;    // ISO 8601
-  payload: any;         // type-specific
+  id: string; // UUID for this message
+  type: string; // see below
+  ref?: string; // if this is a reply, the id of the message being replied to
+  timestamp: string; // ISO 8601
+  payload: any; // type-specific
 }
 ```
 
 #### Client → Server
 
-| Type | Payload | Purpose |
-|---|---|---|
-| `hello` | `{ device_id, device_name, platform, kind, capabilities[], app_version }` | Initial handshake after connect |
-| `heartbeat` | `{}` | Every 15s, keeps connection alive and signals online |
-| `subscribe` | `{ chat_id, since_seq? }` | Subscribe to a chat's event stream; optional since_seq for reconnect gap fill |
-| `unsubscribe` | `{ chat_id }` | Stop receiving events for a chat |
-| `publish_event` | `{ chat_id, seq, event_type, payload }` | Host device publishes a new event |
-| `create_chat` | `{ host_device_id, working_directory?, github_repo?, github_branch?, title?, client_chat_id }` | Request to create a new chat |
-| `send_prompt` | `{ chat_id, content, client_msg_id }` | Send a new prompt to a chat (host or viewer) |
-| `fork_chat` | `{ source_chat_id, target_device_id, working_directory?, github_repo?, github_branch? }` | Fork a chat to another device |
-| `end_chat` | `{ chat_id }` | End a chat (for Cloud env, triggers container cleanup) |
-| `archive_chat` | `{ chat_id }` | Archive a chat (soft delete) |
-| `update_preferences` | `{ ...prefs }` | Update user preferences |
-| `approve_device` | `{ device_id }` | Approve a pending new device |
-| `remove_device` | `{ device_id }` | Revoke a device's access |
+| Type                 | Payload                                                                                        | Purpose                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `hello`              | `{ device_id, device_name, platform, kind, capabilities[], app_version }`                      | Initial handshake after connect                                               |
+| `heartbeat`          | `{}`                                                                                           | Every 15s, keeps connection alive and signals online                          |
+| `subscribe`          | `{ chat_id, since_seq? }`                                                                      | Subscribe to a chat's event stream; optional since_seq for reconnect gap fill |
+| `unsubscribe`        | `{ chat_id }`                                                                                  | Stop receiving events for a chat                                              |
+| `publish_event`      | `{ chat_id, seq, event_type, payload }`                                                        | Host device publishes a new event                                             |
+| `create_chat`        | `{ host_device_id, working_directory?, github_repo?, github_branch?, title?, client_chat_id }` | Request to create a new chat                                                  |
+| `send_prompt`        | `{ chat_id, content, client_msg_id }`                                                          | Send a new prompt to a chat (host or viewer)                                  |
+| `fork_chat`          | `{ source_chat_id, target_device_id, working_directory?, github_repo?, github_branch? }`       | Fork a chat to another device                                                 |
+| `end_chat`           | `{ chat_id }`                                                                                  | End a chat (for Cloud env, triggers container cleanup)                        |
+| `archive_chat`       | `{ chat_id }`                                                                                  | Archive a chat (soft delete)                                                  |
+| `update_preferences` | `{ ...prefs }`                                                                                 | Update user preferences                                                       |
+| `approve_device`     | `{ device_id }`                                                                                | Approve a pending new device                                                  |
+| `remove_device`      | `{ device_id }`                                                                                | Revoke a device's access                                                      |
 
 #### Server → Client
 
-| Type | Payload | Purpose |
-|---|---|---|
-| `connection_established` | `{ server_version, user_id, user_email }` | Sent right after WS accepts |
-| `hello_ack` | `{ devices[], chats[], preferences }` | Response to hello, bulk initial state |
-| `heartbeat_ack` | `{ server_time }` | Keepalive response |
-| `presence_update` | `{ device_id, online, last_seen_at }` | A device's online status changed |
-| `device_registered` | `{ device, needs_approval: bool }` | A new device connected |
-| `device_approval_requested` | `{ device, from_ip }` | Another device needs approval |
-| `device_removed` | `{ device_id }` | A device was revoked |
-| `chat_created` | `{ chat }` | A new chat exists (any user device can see this) |
-| `chat_event` | `{ chat_id, seq, type, payload, actor_device_id, created_at }` | A new event on a subscribed chat |
-| `chat_updated` | `{ chat_id, changes }` | Chat metadata changed (title, status) |
-| `chat_forked` | `{ new_chat_id, source_chat_id }` | A fork completed |
-| `prompt_delivered` | `{ client_msg_id, chat_id }` | Server confirms prompt queued to host |
-| `prompt_rejected` | `{ client_msg_id, reason }` | Server can't deliver (host offline) |
-| `preferences_updated` | `{ preferences }` | Prefs changed on another device |
-| `error` | `{ code, message, ref? }` | Generic error |
-| `gh_token_invalid` | `{}` | GitHub token rotation needed |
+| Type                        | Payload                                                        | Purpose                                          |
+| --------------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
+| `connection_established`    | `{ server_version, user_id, user_email }`                      | Sent right after WS accepts                      |
+| `hello_ack`                 | `{ devices[], chats[], preferences }`                          | Response to hello, bulk initial state            |
+| `heartbeat_ack`             | `{ server_time }`                                              | Keepalive response                               |
+| `presence_update`           | `{ device_id, online, last_seen_at }`                          | A device's online status changed                 |
+| `device_registered`         | `{ device, needs_approval: bool }`                             | A new device connected                           |
+| `device_approval_requested` | `{ device, from_ip }`                                          | Another device needs approval                    |
+| `device_removed`            | `{ device_id }`                                                | A device was revoked                             |
+| `chat_created`              | `{ chat }`                                                     | A new chat exists (any user device can see this) |
+| `chat_event`                | `{ chat_id, seq, type, payload, actor_device_id, created_at }` | A new event on a subscribed chat                 |
+| `chat_updated`              | `{ chat_id, changes }`                                         | Chat metadata changed (title, status)            |
+| `chat_forked`               | `{ new_chat_id, source_chat_id }`                              | A fork completed                                 |
+| `prompt_delivered`          | `{ client_msg_id, chat_id }`                                   | Server confirms prompt queued to host            |
+| `prompt_rejected`           | `{ client_msg_id, reason }`                                    | Server can't deliver (host offline)              |
+| `preferences_updated`       | `{ preferences }`                                              | Prefs changed on another device                  |
+| `error`                     | `{ code, message, ref? }`                                      | Generic error                                    |
+| `gh_token_invalid`          | `{}`                                                           | GitHub token rotation needed                     |
 
 ### 5.3 Event ordering & replay
 
@@ -679,7 +679,7 @@ User clicks "End chat" on a Cloud env chat
 Client shows confirmation modal:
     "This will destroy the container. Uncommitted changes will be lost.
      Last commit: <sha> (2 minutes ago). 5 files modified since then.
-     
+
      [Commit and end]  [End without committing]  [Cancel]"
     │
     ▼
@@ -715,6 +715,7 @@ Soft delete. Chat hidden from default list, recoverable. No actual row deletion 
 Base image: `ghcr.io/v3-code/cloud-env:latest`
 
 Contents:
+
 - Ubuntu 24.04 minimal
 - Node 22 LTS
 - Git, curl, wget, build-essential
@@ -729,15 +730,16 @@ Image built in CI from `apps/cloud-env-image/Dockerfile`, published to GHCR.
 
 ### 7.2 Container lifecycle
 
-| Phase | Duration | Activity |
-|---|---|---|
-| **Start** | 3-8s | Pull image (if needed), create container, start entrypoint, wait for sync client handshake |
-| **Clone** | 5-30s | `git clone` the user's chosen repo at specified branch |
-| **Ready** | instant | Claude Code process started, chat ready for prompts |
-| **Active** | hours/days | User interacts with chat |
-| **End** | 1-2s | SIGTERM to processes, `docker stop`, `docker rm` |
+| Phase      | Duration   | Activity                                                                                   |
+| ---------- | ---------- | ------------------------------------------------------------------------------------------ |
+| **Start**  | 3-8s       | Pull image (if needed), create container, start entrypoint, wait for sync client handshake |
+| **Clone**  | 5-30s      | `git clone` the user's chosen repo at specified branch                                     |
+| **Ready**  | instant    | Claude Code process started, chat ready for prompts                                        |
+| **Active** | hours/days | User interacts with chat                                                                   |
+| **End**    | 1-2s       | SIGTERM to processes, `docker stop`, `docker rm`                                           |
 
 Container resource limits (per container):
+
 - 2 CPU cores (cgroup limit)
 - 4 GB RAM (hard cap)
 - 20 GB disk (via overlay fs limit)
@@ -754,6 +756,7 @@ All limits configurable in `apps/server/src/config.ts` by the server node operat
 - Agent uses `gh` CLI or plain git with token for operations
 
 **Operations supported:**
+
 - `git clone` on start
 - `git commit && git push` on save
 - `gh pr create` for pull requests
@@ -762,6 +765,7 @@ All limits configurable in `apps/server/src/config.ts` by the server node operat
 ### 7.4 Resource limits enforcement
 
 Enforced by Docker daemon and Linux cgroups. Monitored by a `container-monitor` service on the server node that:
+
 - Checks resource usage every 60s
 - Kills containers that exceed limits
 - Logs violations
@@ -819,6 +823,7 @@ V3 sidebar:
 Mostly inherits T3 Code. Additions:
 
 **Top-of-chat strip (when viewing non-local chat):**
+
 ```
 ┌────────────────────────────────────────┐
 │ ℹ Viewing chat hosted on Laptop. All  │
@@ -827,6 +832,7 @@ Mostly inherits T3 Code. Additions:
 ```
 
 **Prompt attribution badge** (when a message was sent from a different device):
+
 ```
 [User message]
   "Can you refactor the auth module?"
@@ -834,6 +840,7 @@ Mostly inherits T3 Code. Additions:
 ```
 
 **Cloud env status indicator** (when chat is Cloud-hosted):
+
 ```
 ┌────────────────────────────────────────┐
 │ ☁ Cloud · agaminggod/v3code · main    │
@@ -845,6 +852,7 @@ Mostly inherits T3 Code. Additions:
 ### 8.3 "Configure your server" prompt
 
 Persistent banner at top of chat area:
+
 ```
 ┌────────────────────────────────────────┐
 │ ⚙ Multiple devices detected on your    │
@@ -855,6 +863,7 @@ Persistent banner at top of chat area:
 ```
 
 Only shown if:
+
 - User signed in with Google AND
 - No `server_url` in Drive App Data AND
 - `device_list` in Drive App Data has 2+ entries AND
@@ -886,6 +895,7 @@ Only visible when V3 is running in server-node mode (see section 10). New route 
 ### 8.6 Mobile app specifics
 
 Android (via Capacitor v1):
+
 - Same UI as web app, same code
 - FCM push notifications for:
   - Chat response received while app backgrounded
@@ -901,6 +911,7 @@ Android (via Capacitor v1):
 ### 9.1 Offline host device
 
 User tries to prompt a chat whose host is offline:
+
 - Input field disabled
 - Placeholder text: "Host device '{name}' is offline"
 - Toast on send attempt: "Can't send. {name} is offline. [Open on another device]"
@@ -910,6 +921,7 @@ User can still scroll and read chat history (from local cache or via server even
 ### 9.2 Server node unreachable
 
 Client fails to connect to server node:
+
 - Toast: "Can't reach your server node. Retrying..."
 - Sidebar shows "⚠ Disconnected" next to other devices
 - Local chats still work fully (all T3 Code functionality preserved)
@@ -976,6 +988,7 @@ Each deploy target has its own template in `deploy/<target>/`.
 ### 10.3 Manual VPS deploy
 
 Docs at `docs/deploy-vps.md`. Covers:
+
 - Ubuntu/Debian server setup
 - Docker install
 - Postgres install
@@ -1037,19 +1050,19 @@ max_event_log_size_mb = 100000
 
 ### 11.2 Added by V3
 
-| Concern | Tech | Rationale |
-|---|---|---|
-| Auth | Better Auth | Modern, self-hostable, TS-native, supports Google + GitHub |
-| Database | Postgres 16 | Standard, reliable, great for event logs |
-| ORM | Drizzle ORM | TS-first, great for Postgres, fits Effect-TS |
-| Google Drive App Data | `googleapis` npm | Official Google client |
-| Cloud env runtime | Docker daemon + dockerode | Standard |
-| Sync client library | Custom: `packages/mesh-client` | Shared between client and server |
-| Protocol types | Custom: `packages/mesh-contracts` | Single source of truth |
-| Mobile wrapper | Capacitor 6 | Fast to ship, reuses web |
-| Push notifications | Firebase Cloud Messaging | Standard for Android |
-| One-click deploy (Fly.io) | `flyctl` + `fly.toml` template | Official |
-| TLS for self-host | Cloudflare Tunnel (recommended) | Lucas already uses it, free, easy |
+| Concern                   | Tech                              | Rationale                                                  |
+| ------------------------- | --------------------------------- | ---------------------------------------------------------- |
+| Auth                      | Better Auth                       | Modern, self-hostable, TS-native, supports Google + GitHub |
+| Database                  | Postgres 16                       | Standard, reliable, great for event logs                   |
+| ORM                       | Drizzle ORM                       | TS-first, great for Postgres, fits Effect-TS               |
+| Google Drive App Data     | `googleapis` npm                  | Official Google client                                     |
+| Cloud env runtime         | Docker daemon + dockerode         | Standard                                                   |
+| Sync client library       | Custom: `packages/mesh-client`    | Shared between client and server                           |
+| Protocol types            | Custom: `packages/mesh-contracts` | Single source of truth                                     |
+| Mobile wrapper            | Capacitor 6                       | Fast to ship, reuses web                                   |
+| Push notifications        | Firebase Cloud Messaging          | Standard for Android                                       |
+| One-click deploy (Fly.io) | `flyctl` + `fly.toml` template    | Official                                                   |
+| TLS for self-host         | Cloudflare Tunnel (recommended)   | Lucas already uses it, free, easy                          |
 
 ### 11.3 Dev tooling
 
@@ -1122,6 +1135,7 @@ Document every modification in `MESH_CHANGES.md` so upstream rebasing stays sane
 ## 13. Phased roadmap (updated for full vision, 7-9 months)
 
 ### Phase 0: Foundation (weeks 1-2)
+
 - Fork t3code to `aGamingGod1234/v3code`
 - Get it building on all 3 devices
 - Read all `.docs/*` thoroughly
@@ -1129,6 +1143,7 @@ Document every modification in `MESH_CHANGES.md` so upstream rebasing stays sane
 - Write PROJECT_LOG.md
 
 ### Phase 1: Auth + Drive App Data (weeks 3-5)
+
 - Google OAuth integration with Better Auth
 - Drive App Data read/write for server URL + device list
 - GitHub OAuth with token storage on server
@@ -1136,6 +1151,7 @@ Document every modification in `MESH_CHANGES.md` so upstream rebasing stays sane
 - Basic `users`, `devices`, `user_preferences` tables
 
 ### Phase 2: Server node mode + setup wizard (weeks 6-8)
+
 - Server/client mode toggle in V3
 - Config file + initial setup wizard
 - Cloudflare Tunnel auto-install flow
@@ -1143,12 +1159,14 @@ Document every modification in `MESH_CHANGES.md` so upstream rebasing stays sane
 - `hello`, `heartbeat`, `presence_update` messages
 
 ### Phase 3: Sidebar rewrite + presence (weeks 9-10)
+
 - Device list in sidebar with grouping
 - Online/offline indicators
 - Local chats still flat under "This Device"
 - "Configure server" prompt
 
 ### Phase 4: Chat sync (weeks 11-16) ← the hard part
+
 - `chat_events` table + event log
 - `subscribe`, `publish_event`, `chat_event` messages
 - Client-side event replay
@@ -1158,22 +1176,26 @@ Document every modification in `MESH_CHANGES.md` so upstream rebasing stays sane
 - Test across all 3 physical devices
 
 ### Phase 5: Cross-device prompts (weeks 17-18)
+
 - `send_prompt` routing
 - Prompt attribution badges in UI
 - Offline-device error handling
 
 ### Phase 6: Fork chat (weeks 19-20)
+
 - Fork UI and target device picker
 - Event log copy logic
 - Working directory remapping
 
 ### Phase 7: Web app cloud mode (weeks 21-23)
+
 - Build-flag-controlled variant of `apps/web`
 - Serve from server node (no local backend expected)
 - Deploy to Cloudflare Pages hosted by user's server node or at public URL
 - GitHub repo browser when no local filesystem
 
 ### Phase 8: Cloud env (weeks 24-27)
+
 - Docker integration on server node
 - Base image creation
 - Cloud device registration
@@ -1182,18 +1204,21 @@ Document every modification in `MESH_CHANGES.md` so upstream rebasing stays sane
 - Cloud chat creation flow
 
 ### Phase 9: Android app (weeks 28-30)
+
 - Capacitor project setup
 - FCM integration
 - Background WS strategy
 - Play Store internal testing
 
 ### Phase 10: Enhanced (weeks 31-34)
+
 - Web previews (Cloudflare Tunnel from container)
 - In-app browser (Playwright on host)
 - Subagent chat display
 - Polish, performance, edge cases
 
 ### Phase 11: Public launch prep (weeks 35-36)
+
 - Landing page at v3code.com
 - Deploy templates (Fly.io, Railway, Cloudflare)
 - Docs site
@@ -1234,21 +1259,23 @@ export interface WireMessage<T = unknown> {
 export interface HelloPayload {
   device_id: string;
   device_name: string;
-  platform: 'windows' | 'macos' | 'linux' | 'android' | 'ios' | 'web';
-  kind: 'desktop' | 'laptop' | 'server' | 'phone' | 'tablet' | 'browser';
+  platform: "windows" | "macos" | "linux" | "android" | "ios" | "web";
+  kind: "desktop" | "laptop" | "server" | "phone" | "tablet" | "browser";
   capabilities: Capability[];
   app_version: string;
 }
 
 export type Capability =
-  | 'execute'
-  | 'claude_code'
-  | 'codex'
-  | 'browser_use'
-  | 'terminal'
-  | 'view_only';
+  | "execute"
+  | "claude_code"
+  | "codex"
+  | "browser_use"
+  | "terminal"
+  | "view_only";
 
-export interface HeartbeatPayload { /* empty */ }
+export interface HeartbeatPayload {
+  /* empty */
+}
 
 export interface SubscribePayload {
   chat_id: string;
@@ -1273,7 +1300,7 @@ export interface CreateChatPayload {
   working_directory?: string;
   github_repo?: string;
   github_branch?: string;
-  provider?: 'claude_code' | 'codex';
+  provider?: "claude_code" | "codex";
 }
 
 export interface SendPromptPayload {
@@ -1302,7 +1329,7 @@ export interface UpdatePreferencesPayload {
   theme?: string;
   font_family?: string;
   font_size?: number;
-  default_provider?: 'claude_code' | 'codex';
+  default_provider?: "claude_code" | "codex";
   keybindings?: Record<string, string>;
   editor_settings?: Record<string, unknown>;
 }
@@ -1382,7 +1409,7 @@ export interface PromptDeliveredPayload {
 
 export interface PromptRejectedPayload {
   client_msg_id: string;
-  reason: 'device_offline' | 'device_removed' | 'not_authorized' | 'chat_not_found';
+  reason: "device_offline" | "device_removed" | "not_authorized" | "chat_not_found";
 }
 
 export interface PreferencesUpdatedPayload {
@@ -1395,14 +1422,16 @@ export interface ErrorPayload {
   ref?: string;
 }
 
-export interface GhTokenInvalidPayload { /* empty */ }
+export interface GhTokenInvalidPayload {
+  /* empty */
+}
 
 // Common
 export interface DeviceInfo {
   id: string;
   name: string;
-  platform: HelloPayload['platform'];
-  kind: HelloPayload['kind'];
+  platform: HelloPayload["platform"];
+  kind: HelloPayload["kind"];
   capabilities: Capability[];
   online: boolean;
   last_seen_at: string;
@@ -1412,7 +1441,7 @@ export interface ChatInfo {
   id: string;
   title: string | null;
   host_device_id: string;
-  status: 'active' | 'archived' | 'ended';
+  status: "active" | "archived" | "ended";
   parent_chat_id: string | null;
   parent_device_id: string | null;
   working_directory: string | null;
@@ -1427,27 +1456,27 @@ export interface UserPreferences {
   theme: string;
   font_family: string | null;
   font_size: number;
-  default_provider: 'claude_code' | 'codex';
+  default_provider: "claude_code" | "codex";
   keybindings: Record<string, string>;
   editor_settings: Record<string, unknown>;
 }
 
 export type ChatEventType =
-  | 'prompt_sent'
-  | 'assistant_message_chunk'
-  | 'assistant_message_complete'
-  | 'tool_call_started'
-  | 'tool_call_result'
-  | 'file_change'
-  | 'commit_made'
-  | 'push_made'
-  | 'subagent_spawned'
-  | 'subagent_event'
-  | 'chat_title_updated'
-  | 'chat_archived'
-  | 'container_started'
-  | 'container_killed'
-  | 'error';
+  | "prompt_sent"
+  | "assistant_message_chunk"
+  | "assistant_message_complete"
+  | "tool_call_started"
+  | "tool_call_result"
+  | "file_change"
+  | "commit_made"
+  | "push_made"
+  | "subagent_spawned"
+  | "subagent_event"
+  | "chat_title_updated"
+  | "chat_archived"
+  | "container_started"
+  | "container_killed"
+  | "error";
 ```
 
 ---

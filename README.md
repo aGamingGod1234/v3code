@@ -24,7 +24,7 @@ Install the latest version of the desktop app from [GitHub Releases](https://git
 #### Windows (`winget`)
 
 ```bash
-winget install T3Tools.T3Code
+winget install aGamingGod1234.V3Code
 ```
 
 #### macOS (Homebrew)

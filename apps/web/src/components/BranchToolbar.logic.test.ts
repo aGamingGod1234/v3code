@@ -154,7 +154,9 @@ describe("resolveCurrentWorkspaceLabel", () => {
   });
 
   it("describes the active checkout as a worktree when one is attached", () => {
-    expect(resolveCurrentWorkspaceLabel("/repo/.v3code/worktrees/feature-a")).toBe("Current worktree");
+    expect(resolveCurrentWorkspaceLabel("/repo/.v3code/worktrees/feature-a")).toBe(
+      "Current worktree",
+    );
   });
 });
 

@@ -38,11 +38,11 @@
   "devDependencies": {
     "@effect/language-service": "catalog:",
     "@effect/vitest": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "@v3tools/contracts": "workspace:*",
     "@v3tools/shared": "workspace:*",
     "@v3tools/web": "workspace:*",
-    "@types/bun": "catalog:",
-    "@types/node": "catalog:",
     "effect-acp": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",

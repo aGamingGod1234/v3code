@@ -66,7 +66,7 @@ Anticipated high-churn / high-conflict-risk upstream files V3 must modify. Liste
 - `apps/web/src/routes/_chat.tsx` (LOW — ConfigureServerBanner injection)
 - `apps/desktop/src/main.ts` (MEDIUM — `v3://` scheme, new IPC)
 - `apps/desktop/src/preload.ts` (LOW — expose V3 IPC)
-- `packages/contracts/src/rpc.ts` (MEDIUM — register mesh.* RPCs)
+- `packages/contracts/src/rpc.ts` (MEDIUM — register mesh.\* RPCs)
 - `packages/contracts/src/auth.ts` (MEDIUM — policy/method unions extended)
 - `packages/contracts/src/orchestration.ts` (HIGH — new event + command variants)
 - `package.json` (MEDIUM — catalog additions, namespace rename)

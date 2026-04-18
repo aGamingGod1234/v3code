@@ -36,7 +36,7 @@ export const RENAME_MAPPINGS: ReadonlyArray<RenameMapping> = [
   { from: "~/.t3", to: "~/.v3code", note: "user data dir (string form)" },
   { from: "/.t3/", to: "/.v3code/", note: "user data dir (path form)" },
   { from: '"T3 Code"', to: '"V3 Code"', note: "display name in manifests" },
-  { from: "t3tools.T3Code", to: "agaminggod1234.V3Code", note: "winget package id" },
+  { from: "T3Tools.T3Code", to: "aGamingGod1234.V3Code", note: "winget package id" },
 ];
 
 // Paths that should never be touched by the codemod even if they match.
@@ -185,9 +185,7 @@ const runDryRebase = Effect.fn("runDryRebase")(function* (options: {
   yield* cp.spawn("git", ["checkout", "-b", ephemeralBranch, options.baseBranch]);
 
   yield* Console.log(`Rebasing onto ${options.upstreamRef}...`);
-  const rebaseResult = yield* cp
-    .spawn("git", ["rebase", options.upstreamRef])
-    .pipe(Effect.either);
+  const rebaseResult = yield* cp.spawn("git", ["rebase", options.upstreamRef]).pipe(Effect.either);
 
   if (rebaseResult._tag === "Right") {
     yield* Console.log("Clean rebase.");
@@ -224,9 +222,7 @@ const renameCommand = Command.make("rename-v3", {
   dry: dryFlag,
 }).pipe(
   Command.withDescription("Apply V3 namespace renames to text files in the repo"),
-  Command.withHandler((args) =>
-    runRename({ rootDir: args.root, dryRun: args.dry }),
-  ),
+  Command.withHandler((args) => runRename({ rootDir: args.root, dryRun: args.dry })),
 );
 
 const upstreamRefArg = Argument.string("upstreamRef");
