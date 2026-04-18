@@ -301,3 +301,93 @@ provisions the OAuth Client ID via the Google Cloud Console.
 - Server identity suite: still 38/38 (no new tests landed there in P1d — the new `googleConfigRouteLayer` is intentionally minimal and exercised end-to-end by the renderer flow).
 - Desktop: +7 tests in `apps/desktop/src/v3GoogleAuthFlow.test.ts`.
 - Web: +13 tests across `apps/web/src/v3/auth/{deviceId,signInState}.test.ts`.
+
+### Phase 2a — Server-node mode foundations: RuntimeMode literal + config.toml loader
+
+P2a is the first slice of Phase 2 (master plan budgets 5 weeks total for P2).
+Goal: introduce the `server-node` `RuntimeMode` literal, surface a
+`~/.v3-code-server/config.toml` loader, and wire detection precedence + the
+two field overrides P2a touches (`[server]` host/port and `[auth]`
+google-client-id/authorized-emails). Postgres (P2b), Drive App Data (P2c),
+the setup wizard (P2d), the cloudflared installer (P2e), Fly/Railway deploy
+templates (P2f), the admin panel (P2g), and presence RPCs (P2h) all land in
+later sub-phases — but the TOML schema validates every section now so those
+phases just consume parsed values.
+
+Detection precedence (master plan §4): CLI flag > env var > bootstrap envelope >
+presence of `~/.v3-code-server/config.toml` > default. Field-level precedence in
+server-node mode: CLI flag > env var > bootstrap envelope > TOML field >
+built-in default. Single-device users without a config.toml see zero behaviour
+change.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `apps/server/src/serverMode.ts` (+ `.test.ts`) — pure helpers: `resolveServerNodeConfigPath()` (env override + home-dir default), `hasServerNodeConfig()` (FS existence check), `resolveServerMode()` (precedence pure function). 9 tests cover each level of precedence + the env-override path.
+- `apps/server/src/config/serverNodeConfig.ts` — Schema mirroring the master plan §10.4 TOML surface (`[server]`, `[auth]`, `[database]`, `[cloud_env]`, `[limits]`). Top-level + every section is `optional` so partial files are valid.
+- `apps/server/src/config/tomlLoader.ts` (+ `.test.ts`) — `loadServerNodeConfig(path)` reads + parses (`smol-toml`) + Schema-decodes. Returns `Option.none()` when the file is absent; surfaces `ServerNodeConfigError` with discriminated `reason: "read" | "parse" | "schema"` otherwise. 7 tests cover absence, minimal config, full master-plan example, parse failure, schema mismatch, port range check, empty file.
+
+**Modified upstream files:**
+
+### `apps/server/src/config.ts` (P2a update on top of P1b)
+
+- **Modified**: 2026-04-18 (P2a)
+- **V3 phase**: Phase 2a — server-node mode foundations
+- **Reason**: Extend the `RuntimeMode` Schema literal with `"server-node"` so the existing `Config.schema(RuntimeMode, "V3CODE_MODE")` + CLI choice flag accept it without bespoke parsing.
+- **What changed**:
+  - `RuntimeMode = Schema.Literals(["web", "desktop"])` → `Schema.Literals(["web", "desktop", "server-node"])`.
+- **Conflict risk on rebase**: low — single-line widening, additive.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/cli.ts` (P2a update)
+
+- **Modified**: 2026-04-18 (P2a)
+- **V3 phase**: Phase 2a — server-node mode foundations
+- **Reason**: Wire `serverMode.resolveServerMode` (precedence) + `loadServerNodeConfig` (TOML parse) into `resolveServerConfig`. Apply TOML field overrides for port/host/googleClientId/authorizedEmails when mode resolves to server-node.
+- **What changed**:
+  - Imports added for `loadServerNodeConfig`, `ServerNodeConfig`, and the three serverMode helpers.
+  - Existing inline `Option.firstSomeOf` mode-resolution block replaced by a call to `resolveServerMode` that takes the existing CLI/env/bootstrap signals plus `hasConfigToml`.
+  - When `mode === "server-node" && hasConfigToml`, the TOML file is loaded and `tomlConfig` becomes the lowest-precedence layer in the per-field merges below.
+  - Port + host gain a fourth `Option.fromUndefinedOr(tomlConfig?.server?.bind_port|bind_host)` precedence entry.
+  - `googleClientId` falls back to `tomlConfig?.auth?.google_client_id` when env is unset.
+  - `authorizedEmails` falls back to `tomlConfig?.auth?.authorized_emails` (mapped through the same trim+lowercase normalization as the env path).
+- **Conflict risk on rebase**: medium — `resolveServerConfig` is a hotspot and upstream may add new fields with their own precedence. The TOML override block is concentrated near the existing precedence chains so a rebase reads as a small, contiguous diff.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/auth/utils.ts` (P2a update)
+
+- **Modified**: 2026-04-18 (P2a)
+- **V3 phase**: Phase 2a — server-node mode foundations
+- **Reason**: Widen the `mode` parameter on `resolveSessionCookieName` to accept the new `"server-node"` literal. The function falls through the non-desktop branch as before, so server-node shares the cookie strategy with `web` (one cookie per origin).
+- **What changed**:
+  - Parameter `readonly mode: "web" | "desktop"` → `readonly mode: "web" | "desktop" | "server-node"`.
+- **Conflict risk on rebase**: low — additive type widening.
+- **Last rebase verified**: 2026-04-18
+
+### `apps/server/src/cli-config.test.ts` (P2a fix-forward of a P1b oversight)
+
+- **Modified**: 2026-04-18 (P2a)
+- **V3 phase**: Phase 2a — server-node mode foundations (incidental fix of a P1b regression)
+- **Reason**: P1b updated `cli.test.ts`, `server.test.ts`, and `environment/Layers/ServerEnvironment.test.ts` to include the new `googleClientId`/`authorizedEmails` fields on inline `ServerConfigShape` objects but missed `cli-config.test.ts`. That oversight broke 7 of 8 tests in this file once P1b shipped. P2a adds the two missing fields to every `expect(resolved).toEqual({…})` block.
+- **What changed**:
+  - Added `googleClientId: undefined, authorizedEmails: []` after each `logWebSocketEvents` entry in the toEqual blocks (10 occurrences via replace_all).
+- **Conflict risk on rebase**: low — additive object-literal entries.
+- **Status on Windows**: 5 of 8 tests now pass. The 3 still-failing tests (`preserves explicit false CLI boolean flags…`, `uses bootstrap envelope values…`, `applies flag then env precedence…`) hit a pre-existing Windows EBADF on the bootstrap-fd code path, identical failure as before P2a per a `git stash`-driven baseline check. Tracked under "Known upstream gaps inherited at fork time" below — Linux CI is presumed clean.
+- **Last rebase verified**: 2026-04-18
+
+### `package.json` + `apps/server/package.json` (P2a update)
+
+- **Modified**: 2026-04-18 (P2a)
+- **What changed**:
+  - Root `workspaces.catalog` gains `"smol-toml": "^1.3.1"` (alphabetical position).
+  - `apps/server/package.json` adds `"smol-toml": "catalog:"` to dependencies.
+- **Conflict risk on rebase**: low — catalog additions merge cleanly unless upstream restructures.
+- **Last rebase verified**: 2026-04-18
+
+**Known Windows test flake (added to the inherited gaps inventory)**
+
+- `apps/server/src/cli-config.test.ts > "preserves explicit false CLI boolean flags over env and bootstrap values"`, `"uses bootstrap envelope values as fallbacks when flags and env are absent"`, `"applies flag then env precedence over bootstrap envelope values"` — three Windows-only EBADF failures on bootstrap-fd handling. Reproduced on pristine pre-P2a state. Linux CI presumed clean. Not caused by P2a.
+
+**Test coverage**
+
+- Server identity suite: still 38/38 (P1d unchanged).
+- New server suite: +16 tests (`serverMode.test.ts` 9 + `config/tomlLoader.test.ts` 7).

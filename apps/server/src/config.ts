@@ -10,7 +10,12 @@ import { Effect, FileSystem, Layer, LogLevel, Path, Schema, Context } from "effe
 
 export const DEFAULT_PORT = 3773;
 
-export const RuntimeMode = Schema.Literals(["web", "desktop"]);
+// `server-node` is the V3 Phase 2 mode for self-hosted multi-device mesh
+// deployments. The detection precedence (CLI flag > env var > config.toml
+// presence > default) lives in `apps/server/src/serverMode.ts`. Adding the
+// literal here keeps the existing `Config.schema(RuntimeMode, ...)` env-var
+// path working without bespoke parsing.
+export const RuntimeMode = Schema.Literals(["web", "desktop", "server-node"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
 
 export const StartupPresentation = Schema.Literals(["browser", "headless"]);

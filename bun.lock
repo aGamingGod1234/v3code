@@ -58,6 +58,7 @@
         "jose": "^5.10.0",
         "node-pty": "^1.1.0",
         "open": "^10.1.0",
+        "smol-toml": "catalog:",
       },
       "devDependencies": {
         "@effect/language-service": "catalog:",
@@ -225,6 +226,7 @@
     "@types/bun": "^1.3.11",
     "@types/node": "^24.10.13",
     "effect": "4.0.0-beta.45",
+    "smol-toml": "^1.3.1",
     "tsdown": "^0.20.3",
     "typescript": "^5.7.3",
     "vitest": "^4.0.0",

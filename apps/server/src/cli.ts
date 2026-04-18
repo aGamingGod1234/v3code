@@ -41,6 +41,13 @@ import {
   type ServerConfigShape,
   type StartupPresentation,
 } from "./config.ts";
+import { loadServerNodeConfig } from "./config/tomlLoader.ts";
+import type { ServerNodeConfig } from "./config/serverNodeConfig.ts";
+import {
+  hasServerNodeConfig,
+  resolveServerMode,
+  resolveServerNodeConfigPath,
+} from "./serverMode.ts";
 import { readBootstrapEnvelope } from "./bootstrap.ts";
 import { expandHomePath, resolveBaseDir } from "./os-jank.ts";
 import { runServer } from "./server.ts";
@@ -259,20 +266,36 @@ export const resolveServerConfig = (
         : Option.none();
     const bootstrap = Option.getOrUndefined(bootstrapEnvelope);
 
-    const mode: RuntimeMode = Option.getOrElse(
-      resolveOptionPrecedence(
-        normalizedFlags.mode,
-        Option.fromUndefinedOr(env.mode),
-        Option.fromUndefinedOr(bootstrap?.mode),
-      ),
-      () => "web",
-    );
+    // V3 Phase 2a: extend mode resolution with config.toml-presence as a
+    // signal. Precedence (master plan §4): CLI flag > env var > bootstrap
+    // envelope > presence of `~/.v3-code-server/config.toml` > default.
+    // Single-device users never have a config.toml, so this is a no-op for
+    // them. The TOML *contents* are loaded later only when mode lands on
+    // server-node (see `tomlConfig` below).
+    const serverNodeConfigPath = resolveServerNodeConfigPath();
+    const tomlExists = yield* hasServerNodeConfig(serverNodeConfigPath);
+    const mode: RuntimeMode = resolveServerMode({
+      cliMode: normalizedFlags.mode,
+      envMode: Option.fromUndefinedOr(env.mode),
+      bootstrapMode: Option.fromUndefinedOr(bootstrap?.mode),
+      hasConfigToml: tomlExists,
+      fallback: "web",
+    });
+
+    // Only consume TOML contents in server-node mode. If a stale config
+    // exists but the user explicitly chose desktop/web mode, ignore it.
+    let tomlConfig: ServerNodeConfig | undefined = undefined;
+    if (mode === "server-node" && tomlExists) {
+      const loaded = yield* loadServerNodeConfig(serverNodeConfigPath);
+      tomlConfig = Option.getOrUndefined(loaded);
+    }
 
     const port = yield* Option.match(
       resolveOptionPrecedence(
         normalizedFlags.port,
         Option.fromUndefinedOr(env.port),
         Option.fromUndefinedOr(bootstrap?.port),
+        Option.fromUndefinedOr(tomlConfig?.server?.bind_port),
       ),
       {
         onSome: (value) => Effect.succeed(value),
@@ -347,6 +370,7 @@ export const resolveServerConfig = (
         normalizedFlags.host,
         Option.fromUndefinedOr(env.host),
         Option.fromUndefinedOr(bootstrap?.host),
+        Option.fromUndefinedOr(tomlConfig?.server?.bind_host),
       ),
       () => (mode === "desktop" ? "127.0.0.1" : undefined),
     );
@@ -383,8 +407,11 @@ export const resolveServerConfig = (
       desktopBootstrapToken,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
-      googleClientId: env.googleClientId,
-      authorizedEmails: parseAuthorizedEmails(env.authorizedEmails),
+      googleClientId: env.googleClientId ?? tomlConfig?.auth?.google_client_id,
+      authorizedEmails:
+        env.authorizedEmails !== undefined
+          ? parseAuthorizedEmails(env.authorizedEmails)
+          : (tomlConfig?.auth?.authorized_emails ?? []).map((entry) => entry.trim().toLowerCase()),
     };
 
     return config;

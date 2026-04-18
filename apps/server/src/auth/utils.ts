@@ -5,7 +5,10 @@ import * as Crypto from "node:crypto";
 const SESSION_COOKIE_NAME = "t3_session";
 
 export function resolveSessionCookieName(input: {
-  readonly mode: "web" | "desktop";
+  // V3 Phase 2a widened the union to include `server-node`. Server-node
+  // mode shares the cookie strategy with `web` (one cookie per origin),
+  // so the non-desktop branch handles it implicitly.
+  readonly mode: "web" | "desktop" | "server-node";
   readonly port: number;
 }): string {
   if (input.mode !== "desktop") {

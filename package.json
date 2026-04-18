@@ -19,6 +19,7 @@
       "@effect/language-service": "0.84.2",
       "@types/bun": "^1.3.11",
       "@types/node": "^24.10.13",
+      "smol-toml": "^1.3.1",
       "tsdown": "^0.20.3",
       "typescript": "^5.7.3",
       "vitest": "^4.0.0"

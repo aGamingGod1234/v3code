@@ -34,7 +34,8 @@
     "effect": "catalog:",
     "jose": "^5.10.0",
     "node-pty": "^1.1.0",
-    "open": "^10.1.0"
+    "open": "^10.1.0",
+    "smol-toml": "catalog:"
   },
   "devDependencies": {
     "@effect/language-service": "catalog:",
