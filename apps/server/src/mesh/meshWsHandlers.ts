@@ -1,13 +1,17 @@
 import {
   type AuthSessionId,
+  type ChatForkCommand,
   type ClientThreadTurnStartCommand,
   DeviceId,
   MESH_WS_METHODS,
   MeshRpcError,
   type PresenceUpdatePayload,
+  type ProjectId,
   type UserId,
 } from "@v3tools/contracts";
 import { Effect, Option, Schema, Stream } from "effect";
+
+import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
@@ -77,6 +81,7 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
     const deviceRegistry = yield* DeviceRegistry;
     const presence = yield* PresenceBroadcaster;
     const promptRouter = yield* PromptRouter;
+    const orchestrationEngine = yield* OrchestrationEngineService;
     yield* MeshPublisher;
 
     const requireSignedInMeshUser = () =>
@@ -257,6 +262,59 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
               Schema.is(MeshRpcError)(cause)
                 ? cause
                 : toMeshRpcError("Failed to route prompt to the host device.", cause),
+            ),
+          ),
+          { "rpc.aggregate": "mesh" },
+        ),
+      [MESH_WS_METHODS.forkChat]: (input: { command: ChatForkCommand }) =>
+        observeRpcEffect(
+          MESH_WS_METHODS.forkChat,
+          Effect.gen(function* () {
+            const command = input.command;
+            // Stamp the source device id from the authenticated session so the
+            // server is the source of truth for "which device kicked off the
+            // fork" — clients can suggest it but cannot spoof it.
+            const stampedCommand: ChatForkCommand = {
+              ...command,
+              ...(context.deviceId !== null && command.sourceDeviceId === undefined
+                ? { sourceDeviceId: context.deviceId }
+                : {}),
+            };
+
+            const dispatchResult = yield* orchestrationEngine
+              .dispatch(stampedCommand)
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError(`Failed to fork chat ${stampedCommand.sourceThreadId}.`, cause),
+                ),
+              );
+
+            // Read back the projected target thread shell to populate the
+            // result payload (mainly for the source UI to know which projectId
+            // and host device the new chat ended up on after defaults were
+            // resolved server-side).
+            const targetShellOpt = yield* projectionSnapshotQuery
+              .getThreadShellById(stampedCommand.targetThreadId)
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError("Failed to read forked chat shell.", cause),
+                ),
+              );
+
+            const targetShell = Option.isSome(targetShellOpt) ? targetShellOpt.value : null;
+
+            return {
+              targetThreadId: stampedCommand.targetThreadId,
+              copiedEventCount: 0,
+              forkedFromStreamVersion: dispatchResult.sequence,
+              hostedOnDeviceId: targetShell?.hostDeviceId ?? null,
+              targetProjectId: (targetShell?.projectId ?? command.targetProjectId) as ProjectId,
+            } as const;
+          }).pipe(
+            Effect.mapError((cause) =>
+              Schema.is(MeshRpcError)(cause)
+                ? cause
+                : toMeshRpcError("Failed to fork chat.", cause),
             ),
           ),
           { "rpc.aggregate": "mesh" },

@@ -2,6 +2,7 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
+  ThreadId,
 } from "@v3tools/contracts";
 import { Effect } from "effect";
 
@@ -11,8 +12,8 @@ import {
   requireProject,
   requireProjectAbsent,
   requireThread,
-  requireThreadArchived,
   requireThreadAbsent,
+  requireThreadArchived,
   requireThreadNotArchived,
 } from "./commandInvariants.ts";
 import { projectEvent } from "./projector.ts";
@@ -716,6 +717,20 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "chat.fork": {
+      // Fork commands take a separate execution path inside the engine: the
+      // SQL event-log copy + appended `thread.forked` event must commit in
+      // one transaction, which doesn't fit the decider's "produce planned
+      // events from a read-model snapshot" contract. The engine validates
+      // via `validateChatForkCommand` before invoking
+      // `OrchestrationEventStore.forkThreadEvents`.
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail:
+          "chat.fork must be handled directly by OrchestrationEngine.processEnvelope, not the decider.",
+      });
+    }
+
     case "thread.activity.append": {
       yield* requireThread({
         readModel,
@@ -755,4 +770,70 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
     }
   }
+});
+
+export interface ChatForkValidationResult {
+  readonly sourceThread: {
+    readonly id: ThreadId;
+    readonly projectId: string;
+    readonly title: string;
+    readonly hostDeviceId: string | null;
+  };
+  readonly targetProjectId: string;
+}
+
+/**
+ * Validate a `chat.fork` command against the read model.
+ *
+ * Mirrors the invariants the decider would normally enforce for thread-level
+ * commands: source thread exists, target thread does not exist, the resolved
+ * target project exists, and the source has no in-flight provider session or
+ * unresolved approvals.
+ */
+export const validateChatForkCommand = Effect.fn("validateChatForkCommand")(function* (input: {
+  readonly command: Extract<OrchestrationCommand, { type: "chat.fork" }>;
+  readonly readModel: OrchestrationReadModel;
+}) {
+  const { command, readModel } = input;
+
+  const sourceThread = yield* requireThread({
+    readModel,
+    command,
+    threadId: command.sourceThreadId,
+  });
+  yield* requireThreadAbsent({
+    readModel,
+    command,
+    threadId: command.targetThreadId,
+  });
+  const targetProjectId = command.targetProjectId ?? sourceThread.projectId;
+  yield* requireProject({
+    readModel,
+    command,
+    projectId: targetProjectId,
+  });
+  const sessionStatus = sourceThread.session?.status ?? null;
+  if (sessionStatus === "running" || sessionStatus === "starting") {
+    return yield* new OrchestrationCommandInvariantError({
+      commandType: command.type,
+      detail: `Source thread '${command.sourceThreadId}' has an active session (status='${sessionStatus}') and cannot be forked. Wait for the turn to settle or stop the session first.`,
+    });
+  }
+  const hasStreamingMessage = sourceThread.messages.some((message) => message.streaming);
+  if (hasStreamingMessage) {
+    return yield* new OrchestrationCommandInvariantError({
+      commandType: command.type,
+      detail: `Source thread '${command.sourceThreadId}' is mid-turn (a message is still streaming) and cannot be forked.`,
+    });
+  }
+
+  return {
+    sourceThread: {
+      id: sourceThread.id,
+      projectId: sourceThread.projectId,
+      title: sourceThread.title,
+      hostDeviceId: sourceThread.hostDeviceId ?? null,
+    },
+    targetProjectId,
+  } satisfies ChatForkValidationResult;
 });

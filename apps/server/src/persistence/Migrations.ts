@@ -41,6 +41,7 @@ import Migration0025 from "./Migrations/025_CleanupInvalidProjectionPendingAppro
 import Migration0026 from "./Migrations/026_V3UsersDevices.ts";
 import Migration0027 from "./Migrations/027_ProjectionThreadsMeshSync.ts";
 import Migration0028 from "./Migrations/028_ProjectionThreadMessageSourceDevice.ts";
+import Migration0029 from "./Migrations/029_ProjectionThreadsForkLineage.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -81,6 +82,7 @@ export const migrationEntries = [
   [26, "V3UsersDevices", Migration0026],
   [27, "ProjectionThreadsMeshSync", Migration0027],
   [28, "ProjectionThreadMessageSourceDevice", Migration0028],
+  [29, "ProjectionThreadsForkLineage", Migration0029],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

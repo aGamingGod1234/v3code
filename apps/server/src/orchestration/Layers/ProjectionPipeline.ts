@@ -763,6 +763,30 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
         }
 
+        case "thread.forked": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.setForkLineage({
+            threadId: event.payload.threadId,
+            forkLineage: {
+              parentChatId: event.payload.sourceThreadId,
+              parentDeviceId: event.payload.parentDeviceId,
+              forkedFromStreamVersion: event.payload.forkedFromStreamVersion,
+              forkedAt: event.payload.forkedAt,
+            },
+          });
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
+            updatedAt: event.payload.forkedAt,
+          });
+          return;
+        }
+
         default:
           return;
       }
