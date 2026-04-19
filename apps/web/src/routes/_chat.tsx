@@ -1,6 +1,7 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect } from "react";
 
+import { ConfigureServerBanner } from "../components/chat/ConfigureServerBanner";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import {
@@ -100,6 +101,7 @@ function ChatRouteGlobalShortcuts() {
 function ChatRouteLayout() {
   return (
     <>
+      <ConfigureServerBanner />
       <ChatRouteGlobalShortcuts />
       <Outlet />
     </>

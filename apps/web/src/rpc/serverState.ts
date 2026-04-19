@@ -24,6 +24,16 @@ export interface ServerConfigUpdatedNotification {
   readonly source: ServerConfigUpdateSource;
 }
 
+export type ClientServerModeState = "desktop" | "server-node" | "web";
+
+export interface UserSessionState {
+  readonly signedIn: boolean;
+  readonly email: string | null;
+  readonly displayName: string | null;
+  readonly avatarUrl: string | null;
+  readonly pendingApproval: boolean;
+}
+
 type ServerStateClient = Pick<
   WsRpcClient["server"],
   "getConfig" | "subscribeConfig" | "subscribeLifecycle"
@@ -60,6 +70,14 @@ export const welcomeAtom = makeStateAtom<ServerLifecycleWelcomePayload | null>(
   "server-welcome",
   null,
 );
+export const serverModeAtom = makeStateAtom<ClientServerModeState>("server-mode", "web");
+export const userSessionAtom = makeStateAtom<UserSessionState>("user-session", {
+  signedIn: false,
+  email: null,
+  displayName: null,
+  avatarUrl: null,
+  pendingApproval: false,
+});
 export const serverConfigAtom = makeStateAtom<ServerConfig | null>("server-config", null);
 export const serverConfigUpdatedAtom = makeStateAtom<ServerConfigUpdatedNotification | null>(
   "server-config-updated",
@@ -72,6 +90,22 @@ export const providersUpdatedAtom = makeStateAtom<ServerProviderUpdatedPayload |
 
 export function getServerConfig(): ServerConfig | null {
   return appAtomRegistry.get(serverConfigAtom);
+}
+
+export function getServerModeState(): ClientServerModeState {
+  return appAtomRegistry.get(serverModeAtom);
+}
+
+export function setServerModeState(mode: ClientServerModeState): void {
+  appAtomRegistry.set(serverModeAtom, mode);
+}
+
+export function getUserSessionState(): UserSessionState {
+  return appAtomRegistry.get(userSessionAtom);
+}
+
+export function setUserSessionState(session: UserSessionState): void {
+  appAtomRegistry.set(userSessionAtom, session);
 }
 
 export function getServerConfigUpdatedNotification(): ServerConfigUpdatedNotification | null {
@@ -202,6 +236,14 @@ export function startServerStateSync(client: ServerStateClient): () => void {
 export function resetServerStateForTests() {
   resetAppAtomRegistryForTests();
   nextServerConfigUpdatedNotificationId = 1;
+  appAtomRegistry.set(serverModeAtom, "web");
+  appAtomRegistry.set(userSessionAtom, {
+    signedIn: false,
+    email: null,
+    displayName: null,
+    avatarUrl: null,
+    pendingApproval: false,
+  });
 }
 
 let nextServerConfigUpdatedNotificationId = 1;
@@ -260,6 +302,14 @@ function useLatestAtomSubscription<A>(
 
 export function useServerConfig(): ServerConfig | null {
   return useAtomValue(serverConfigAtom);
+}
+
+export function useServerModeState(): ClientServerModeState {
+  return useAtomValue(serverModeAtom);
+}
+
+export function useUserSessionState(): UserSessionState {
+  return useAtomValue(userSessionAtom);
 }
 
 export function useServerSettings(): ServerSettings {

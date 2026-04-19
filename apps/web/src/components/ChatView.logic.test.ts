@@ -8,6 +8,7 @@ import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
   createLocalDispatchSnapshot,
+  deriveRemoteHostInputDisabledReason,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
@@ -80,6 +81,40 @@ describe("buildExpiredTerminalContextToastCopy", () => {
       title: "Expired terminal contexts omitted from message",
       description: "Re-add it if you want that terminal output included.",
     });
+  });
+});
+
+describe("deriveRemoteHostInputDisabledReason", () => {
+  it("returns null for local-hosted threads", () => {
+    expect(
+      deriveRemoteHostInputDisabledReason({
+        currentDeviceId: "device-local" as never,
+        hostDeviceId: "device-local" as never,
+        devices: [
+          {
+            id: "device-local" as never,
+            name: "Desktop",
+            online: true,
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("disables input when the remote host device is offline", () => {
+    expect(
+      deriveRemoteHostInputDisabledReason({
+        currentDeviceId: "device-laptop" as never,
+        hostDeviceId: "device-desktop" as never,
+        devices: [
+          {
+            id: "device-desktop" as never,
+            name: "Desktop",
+            online: false,
+          },
+        ],
+      }),
+    ).toBe("Desktop is offline. Reconnect that device to send prompts to this thread.");
   });
 });
 
@@ -220,6 +255,7 @@ const makeThread = (input?: {
   codexThreadId: null,
   projectId: ProjectId.make("project-1"),
   title: "Thread",
+  hostDeviceId: null,
   modelSelection: { provider: "codex" as const, model: "gpt-5.4" },
   runtimeMode: "full-access" as const,
   interactionMode: "default" as const,
@@ -274,6 +310,7 @@ function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) 
           codexThreadId: thread.codexThreadId,
           projectId: thread.projectId,
           title: thread.title,
+          hostDeviceId: thread.hostDeviceId,
           modelSelection: thread.modelSelection,
           runtimeMode: thread.runtimeMode,
           interactionMode: thread.interactionMode,
@@ -466,6 +503,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
       codexThreadId: null,
       projectId,
       title: "Thread",
+      hostDeviceId: null,
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -503,6 +541,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
       codexThreadId: null,
       projectId,
       title: "Thread",
+      hostDeviceId: null,
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -549,6 +588,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
       codexThreadId: null,
       projectId,
       title: "Thread",
+      hostDeviceId: null,
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -592,6 +632,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
       codexThreadId: null,
       projectId,
       title: "Thread",
+      hostDeviceId: null,
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -635,6 +676,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
       codexThreadId: null,
       projectId,
       title: "Thread",
+      hostDeviceId: null,
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -685,6 +727,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
       codexThreadId: null,
       projectId,
       title: "Thread",
+      hostDeviceId: null,
       modelSelection: { provider: "codex", model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",

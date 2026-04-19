@@ -9,6 +9,7 @@ function createTestClient() {
   const configListeners = new Set<(event: any) => void>();
   const terminalListeners = new Set<(event: any) => void>();
   const shellListeners = new Set<(event: any) => void>();
+  const promptListeners = new Set<(event: any) => void>();
   let shellResubscribe: (() => void) | undefined;
 
   const client = {
@@ -75,6 +76,16 @@ function createTestClient() {
       onEvent: (listener: (event: any) => void) => {
         terminalListeners.add(listener);
         return () => terminalListeners.delete(listener);
+      },
+    },
+    mesh: {
+      publishEvent: vi.fn(async () => ({ sequence: 0 })),
+      sendPrompt: vi.fn(async () => ({ sequence: 0 })),
+      subscribeChat: vi.fn(() => () => undefined),
+      subscribePresence: vi.fn(() => () => undefined),
+      subscribePrompts: (listener: (event: any) => void) => {
+        promptListeners.add(listener);
+        return () => promptListeners.delete(listener);
       },
     },
     projects: {
@@ -162,6 +173,7 @@ describe("createEnvironmentConnection", () => {
       },
       client,
       applyShellEvent: vi.fn(),
+      applyPromptForward: vi.fn(),
       syncShellSnapshot,
       applyTerminalEvent: vi.fn(),
     });
@@ -194,6 +206,7 @@ describe("createEnvironmentConnection", () => {
       },
       client,
       applyShellEvent: vi.fn(),
+      applyPromptForward: vi.fn(),
       syncShellSnapshot: vi.fn(),
       applyTerminalEvent: vi.fn(),
     });
@@ -224,6 +237,7 @@ describe("createEnvironmentConnection", () => {
       },
       client,
       applyShellEvent: vi.fn(),
+      applyPromptForward: vi.fn(),
       syncShellSnapshot,
       applyTerminalEvent: vi.fn(),
     });

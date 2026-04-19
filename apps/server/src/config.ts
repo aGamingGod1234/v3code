@@ -10,7 +10,12 @@ import { Effect, FileSystem, Layer, LogLevel, Path, Schema, Context } from "effe
 
 export const DEFAULT_PORT = 3773;
 
-export const RuntimeMode = Schema.Literals(["web", "desktop"]);
+// `server-node` is the V3 Phase 2 mode for self-hosted multi-device mesh
+// deployments. The detection precedence (CLI flag > env var > config.toml
+// presence > default) lives in `apps/server/src/serverMode.ts`. Adding the
+// literal here keeps the existing `Config.schema(RuntimeMode, ...)` env-var
+// path working without bespoke parsing.
+export const RuntimeMode = Schema.Literals(["web", "desktop", "server-node"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
 
 export const StartupPresentation = Schema.Literals(["browser", "headless"]);
@@ -72,6 +77,12 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   // enable Google sign-in.
   readonly googleClientId: string | undefined;
   readonly authorizedEmails: ReadonlyArray<string>;
+  // V3 server-node mode (Phase 2b). Populated from `V3CODE_POSTGRES_URL`
+  // or `[database].postgres_url` in `~/.v3-code-server/config.toml`. The
+  // Postgres persistence layer at `persistence/Layers/Postgres.ts`
+  // refuses to construct when this is undefined. In desktop / web
+  // modes the SQLite layer ignores it entirely.
+  readonly postgresUrl: string | undefined;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -174,6 +185,7 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           startupPresentation: "browser",
           googleClientId: undefined,
           authorizedEmails: [],
+          postgresUrl: undefined,
         } satisfies ServerConfigShape;
       }),
     );

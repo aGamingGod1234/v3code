@@ -91,6 +91,8 @@ function buildProps() {
     isRevertingCheckpoint: false,
     onImageExpand: () => {},
     activeThreadEnvironmentId: ACTIVE_THREAD_ENVIRONMENT_ID,
+    currentDeviceId: null,
+    deviceNameById: new Map(),
     markdownCwd: undefined,
     resolvedTheme: "light" as const,
     timestampFormat: "locale" as const,
@@ -134,6 +136,35 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain("lucide-terminal");
     expect(markup).toContain("yoo what&#x27;s ");
   }, 20_000);
+
+  it("shows a prompt attribution badge for messages sent from another device", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        currentDeviceId={"device-desktop" as never}
+        deviceNameById={new Map([["device-laptop" as never, "Laptop"]])}
+        timelineEntries={[
+          {
+            id: "entry-1",
+            kind: "message",
+            createdAt: "2026-04-19T08:30:00.000Z",
+            message: {
+              id: MessageId.make("message-remote-device"),
+              role: "user",
+              text: "Ship it",
+              sourceDeviceId: "device-laptop" as never,
+              createdAt: "2026-04-19T08:30:00.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Laptop");
+    expect(markup).toContain("lucide-globe");
+  });
 
   it("renders context compaction entries in the normal work log", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");

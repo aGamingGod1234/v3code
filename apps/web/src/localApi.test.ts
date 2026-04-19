@@ -185,6 +185,27 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     showContextMenu: async () => null,
     openExternal: async () => true,
     onMenuAction: () => () => undefined,
+    openV3GoogleSignIn: async () => ({
+      idToken: "mock-id-token",
+      accessToken: "mock-access-token",
+    }),
+    v3Wizard: {
+      probeDocker: async () => ({ status: "ok", version: "27.0.0", message: null }),
+      probePort: async (port: number) => ({ port, available: true, message: null }),
+      probeCloudflared: async () => ({
+        status: "missing",
+        version: null,
+        installDocsUrl: "https://example.com",
+      }),
+      probePaths: async () => ({
+        configPath: "/tmp/config.toml",
+        configExists: false,
+        defaultDataDirectory: "/tmp/data",
+      }),
+      pickDataDirectory: async () => null,
+      writeServerNodeConfig: async () => ({ path: "/tmp/config.toml", bytesWritten: 0 }),
+      generateEncryptionKey: async () => "mock-encryption-key",
+    },
     getUpdateState: async () => {
       throw new Error("getUpdateState not implemented in test");
     },

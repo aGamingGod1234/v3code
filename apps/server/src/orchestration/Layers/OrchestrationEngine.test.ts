@@ -86,6 +86,8 @@ describe("OrchestrationEngine", () => {
           }),
         ),
       readFromSequence: () => Stream.empty,
+      readThreadStream: () => Stream.empty,
+      getLatestThreadStreamVersion: () => Effect.succeed(0),
       readAll: () =>
         Stream.fail(
           new PersistenceSqlError({
@@ -158,6 +160,7 @@ describe("OrchestrationEngine", () => {
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
           getThreadShellById: () => Effect.succeed(Option.none()),
           getThreadDetailById: () => Effect.succeed(Option.none()),
+          getThreadMeshSnapshot: () => Effect.succeed(Option.none()),
         }),
       ),
       Layer.provide(
@@ -620,6 +623,8 @@ describe("OrchestrationEngine", () => {
       readFromSequence(sequenceExclusive) {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
+      readThreadStream: () => Stream.empty,
+      getLatestThreadStreamVersion: () => Effect.succeed(0),
       readAll() {
         return Stream.fromIterable(events);
       },
@@ -844,6 +849,8 @@ describe("OrchestrationEngine", () => {
       readFromSequence(sequenceExclusive) {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
+      readThreadStream: () => Stream.empty,
+      getLatestThreadStreamVersion: () => Effect.succeed(0),
       readAll() {
         return Stream.fromIterable(events);
       },

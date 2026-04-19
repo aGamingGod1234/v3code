@@ -13,6 +13,7 @@ import type {
   MessageId,
   ProviderKind,
   CheckpointRef,
+  DeviceId,
   ProviderInteractionMode,
   RuntimeMode,
 } from "@v3tools/contracts";
@@ -47,6 +48,7 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system";
   text: string;
   attachments?: ChatAttachment[];
+  sourceDeviceId?: DeviceId;
   turnId?: TurnId | null;
   createdAt: string;
   completedAt?: string | undefined;
@@ -98,6 +100,7 @@ export interface Thread {
   codexThreadId: string | null;
   projectId: ProjectId;
   title: string;
+  hostDeviceId: DeviceId | null;
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
@@ -122,6 +125,7 @@ export interface ThreadShell {
   codexThreadId: string | null;
   projectId: ProjectId;
   title: string;
+  hostDeviceId: DeviceId | null;
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
@@ -143,6 +147,7 @@ export interface SidebarThreadSummary {
   environmentId: EnvironmentId;
   projectId: ProjectId;
   title: string;
+  hostDeviceId: DeviceId | null;
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;
   createdAt: string;

@@ -1,6 +1,9 @@
 import {
   type AuthSessionRole,
+  CommandId,
   type EnvironmentId,
+  type MeshPromptStreamItem,
+  MessageId,
   type OrchestrationEvent,
   type OrchestrationShellSnapshot,
   type OrchestrationShellStreamEvent,
@@ -18,6 +21,11 @@ import {
   scopeThreadRef,
 } from "@v3tools/client-runtime";
 
+import {
+  applyMeshGapDetection,
+  createMeshGapCursor,
+  updateMeshGapCursorFromSnapshot,
+} from "~/mesh/gapDetection";
 import {
   markPromotedDraftThreadByRef,
   markPromotedDraftThreadsByRef,
@@ -78,6 +86,7 @@ type ThreadDetailSubscriptionEntry = {
   refCount: number;
   lastAccessedAt: number;
   evictionTimeoutId: ReturnType<typeof setTimeout> | null;
+  meshCursor: number;
 };
 
 const environmentConnections = new Map<EnvironmentId, EnvironmentConnection>();
@@ -161,6 +170,21 @@ function shouldEvictThreadDetailSubscription(entry: ThreadDetailSubscriptionEntr
   return entry.refCount === 0 && !isNonIdleThreadDetailSubscription(entry);
 }
 
+function restartThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry): void {
+  const key = getThreadDetailSubscriptionKey(entry.environmentId, entry.threadId);
+  entry.unsubscribe();
+  entry.unsubscribe = NOOP;
+
+  queueMicrotask(() => {
+    if (threadDetailSubscriptions.get(key) !== entry) {
+      return;
+    }
+    if (!attachThreadDetailSubscription(entry)) {
+      watchThreadDetailSubscriptionConnection(entry);
+    }
+  });
+}
+
 function attachThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry): boolean {
   if (entry.unsubscribeConnectionListener !== null) {
     entry.unsubscribeConnectionListener();
@@ -175,13 +199,33 @@ function attachThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry): b
     return false;
   }
 
-  entry.unsubscribe = connection.client.orchestration.subscribeThread(
-    { threadId: entry.threadId },
+  entry.unsubscribe = connection.client.mesh.subscribeChat(
+    {
+      threadId: entry.threadId,
+      fromStreamVersionExclusive: entry.meshCursor,
+    },
     (item) => {
       if (item.kind === "snapshot") {
+        entry.meshCursor = updateMeshGapCursorFromSnapshot(
+          createMeshGapCursor(entry.meshCursor),
+          item.latestStreamVersion,
+        ).lastStreamVersion;
         useStore.getState().syncServerThreadDetail(item.snapshot.thread, entry.environmentId);
         return;
       }
+
+      const decision = applyMeshGapDetection(
+        createMeshGapCursor(entry.meshCursor),
+        item.event.streamVersion ?? entry.meshCursor,
+      );
+      if (decision.type === "ignore") {
+        return;
+      }
+      if (decision.type === "resubscribe") {
+        restartThreadDetailSubscription(entry);
+        return;
+      }
+      entry.meshCursor = decision.state.lastStreamVersion;
       applyEnvironmentThreadDetailEvent(item.event, entry.environmentId);
     },
   );
@@ -349,6 +393,7 @@ export function retainThreadDetailSubscription(
     refCount: 1,
     lastAccessedAt: Date.now(),
     evictionTimeoutId: null,
+    meshCursor: 0,
   };
   threadDetailSubscriptions.set(key, entry);
   if (!attachThreadDetailSubscription(entry)) {
@@ -386,6 +431,10 @@ function getRuntimeErrorFields(error: unknown) {
 
 function isoNow(): string {
   return new Date().toISOString();
+}
+
+function buildForwardedPromptCommandId(threadId: ThreadId, messageId: MessageId): CommandId {
+  return CommandId.make(`mesh-client-msg:${threadId}:${messageId}`);
 }
 
 function setRuntimeConnecting(environmentId: EnvironmentId) {
@@ -631,9 +680,33 @@ function applyShellEvent(event: OrchestrationShellStreamEvent, environmentId: En
   }
 }
 
+function applyPromptForward(
+  item: MeshPromptStreamItem,
+  environmentId: EnvironmentId,
+  client: WsRpcClient,
+) {
+  void client.orchestration
+    .dispatchCommand({
+      ...item.command,
+      commandId: buildForwardedPromptCommandId(
+        item.command.threadId,
+        item.command.message.messageId,
+      ),
+    })
+    .catch((error) => {
+      console.error("Failed to apply forwarded mesh prompt.", {
+        environmentId,
+        threadId: item.command.threadId,
+        messageId: item.command.message.messageId,
+        error,
+      });
+    });
+}
+
 function createEnvironmentConnectionHandlers() {
   return {
     applyShellEvent,
+    applyPromptForward,
     syncShellSnapshot: (snapshot: OrchestrationShellSnapshot, environmentId: EnvironmentId) => {
       useStore.getState().syncServerShellSnapshot(snapshot, environmentId);
       reconcileThreadDetailSubscriptionsForEnvironment(

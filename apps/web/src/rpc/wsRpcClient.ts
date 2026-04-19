@@ -5,6 +5,7 @@ import {
   type GitStatusResult,
   type GitStatusStreamEvent,
   type LocalApi,
+  MESH_WS_METHODS,
   ORCHESTRATION_WS_METHODS,
   type ServerSettingsPatch,
   WS_METHODS,
@@ -111,6 +112,13 @@ export interface WsRpcClient {
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
     readonly subscribeAuthAccess: RpcStreamMethod<typeof WS_METHODS.subscribeAuthAccess>;
+  };
+  readonly mesh: {
+    readonly publishEvent: RpcUnaryMethod<typeof MESH_WS_METHODS.publishEvent>;
+    readonly sendPrompt: RpcUnaryMethod<typeof MESH_WS_METHODS.sendPrompt>;
+    readonly subscribeChat: RpcInputStreamMethod<typeof MESH_WS_METHODS.subscribeChat>;
+    readonly subscribePresence: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePresence>;
+    readonly subscribePrompts: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePrompts>;
   };
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
@@ -228,6 +236,30 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       subscribeAuthAccess: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeAuthAccess]({}),
+          listener,
+          options,
+        ),
+    },
+    mesh: {
+      publishEvent: (input) =>
+        transport.request((client) => client[MESH_WS_METHODS.publishEvent](input)),
+      sendPrompt: (input) =>
+        transport.request((client) => client[MESH_WS_METHODS.sendPrompt](input)),
+      subscribeChat: (input, listener, options) =>
+        transport.subscribe(
+          (client) => client[MESH_WS_METHODS.subscribeChat](input),
+          listener,
+          options,
+        ),
+      subscribePresence: (listener, options) =>
+        transport.subscribe(
+          (client) => client[MESH_WS_METHODS.subscribePresence]({}),
+          listener,
+          options,
+        ),
+      subscribePrompts: (listener, options) =>
+        transport.subscribe(
+          (client) => client[MESH_WS_METHODS.subscribePrompts]({}),
           listener,
           options,
         ),

@@ -1,4 +1,4 @@
-import { type EnvironmentId, type MessageId, type TurnId } from "@v3tools/contracts";
+import { type DeviceId, type EnvironmentId, type MessageId, type TurnId } from "@v3tools/contracts";
 import {
   createContext,
   memo,
@@ -81,6 +81,8 @@ interface TimelineRowSharedState {
   resolvedTheme: "light" | "dark";
   workspaceRoot: string | undefined;
   activeThreadEnvironmentId: EnvironmentId;
+  currentDeviceId: DeviceId | null;
+  deviceNameById: ReadonlyMap<DeviceId, string>;
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
@@ -109,6 +111,8 @@ interface MessagesTimelineProps {
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   activeThreadEnvironmentId: EnvironmentId;
+  currentDeviceId: DeviceId | null;
+  deviceNameById: ReadonlyMap<DeviceId, string>;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
@@ -137,6 +141,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   isRevertingCheckpoint,
   onImageExpand,
   activeThreadEnvironmentId,
+  currentDeviceId,
+  deviceNameById,
   markdownCwd,
   resolvedTheme,
   timestampFormat,
@@ -204,6 +210,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       resolvedTheme,
       workspaceRoot,
       activeThreadEnvironmentId,
+      currentDeviceId,
+      deviceNameById,
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
@@ -220,6 +228,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       resolvedTheme,
       workspaceRoot,
       activeThreadEnvironmentId,
+      currentDeviceId,
+      deviceNameById,
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
@@ -272,6 +282,21 @@ function keyExtractor(item: MessagesTimelineRow) {
   return item.id;
 }
 
+function resolvePromptAttributionLabel(
+  sourceDeviceId: DeviceId | undefined,
+  currentDeviceId: DeviceId | null,
+  deviceNameById: ReadonlyMap<DeviceId, string>,
+): string | null {
+  if (
+    sourceDeviceId === undefined ||
+    currentDeviceId === null ||
+    sourceDeviceId === currentDeviceId
+  ) {
+    return null;
+  }
+  return deviceNameById.get(sourceDeviceId) ?? "Other device";
+}
+
 // ---------------------------------------------------------------------------
 // TimelineRowContent — the actual row component
 // ---------------------------------------------------------------------------
@@ -304,6 +329,11 @@ function TimelineRowContent({ row }: { row: TimelineRow }) {
           const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
           const terminalContexts = displayedUserMessage.contexts;
           const canRevertAgentWork = typeof row.revertTurnCount === "number";
+          const promptAttributionLabel = resolvePromptAttributionLabel(
+            row.message.sourceDeviceId,
+            ctx.currentDeviceId,
+            ctx.deviceNameById,
+          );
           return (
             <div className="flex justify-end">
               <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
@@ -350,6 +380,19 @@ function TimelineRowContent({ row }: { row: TimelineRow }) {
                   />
                 )}
                 <div className="mt-1.5 flex items-center justify-end gap-2">
+                  {promptAttributionLabel ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/80">
+                            <GlobeIcon className="size-3" />
+                            {promptAttributionLabel}
+                          </span>
+                        }
+                      />
+                      <TooltipPopup>Sent from {promptAttributionLabel}</TooltipPopup>
+                    </Tooltip>
+                  ) : null}
                   <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
                     {displayedUserMessage.copyText && (
                       <MessageCopyButton text={displayedUserMessage.copyText} />

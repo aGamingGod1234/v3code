@@ -49,6 +49,16 @@ import {
   OrchestrationRpcSchemas,
 } from "./orchestration.ts";
 import {
+  MESH_WS_METHODS,
+  MeshChatStreamItem,
+  MeshPublishEventInput,
+  MeshPresenceStreamItem,
+  MeshPromptStreamItem,
+  MeshRpcError,
+  MeshSendPromptInput,
+  MeshSubscribeChatInput,
+} from "./mesh/chat.ts";
+import {
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -355,6 +365,39 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
   stream: true,
 });
 
+export const WsMeshSubscribeChatRpc = Rpc.make(MESH_WS_METHODS.subscribeChat, {
+  payload: MeshSubscribeChatInput,
+  success: MeshChatStreamItem,
+  error: MeshRpcError,
+  stream: true,
+});
+
+export const WsMeshPublishEventRpc = Rpc.make(MESH_WS_METHODS.publishEvent, {
+  payload: MeshPublishEventInput,
+  success: OrchestrationRpcSchemas.dispatchCommand.output,
+  error: MeshRpcError,
+});
+
+export const WsMeshSendPromptRpc = Rpc.make(MESH_WS_METHODS.sendPrompt, {
+  payload: MeshSendPromptInput,
+  success: OrchestrationRpcSchemas.dispatchCommand.output,
+  error: MeshRpcError,
+});
+
+export const WsMeshSubscribePresenceRpc = Rpc.make(MESH_WS_METHODS.subscribePresence, {
+  payload: Schema.Struct({}),
+  success: MeshPresenceStreamItem,
+  error: MeshRpcError,
+  stream: true,
+});
+
+export const WsMeshSubscribePromptsRpc = Rpc.make(MESH_WS_METHODS.subscribePrompts, {
+  payload: Schema.Struct({}),
+  success: MeshPromptStreamItem,
+  error: MeshRpcError,
+  stream: true,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -387,6 +430,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
+  WsMeshSubscribeChatRpc,
+  WsMeshPublishEventRpc,
+  WsMeshSendPromptRpc,
+  WsMeshSubscribePresenceRpc,
+  WsMeshSubscribePromptsRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,

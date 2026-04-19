@@ -680,6 +680,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     codexThreadId: null,
     projectId: ProjectId.make("project-1"),
     title: "Thread",
+    hostDeviceId: null,
     modelSelection: {
       provider: "codex",
       model: "gpt-5.4",

@@ -566,6 +566,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             threadId: event.payload.threadId,
             projectId: event.payload.projectId,
             title: event.payload.title,
+            hostDeviceId: event.payload.hostDeviceId ?? null,
             modelSelection: event.payload.modelSelection,
             runtimeMode: event.payload.runtimeMode,
             interactionMode: event.payload.interactionMode,
@@ -579,6 +580,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
             hasActionableProposedPlan: 0,
+            lastStreamVersion: event.streamVersion ?? 0,
             deletedAt: null,
           });
           return;
@@ -593,6 +595,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             archivedAt: event.payload.archivedAt,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -608,6 +611,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             archivedAt: null,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -623,6 +627,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+            ...(event.payload.hostDeviceId !== undefined
+              ? { hostDeviceId: event.payload.hostDeviceId }
+              : {}),
             ...(event.payload.modelSelection !== undefined
               ? { modelSelection: event.payload.modelSelection }
               : {}),
@@ -630,6 +637,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.worktreePath !== undefined
               ? { worktreePath: event.payload.worktreePath }
               : {}),
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -645,6 +653,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             runtimeMode: event.payload.runtimeMode,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -660,6 +669,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             interactionMode: event.payload.interactionMode,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -676,6 +686,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             deletedAt: event.payload.deletedAt,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.payload.deletedAt,
           });
           return;
@@ -694,6 +705,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           }
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.occurredAt,
           });
           yield* refreshThreadShellSummary(event.payload.threadId);
@@ -710,6 +722,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             latestTurnId: event.payload.session.activeTurnId,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.occurredAt,
           });
           yield* refreshThreadShellSummary(event.payload.threadId);
@@ -726,6 +739,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             latestTurnId: event.payload.turnId,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.occurredAt,
           });
           yield* refreshThreadShellSummary(event.payload.threadId);
@@ -742,6 +756,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             latestTurnId: null,
+            lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.occurredAt,
           });
           yield* refreshThreadShellSummary(event.payload.threadId);
@@ -787,6 +802,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             role: event.payload.role,
             text: nextText,
             ...(nextAttachments !== undefined ? { attachments: [...nextAttachments] } : {}),
+            sourceDeviceId: event.payload.sourceDeviceId ?? previousMessage?.sourceDeviceId ?? null,
             isStreaming: event.payload.streaming,
             createdAt: previousMessage?.createdAt ?? event.payload.createdAt,
             updatedAt: event.payload.updatedAt,

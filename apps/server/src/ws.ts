@@ -3,6 +3,7 @@ import {
   type AuthAccessStreamEvent,
   AuthSessionId,
   CommandId,
+  DeviceId,
   EventId,
   type OrchestrationCommand,
   type GitActionProgressEvent,
@@ -19,6 +20,7 @@ import {
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
   ThreadId,
+  type UserId,
   type TerminalEvent,
   WS_METHODS,
   WsRpcGroup,
@@ -63,6 +65,9 @@ import {
   type SessionCredentialChange,
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
+import { UserContextResolver } from "./identity/Services/UserContextResolver.ts";
+import { DeviceRegistry } from "./mesh/Services/DeviceRegistry.ts";
+import { makeMeshWsHandlers } from "./mesh/meshWsHandlers.ts";
 
 function isThreadDetailEvent(event: OrchestrationEvent): event is Extract<
   OrchestrationEvent,
@@ -128,7 +133,14 @@ function toAuthAccessStreamEvent(
   }
 }
 
-const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
+const makeWsRpcLayer = (
+  currentSessionId: AuthSessionId,
+  currentMeshContext: {
+    readonly userId: UserId | null;
+    readonly deviceId: DeviceId | null;
+    readonly sessionId: AuthSessionId;
+  },
+) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -153,6 +165,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const serverAuth = yield* ServerAuth;
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const sessions = yield* SessionCredentialService;
+      const meshHandlers = yield* makeMeshWsHandlers(currentMeshContext);
       const serverCommandId = (tag: string) =>
         CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
@@ -442,6 +455,11 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 threadId: command.threadId,
                 projectId: bootstrap.createThread.projectId,
                 title: bootstrap.createThread.title,
+                ...(bootstrap.createThread.hostDeviceId !== undefined
+                  ? {
+                      hostDeviceId: bootstrap.createThread.hostDeviceId,
+                    }
+                  : {}),
                 modelSelection: bootstrap.createThread.modelSelection,
                 runtimeMode: bootstrap.createThread.runtimeMode,
                 interactionMode: bootstrap.createThread.interactionMode,
@@ -545,6 +563,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
 
       return WsRpcGroup.of({
+        ...meshHandlers,
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.dispatchCommand,
@@ -1067,7 +1086,12 @@ export const websocketRpcRouteLayer = Layer.unwrap(
         const request = yield* HttpServerRequest.HttpServerRequest;
         const serverAuth = yield* ServerAuth;
         const sessions = yield* SessionCredentialService;
+        const userContextResolver = yield* UserContextResolver;
+        const deviceRegistry = yield* DeviceRegistry;
         const session = yield* serverAuth.authenticateWebSocketUpgrade(request);
+        const meshContext = yield* userContextResolver
+          .resolve(session.sessionId)
+          .pipe(Effect.catch(() => Effect.succeed(Option.none())));
         const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
           spanPrefix: "ws.rpc",
           spanAttributes: {
@@ -1076,13 +1100,42 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           },
         }).pipe(
           Effect.provide(
-            makeWsRpcLayer(session.sessionId).pipe(Layer.provideMerge(RpcSerialization.layerJson)),
+            makeWsRpcLayer(session.sessionId, {
+              userId: Option.isSome(meshContext) ? meshContext.value.userId : null,
+              deviceId: Option.isSome(meshContext) ? meshContext.value.deviceId : null,
+              sessionId: session.sessionId,
+            }).pipe(Layer.provideMerge(RpcSerialization.layerJson)),
           ),
         );
         return yield* Effect.acquireUseRelease(
-          sessions.markConnected(session.sessionId),
+          Effect.all(
+            [
+              sessions.markConnected(session.sessionId),
+              Option.isSome(meshContext)
+                ? deviceRegistry.register({
+                    deviceId: meshContext.value.deviceId,
+                    sessionId: session.sessionId,
+                    connectedAt: new Date().toISOString(),
+                  })
+                : Effect.void,
+            ],
+            { discard: true },
+          ),
           () => rpcWebSocketHttpEffect,
-          () => sessions.markDisconnected(session.sessionId),
+          () =>
+            Effect.all(
+              [
+                sessions.markDisconnected(session.sessionId),
+                Option.isSome(meshContext)
+                  ? deviceRegistry.unregister({
+                      deviceId: meshContext.value.deviceId,
+                      sessionId: session.sessionId,
+                      disconnectedAt: new Date().toISOString(),
+                    })
+                  : Effect.void,
+              ],
+              { discard: true },
+            ).pipe(Effect.asVoid),
         );
       }).pipe(Effect.catchTag("AuthError", respondToAuthError)),
     ),

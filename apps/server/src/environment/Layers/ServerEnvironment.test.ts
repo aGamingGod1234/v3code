@@ -39,6 +39,7 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     startupPresentation: "browser",
     googleClientId: undefined,
     authorizedEmails: [],
+    postgresUrl: undefined,
   } satisfies ServerConfigShape;
 });
 

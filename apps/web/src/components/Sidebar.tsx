@@ -161,9 +161,14 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
+import { ArchivedSection } from "./sidebar/ArchivedSection";
+import { DeviceGroup } from "./sidebar/DeviceGroup";
+import { SignedInBar } from "./sidebar/SignedInBar";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { CommandDialogTrigger } from "./ui/command";
 import { readEnvironmentApi } from "../environmentApi";
+import { useAccountState } from "../hooks/useAccountState";
+import { useChatsByDevice } from "../hooks/useChatsByDevice";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
 import { derivePhysicalProjectKey, deriveProjectGroupingOverrideKey } from "../logicalProject";
@@ -178,6 +183,7 @@ import {
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
+import { V3SignInButton } from "../v3/ui/SignInButton";
 const THREAD_PREVIEW_LIMIT = 6;
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
@@ -2418,6 +2424,9 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
 });
 
 interface SidebarProjectsContentProps {
+  account: ReturnType<typeof useAccountState>;
+  archivedThreadCount: number;
+  showMeshChrome: boolean;
   showArm64IntelBuildWarning: boolean;
   arm64IntelBuildWarningDescription: string | null;
   desktopUpdateButtonAction: "download" | "install" | "none";
@@ -2447,6 +2456,7 @@ interface SidebarProjectsContentProps {
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
+  deviceChatGroups: ReturnType<typeof useChatsByDevice>["groups"];
   dragInProgressRef: React.RefObject<boolean>;
   suppressProjectClickAfterDragRef: React.RefObject<boolean>;
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
@@ -2458,6 +2468,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
   props: SidebarProjectsContentProps,
 ) {
   const {
+    account,
+    archivedThreadCount,
+    showMeshChrome,
     showArm64IntelBuildWarning,
     arm64IntelBuildWarningDescription,
     desktopUpdateButtonAction,
@@ -2487,6 +2500,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     attachThreadListAutoAnimateRef,
     expandThreadListForProject,
     collapseThreadListForProject,
+    deviceChatGroups,
     dragInProgressRef,
     suppressProjectClickAfterDragRef,
     suppressProjectClickForContextMenuRef,
@@ -2515,6 +2529,33 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
 
   return (
     <SidebarContent className="gap-0">
+      {showMeshChrome ? (
+        <SidebarGroup className="px-2 pt-2 pb-0">
+          {account.isSignedIn ? (
+            <SignedInBar account={account} />
+          ) : (
+            <V3SignInButton className="w-full justify-center rounded-xl" />
+          )}
+        </SidebarGroup>
+      ) : null}
+      {showMeshChrome && account.isSignedIn && deviceChatGroups.length > 0 ? (
+        <SidebarGroup className="px-2 pt-2 pb-1">
+          <div className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+            Devices
+          </div>
+          <div className="flex flex-col gap-1">
+            {deviceChatGroups.map((group) => (
+              <DeviceGroup
+                key={group.device.id}
+                chats={group.chats}
+                currentDeviceId={account.currentDeviceId}
+                device={group.device}
+                routeThreadKey={routeThreadKey}
+              />
+            ))}
+          </div>
+        </SidebarGroup>
+      ) : null}
       <SidebarGroup className="px-2 pt-2 pb-1">
         <SidebarMenu>
           <SidebarMenuItem>
@@ -2673,11 +2714,22 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </div>
         )}
       </SidebarGroup>
+      {showMeshChrome && account.isSignedIn ? (
+        <SidebarGroup className="px-2 pt-0 pb-2">
+          <ArchivedSection count={archivedThreadCount} />
+        </SidebarGroup>
+      ) : null}
     </SidebarContent>
   );
 });
 
-export default function Sidebar() {
+interface SidebarProps {
+  readonly mode?: "mesh" | "legacy";
+}
+
+export default function Sidebar({ mode = "mesh" }: SidebarProps = {}) {
+  const account = useAccountState();
+  const { archivedChats, groups: deviceChatGroups } = useChatsByDevice();
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const sidebarThreads = useStore(useShallow(selectSidebarThreadsAcrossEnvironments));
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
@@ -2686,6 +2738,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const isOnSettings = pathname.startsWith("/settings");
+  const showMeshChrome = mode === "mesh";
   const sidebarThreadSortOrder = useSettings((s) => s.sidebarThreadSortOrder);
   const sidebarProjectSortOrder = useSettings((s) => s.sidebarProjectSortOrder);
   const sidebarProjectGroupingMode = useSettings((s) => s.sidebarProjectGroupingMode);
@@ -3345,10 +3398,13 @@ export default function Sidebar() {
       <SidebarChromeHeader isElectron={isElectron} />
 
       {isOnSettings ? (
-        <SettingsSidebarNav pathname={pathname} />
+        <SettingsSidebarNav pathname={pathname} showMeshChrome={showMeshChrome} />
       ) : (
         <>
           <SidebarProjectsContent
+            account={account}
+            archivedThreadCount={showMeshChrome ? archivedChats.length : 0}
+            showMeshChrome={showMeshChrome}
             showArm64IntelBuildWarning={showArm64IntelBuildWarning}
             arm64IntelBuildWarningDescription={arm64IntelBuildWarningDescription}
             desktopUpdateButtonAction={desktopUpdateButtonAction}
@@ -3378,6 +3434,7 @@ export default function Sidebar() {
             attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
             expandThreadListForProject={expandThreadListForProject}
             collapseThreadListForProject={collapseThreadListForProject}
+            deviceChatGroups={showMeshChrome ? deviceChatGroups : []}
             dragInProgressRef={dragInProgressRef}
             suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}

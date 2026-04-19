@@ -24,6 +24,18 @@ const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secr
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
+// V3 Phase 1d — main-process Google sign-in.
+const V3_OPEN_GOOGLE_SIGNIN_CHANNEL = "desktop:v3-open-google-signin";
+// V3 Phase 2d — setup wizard channels. Matches V3_WIZARD_CHANNELS in
+// apps/desktop/src/v3SetupWizard.ts; kept flat here because preload has
+// no access to shared runtime modules.
+const V3_WIZARD_PROBE_DOCKER_CHANNEL = "desktop:v3-wizard-probe-docker";
+const V3_WIZARD_PROBE_PORT_CHANNEL = "desktop:v3-wizard-probe-port";
+const V3_WIZARD_PROBE_CLOUDFLARED_CHANNEL = "desktop:v3-wizard-probe-cloudflared";
+const V3_WIZARD_PROBE_PATHS_CHANNEL = "desktop:v3-wizard-probe-paths";
+const V3_WIZARD_PICK_DATA_DIRECTORY_CHANNEL = "desktop:v3-wizard-pick-data-directory";
+const V3_WIZARD_WRITE_CONFIG_CHANNEL = "desktop:v3-wizard-write-config";
+const V3_WIZARD_GENERATE_KEY_CHANNEL = "desktop:v3-wizard-generate-key";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getAppBranding: () => {
@@ -84,5 +96,16 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     return () => {
       ipcRenderer.removeListener(UPDATE_STATE_CHANNEL, wrappedListener);
     };
+  },
+  openV3GoogleSignIn: (input) => ipcRenderer.invoke(V3_OPEN_GOOGLE_SIGNIN_CHANNEL, input),
+  v3Wizard: {
+    probeDocker: () => ipcRenderer.invoke(V3_WIZARD_PROBE_DOCKER_CHANNEL),
+    probePort: (port) => ipcRenderer.invoke(V3_WIZARD_PROBE_PORT_CHANNEL, port),
+    probeCloudflared: () => ipcRenderer.invoke(V3_WIZARD_PROBE_CLOUDFLARED_CHANNEL),
+    probePaths: () => ipcRenderer.invoke(V3_WIZARD_PROBE_PATHS_CHANNEL),
+    pickDataDirectory: (options) =>
+      ipcRenderer.invoke(V3_WIZARD_PICK_DATA_DIRECTORY_CHANNEL, options),
+    writeServerNodeConfig: (input) => ipcRenderer.invoke(V3_WIZARD_WRITE_CONFIG_CHANNEL, input),
+    generateEncryptionKey: () => ipcRenderer.invoke(V3_WIZARD_GENERATE_KEY_CHANNEL),
   },
 } satisfies DesktopBridge);

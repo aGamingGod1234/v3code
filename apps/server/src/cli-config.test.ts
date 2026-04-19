@@ -87,6 +87,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: true,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
     }),
   );
@@ -149,6 +152,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
     }),
   );
@@ -161,6 +167,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         noBrowser: true,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -212,6 +221,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
     }),
   );
@@ -281,6 +293,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: true,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
       assert.equal(join(baseDir, "dev"), resolved.stateDir);
     }),
@@ -346,6 +361,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         noBrowser: false,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -399,6 +417,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
     }),
   );
@@ -463,6 +484,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
     }),
   );
@@ -522,6 +546,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
+        googleClientId: undefined,
+        authorizedEmails: [],
+        postgresUrl: undefined,
       });
     }),
   );

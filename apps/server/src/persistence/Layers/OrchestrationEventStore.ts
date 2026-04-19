@@ -45,6 +45,7 @@ const AppendEventRequestSchema = Schema.Struct({
 
 const OrchestrationEventPersistedRowSchema = Schema.Struct({
   sequence: NonNegativeInt,
+  streamVersion: NonNegativeInt,
   eventId: EventId,
   type: OrchestrationEventType,
   aggregateKind: OrchestrationAggregateKind,
@@ -60,6 +61,17 @@ const OrchestrationEventPersistedRowSchema = Schema.Struct({
 const ReadFromSequenceRequestSchema = Schema.Struct({
   sequenceExclusive: NonNegativeInt,
   limit: Schema.Number,
+});
+const ReadThreadStreamRequestSchema = Schema.Struct({
+  threadId: ThreadId,
+  streamVersionExclusive: NonNegativeInt,
+  limit: Schema.Number,
+});
+const LatestThreadStreamVersionRequestSchema = Schema.Struct({
+  threadId: ThreadId,
+});
+const LatestThreadStreamVersionRowSchema = Schema.Struct({
+  latestStreamVersion: NonNegativeInt,
 });
 const DEFAULT_READ_FROM_SEQUENCE_LIMIT = 1_000;
 const READ_PAGE_SIZE = 500;
@@ -141,6 +153,7 @@ const makeEventStore = Effect.gen(function* () {
         )
         RETURNING
           sequence,
+          stream_version AS "streamVersion",
           event_id AS "eventId",
           event_type AS "type",
           aggregate_kind AS "aggregateKind",
@@ -161,6 +174,7 @@ const makeEventStore = Effect.gen(function* () {
       sql`
         SELECT
           sequence,
+          stream_version AS "streamVersion",
           event_id AS "eventId",
           event_type AS "type",
           aggregate_kind AS "aggregateKind",
@@ -175,6 +189,46 @@ const makeEventStore = Effect.gen(function* () {
         WHERE sequence > ${request.sequenceExclusive}
         ORDER BY sequence ASC
         LIMIT ${request.limit}
+      `,
+  });
+
+  const readThreadRowsFromStreamVersion = SqlSchema.findAll({
+    Request: ReadThreadStreamRequestSchema,
+    Result: OrchestrationEventPersistedRowSchema,
+    execute: (request) =>
+      sql`
+        SELECT
+          sequence,
+          stream_version AS "streamVersion",
+          event_id AS "eventId",
+          event_type AS "type",
+          aggregate_kind AS "aggregateKind",
+          stream_id AS "aggregateId",
+          occurred_at AS "occurredAt",
+          command_id AS "commandId",
+          causation_event_id AS "causationEventId",
+          correlation_id AS "correlationId",
+          payload_json AS "payload",
+          metadata_json AS "metadata"
+        FROM orchestration_events
+        WHERE aggregate_kind = 'thread'
+          AND stream_id = ${request.threadId}
+          AND stream_version > ${request.streamVersionExclusive}
+        ORDER BY stream_version ASC
+        LIMIT ${request.limit}
+      `,
+  });
+
+  const getLatestThreadStreamVersionRow = SqlSchema.findOne({
+    Request: LatestThreadStreamVersionRequestSchema,
+    Result: LatestThreadStreamVersionRowSchema,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          COALESCE(MAX(stream_version), 0) AS "latestStreamVersion"
+        FROM orchestration_events
+        WHERE aggregate_kind = 'thread'
+          AND stream_id = ${threadId}
       `,
   });
 
@@ -257,9 +311,75 @@ const makeEventStore = Effect.gen(function* () {
     return readPage(sequenceExclusive, normalizedLimit);
   };
 
+  const readThreadStream: OrchestrationEventStoreShape["readThreadStream"] = (
+    threadId,
+    streamVersionExclusive,
+    limit = DEFAULT_READ_FROM_SEQUENCE_LIMIT,
+  ) => {
+    const normalizedLimit = Math.max(0, Math.floor(limit));
+    if (normalizedLimit === 0) {
+      return Stream.empty;
+    }
+    const readPage = (
+      cursor: number,
+      remaining: number,
+    ): Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError> =>
+      Stream.fromEffect(
+        readThreadRowsFromStreamVersion({
+          threadId: ThreadId.make(threadId),
+          streamVersionExclusive: cursor,
+          limit: Math.min(remaining, READ_PAGE_SIZE),
+        }).pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "OrchestrationEventStore.readThreadStream:query",
+              "OrchestrationEventStore.readThreadStream:decodeRows",
+            ),
+          ),
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, (row) =>
+              decodeEvent(row).pipe(
+                Effect.mapError(
+                  toPersistenceDecodeError("OrchestrationEventStore.readThreadStream:rowToEvent"),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ).pipe(
+        Stream.flatMap((events) => {
+          if (events.length === 0) {
+            return Stream.empty;
+          }
+          const nextRemaining = remaining - events.length;
+          if (nextRemaining <= 0) {
+            return Stream.fromIterable(events);
+          }
+          const nextCursor = events[events.length - 1]?.streamVersion ?? cursor;
+          return Stream.concat(Stream.fromIterable(events), readPage(nextCursor, nextRemaining));
+        }),
+      );
+
+    return readPage(streamVersionExclusive, normalizedLimit);
+  };
+
+  const getLatestThreadStreamVersion: OrchestrationEventStoreShape["getLatestThreadStreamVersion"] =
+    (threadId) =>
+      getLatestThreadStreamVersionRow({ threadId: ThreadId.make(threadId) }).pipe(
+        Effect.map((row) => row.latestStreamVersion),
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "OrchestrationEventStore.getLatestThreadStreamVersion:query",
+            "OrchestrationEventStore.getLatestThreadStreamVersion:decodeRow",
+          ),
+        ),
+      );
+
   return {
     append,
     readFromSequence,
+    readThreadStream,
+    getLatestThreadStreamVersion,
     readAll: () => readFromSequence(0, Number.MAX_SAFE_INTEGER),
   } satisfies OrchestrationEventStoreShape;
 });

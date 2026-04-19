@@ -123,3 +123,50 @@ export const GoogleBootstrapResult = Schema.Struct({
   needsApproval: Schema.Boolean,
 });
 export type GoogleBootstrapResult = typeof GoogleBootstrapResult.Type;
+
+// ---------------------------------------------------------------------------
+// Public client config for Google sign-in (P1d wire shape)
+// ---------------------------------------------------------------------------
+
+// Read by client devices on boot to decide whether to surface the V3 sign-in
+// affordance and which OAuth client to authenticate against. The client_id is
+// the OAuth Client ID registered in the operator's Google Cloud Console
+// project. It is intentionally not a secret — public installed-app clients
+// authenticate with PKCE rather than a client secret. When `available` is
+// false, `clientId` is null and the sign-in UI surfaces a "not configured"
+// state instead of attempting the OAuth dance.
+export const GoogleClientPublicConfig = Schema.Struct({
+  available: Schema.Boolean,
+  clientId: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type GoogleClientPublicConfig = typeof GoogleClientPublicConfig.Type;
+
+// ---------------------------------------------------------------------------
+// Device management API (P3)
+// ---------------------------------------------------------------------------
+
+export const V3DeviceListResult = Schema.Struct({
+  currentDeviceId: DeviceId,
+  devices: Schema.Array(DeviceInfo),
+});
+export type V3DeviceListResult = typeof V3DeviceListResult.Type;
+
+export const V3ApproveDeviceInput = Schema.Struct({
+  deviceId: DeviceId,
+});
+export type V3ApproveDeviceInput = typeof V3ApproveDeviceInput.Type;
+
+export const V3ApproveDeviceResult = Schema.Struct({
+  approved: Schema.Boolean,
+});
+export type V3ApproveDeviceResult = typeof V3ApproveDeviceResult.Type;
+
+export const V3RemoveDeviceInput = Schema.Struct({
+  deviceId: DeviceId,
+});
+export type V3RemoveDeviceInput = typeof V3RemoveDeviceInput.Type;
+
+export const V3RemoveDeviceResult = Schema.Struct({
+  removed: Schema.Boolean,
+});
+export type V3RemoveDeviceResult = typeof V3RemoveDeviceResult.Type;

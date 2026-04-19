@@ -6,6 +6,13 @@ import { readEnvironmentConnection } from "./environments/runtime";
 const environmentApiOverridesForTests = new Map<EnvironmentId, EnvironmentApi>();
 
 export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
+  const dispatchCommand: EnvironmentApi["orchestration"]["dispatchCommand"] = (command) =>
+    command.type === "thread.turn.start"
+      ? rpcClient.mesh.sendPrompt({ command })
+      : command.type.startsWith("thread.")
+        ? rpcClient.mesh.publishEvent({ command })
+        : rpcClient.orchestration.dispatchCommand(command);
+
   return {
     terminal: {
       open: (input) => rpcClient.terminal.open(input as never),
@@ -37,7 +44,7 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       preparePullRequestThread: rpcClient.git.preparePullRequestThread,
     },
     orchestration: {
-      dispatchCommand: rpcClient.orchestration.dispatchCommand,
+      dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       subscribeShell: (callback, options) =>

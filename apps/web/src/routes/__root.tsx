@@ -35,6 +35,7 @@ import {
   useServerConfigUpdatedSubscription,
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
+import { useMeshSubscriptions } from "../rpc/meshSubscriptions";
 import { useStore } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
@@ -49,6 +50,8 @@ import {
   resolveInitialServerAuthGateState,
   updatePrimaryEnvironmentDescriptor,
 } from "../environments/primary";
+import { V3StartupSignInNudge } from "../v3/ui/StartupSignInNudge";
+import { V3DeviceApprovalToast } from "../v3/ui/DeviceApprovalToast";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -94,6 +97,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <AuthenticatedTracingBootstrap />
         <ServerStateBootstrap />
+        <MeshStateBootstrap />
         <EnvironmentConnectionManagerBootstrap />
         <EventRouter />
         <WebSocketConnectionCoordinator />
@@ -105,6 +109,8 @@ function RootRouteView() {
             </AppSidebarLayout>
           </CommandPalette>
         </WebSocketConnectionSurface>
+        <V3StartupSignInNudge />
+        <V3DeviceApprovalToast />
       </AnchoredToastProvider>
     </ToastProvider>
   );
@@ -184,6 +190,11 @@ function errorDetails(error: unknown): string {
 function ServerStateBootstrap() {
   useEffect(() => startServerStateSync(getPrimaryEnvironmentConnection().client.server), []);
 
+  return null;
+}
+
+function MeshStateBootstrap() {
+  useMeshSubscriptions();
   return null;
 }
 

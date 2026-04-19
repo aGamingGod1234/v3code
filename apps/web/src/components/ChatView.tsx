@@ -150,6 +150,7 @@ import {
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
+  deriveRemoteHostInputDisabledReason,
   hasServerAcknowledgedLocalDispatch,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
@@ -172,6 +173,7 @@ import {
   useServerConfig,
   useServerKeybindings,
 } from "~/rpc/serverState";
+import { useMeshDeviceSnapshot } from "~/rpc/meshState";
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
 import { RightPanelSheet } from "./RightPanelSheet";
@@ -657,6 +659,12 @@ export default function ChatView(props: ChatViewProps) {
         ? store.getDraftSession(draftId)
         : null,
   );
+  const meshDeviceSnapshot = useMeshDeviceSnapshot();
+  const currentDeviceId = meshDeviceSnapshot.currentDeviceId;
+  const deviceNameById = useMemo(
+    () => new Map(meshDeviceSnapshot.devices.map((device) => [device.id, device.name] as const)),
+    [meshDeviceSnapshot.devices],
+  );
   const promptRef = useRef("");
   const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
   const composerTerminalContextsRef = useRef<TerminalContextDraft[]>([]);
@@ -785,6 +793,15 @@ export default function ChatView(props: ChatViewProps) {
   );
   const isServerThread = routeKind === "server" && serverThread !== undefined;
   const activeThread = isServerThread ? serverThread : localDraftThread;
+  const remoteHostInputDisabledReason = useMemo(
+    () =>
+      deriveRemoteHostInputDisabledReason({
+        currentDeviceId,
+        hostDeviceId: activeThread?.hostDeviceId,
+        devices: meshDeviceSnapshot.devices,
+      }),
+    [activeThread?.hostDeviceId, currentDeviceId, meshDeviceSnapshot.devices],
+  );
   const runtimeMode = composerRuntimeMode ?? activeThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   const interactionMode =
     composerInteractionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE;
@@ -932,13 +949,20 @@ export default function ChatView(props: ChatViewProps) {
       );
       const storedDraftSession = getDraftSessionByLogicalProjectKey(logicalProjectKey);
       if (storedDraftSession) {
-        setDraftThreadContext(storedDraftSession.draftId, input);
+        const nextHostDeviceId = storedDraftSession.hostDeviceId ?? currentDeviceId ?? null;
+        setDraftThreadContext(storedDraftSession.draftId, {
+          ...input,
+          ...(storedDraftSession.hostDeviceId == null && currentDeviceId !== null
+            ? { hostDeviceId: nextHostDeviceId }
+            : {}),
+        });
         setLogicalProjectDraftThreadId(
           logicalProjectKey,
           activeProjectRef,
           storedDraftSession.draftId,
           {
             threadId: storedDraftSession.threadId,
+            hostDeviceId: nextHostDeviceId,
             ...input,
           },
         );
@@ -957,12 +981,19 @@ export default function ChatView(props: ChatViewProps) {
         activeDraftSession?.logicalProjectKey === logicalProjectKey &&
         draftId
       ) {
-        setDraftThreadContext(draftId, input);
+        const nextHostDeviceId = activeDraftSession.hostDeviceId ?? currentDeviceId ?? null;
+        setDraftThreadContext(draftId, {
+          ...input,
+          ...(activeDraftSession.hostDeviceId == null && currentDeviceId !== null
+            ? { hostDeviceId: nextHostDeviceId }
+            : {}),
+        });
         setLogicalProjectDraftThreadId(logicalProjectKey, activeProjectRef, draftId, {
           threadId: activeDraftSession.threadId,
           createdAt: activeDraftSession.createdAt,
           runtimeMode: activeDraftSession.runtimeMode,
           interactionMode: activeDraftSession.interactionMode,
+          hostDeviceId: nextHostDeviceId,
           ...input,
         });
         return activeDraftSession.threadId;
@@ -975,6 +1006,7 @@ export default function ChatView(props: ChatViewProps) {
         createdAt: new Date().toISOString(),
         runtimeMode: DEFAULT_RUNTIME_MODE,
         interactionMode: DEFAULT_INTERACTION_MODE,
+        hostDeviceId: currentDeviceId ?? null,
         ...input,
       });
       await navigate({
@@ -985,6 +1017,7 @@ export default function ChatView(props: ChatViewProps) {
     },
     [
       activeProject,
+      currentDeviceId,
       draftId,
       getDraftSession,
       getDraftSessionByLogicalProjectKey,
@@ -2361,6 +2394,7 @@ export default function ChatView(props: ChatViewProps) {
     e?.preventDefault();
     const api = readEnvironmentApi(environmentId);
     if (!api || !activeThread || isSendBusy || isConnecting || sendInFlightRef.current) return;
+    if (remoteHostInputDisabledReason) return;
     if (activePendingProgress) {
       onAdvanceActivePendingUserInput();
       return;
@@ -2838,7 +2872,8 @@ export default function ChatView(props: ChatViewProps) {
         !isServerThread ||
         isSendBusy ||
         isConnecting ||
-        sendInFlightRef.current
+        sendInFlightRef.current ||
+        remoteHostInputDisabledReason
       ) {
         return;
       }
@@ -2961,6 +2996,7 @@ export default function ChatView(props: ChatViewProps) {
       isServerThread,
       persistThreadSettingsForNextTurn,
       resetLocalDispatch,
+      remoteHostInputDisabledReason,
       runtimeMode,
       setComposerDraftInteractionMode,
       setThreadError,
@@ -3271,6 +3307,8 @@ export default function ChatView(props: ChatViewProps) {
               completionSummary={completionSummary}
               turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
               activeThreadEnvironmentId={activeThread.environmentId}
+              currentDeviceId={currentDeviceId}
+              deviceNameById={deviceNameById}
               routeThreadKey={routeThreadKey}
               onOpenTurnDiff={onOpenTurnDiff}
               revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
@@ -3317,6 +3355,7 @@ export default function ChatView(props: ChatViewProps) {
               isConnecting={isConnecting}
               isSendBusy={isSendBusy}
               isPreparingWorktree={isPreparingWorktree}
+              inputDisabledReason={remoteHostInputDisabledReason}
               activePendingApproval={activePendingApproval}
               pendingApprovals={pendingApprovals}
               pendingUserInputs={pendingUserInputs}

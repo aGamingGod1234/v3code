@@ -78,6 +78,7 @@ const makeCliTestServerConfig = (baseDir: string) =>
       logWebSocketEvents: false,
       googleClientId: undefined,
       authorizedEmails: [],
+      postgresUrl: undefined,
     } satisfies ServerConfigShape;
   });
 
