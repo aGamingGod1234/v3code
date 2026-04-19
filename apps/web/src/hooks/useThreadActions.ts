@@ -244,6 +244,55 @@ export function useThreadActions() {
     ],
   );
 
+  const forkThread = useCallback(
+    async (
+      target: ScopedThreadRef,
+      options: {
+        readonly title?: string;
+        readonly branch?: string | null;
+        readonly worktreePath?: string | null;
+      } = {},
+    ) => {
+      const api = readEnvironmentApi(target.environmentId);
+      if (!api) return null;
+      const resolved = resolveThreadTarget(target);
+      if (!resolved) return null;
+      const { thread } = resolved;
+
+      const targetThreadId = ThreadId.make(crypto.randomUUID());
+      const command = {
+        type: "chat.fork" as const,
+        commandId: newCommandId(),
+        sourceThreadId: thread.id,
+        targetThreadId,
+        ...(options.title !== undefined ? { targetTitle: options.title } : {}),
+        ...(options.branch !== undefined ? { targetBranch: options.branch } : {}),
+        ...(options.worktreePath !== undefined ? { targetWorktreePath: options.worktreePath } : {}),
+        createdAt: new Date().toISOString(),
+      };
+
+      try {
+        await api.orchestration.dispatchCommand(command);
+        const targetRef = scopeThreadRef(target.environmentId, targetThreadId);
+        await router.navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(targetRef),
+          replace: false,
+        });
+        return targetRef;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error forking chat.";
+        toastManager.add({
+          type: "error",
+          title: "Could not fork chat",
+          description: message,
+        });
+        return null;
+      }
+    },
+    [resolveThreadTarget, router],
+  );
+
   const confirmAndDeleteThread = useCallback(
     async (target: ScopedThreadRef) => {
       const api = readEnvironmentApi(target.environmentId);
@@ -275,5 +324,6 @@ export function useThreadActions() {
     unarchiveThread,
     deleteThread,
     confirmAndDeleteThread,
+    forkThread,
   };
 }

@@ -9,11 +9,44 @@
  *
  * @module OrchestrationEventStore
  */
-import { OrchestrationEvent } from "@v3tools/contracts";
+import {
+  OrchestrationEvent,
+  type CommandId,
+  type DeviceId,
+  type ThreadId,
+} from "@v3tools/contracts";
 import { Context } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { OrchestrationEventStoreError } from "../Errors.ts";
+
+/**
+ * Input for fork-copying a thread's event log into a new stream.
+ *
+ * Copies every `aggregate_kind='thread'` event from `sourceThreadId` to
+ * `targetThreadId`, rewriting `payload.threadId` and tagging
+ * `metadata.forkedFromChatId`. The copy preserves stream_version so the
+ * target stream has the same per-thread sequence as the source plus the
+ * appended `thread.forked` event at the next stream_version.
+ */
+export interface ForkThreadEventsInput {
+  readonly sourceThreadId: ThreadId;
+  readonly targetThreadId: ThreadId;
+  readonly newProjectId?: string | undefined;
+  readonly newTitle?: string | undefined;
+  readonly newBranch?: string | null | undefined;
+  readonly newWorktreePath?: string | null | undefined;
+  readonly newHostDeviceId?: DeviceId | null | undefined;
+  readonly forkOccurredAt: string;
+  readonly forkCommandId: CommandId;
+  readonly parentDeviceId: DeviceId | null;
+}
+
+export interface ForkThreadEventsResult {
+  readonly copiedEventCount: number;
+  readonly forkedEvent: OrchestrationEvent;
+  readonly highestSourceStreamVersion: number;
+}
 
 /**
  * OrchestrationEventStoreShape - Service API for orchestration event persistence.
@@ -67,6 +100,25 @@ export interface OrchestrationEventStoreShape {
    * @returns Stream containing all stored events.
    */
   readonly readAll: () => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
+
+  /**
+   * Fork a thread's event log into a new stream.
+   *
+   * Copies every event from the source thread to the target thread preserving
+   * `stream_version`, rewriting `payload.threadId` (and optionally projectId,
+   * title, branch, worktreePath, hostDeviceId on `thread.created`/`thread.meta-updated`),
+   * and tagging `metadata.forkedFromChatId` on every copied event. Then appends
+   * a `thread.forked` event to the new stream at the next stream_version.
+   *
+   * Idempotent via the supplied `forkCommandId` (callers should guard with
+   * `OrchestrationCommandReceiptRepository`).
+   *
+   * Must be called inside a SQL transaction so the copy and the trailing
+   * `thread.forked` append commit atomically.
+   */
+  readonly forkThreadEvents: (
+    input: ForkThreadEventsInput,
+  ) => Effect.Effect<ForkThreadEventsResult, OrchestrationEventStoreError>;
 }
 
 /**

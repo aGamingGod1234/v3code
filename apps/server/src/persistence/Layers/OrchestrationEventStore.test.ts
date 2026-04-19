@@ -1,4 +1,11 @@
-import { CommandId, EventId, ProjectId } from "@v3tools/contracts";
+import {
+  CommandId,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  EventId,
+  MessageId,
+  ProjectId,
+  ThreadId,
+} from "@v3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -114,6 +121,100 @@ layer("OrchestrationEventStore", (it) => {
           ),
         );
       }
+    }),
+  );
+
+  it.effect("forkThreadEvents copies the source stream and appends thread.forked", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const now = new Date().toISOString();
+      const projectId = ProjectId.make("project-fork");
+      const sourceThreadId = ThreadId.make("thread-fork-source");
+      const targetThreadId = ThreadId.make("thread-fork-target");
+
+      yield* eventStore.append({
+        type: "thread.created",
+        eventId: EventId.make("evt-fork-source-created"),
+        aggregateKind: "thread",
+        aggregateId: sourceThreadId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-fork-source-created"),
+        causationEventId: null,
+        correlationId: CommandId.make("cmd-fork-source-created"),
+        metadata: {},
+        payload: {
+          threadId: sourceThreadId,
+          projectId,
+          title: "Source thread",
+          modelSelection: { provider: "codex", model: "gpt-5-codex" },
+          runtimeMode: "approval-required",
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      yield* eventStore.append({
+        type: "thread.message-sent",
+        eventId: EventId.make("evt-fork-source-msg"),
+        aggregateKind: "thread",
+        aggregateId: sourceThreadId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-fork-source-msg"),
+        causationEventId: null,
+        correlationId: CommandId.make("cmd-fork-source-msg"),
+        metadata: {},
+        payload: {
+          threadId: sourceThreadId,
+          messageId: MessageId.make("msg-fork-source-1"),
+          role: "user",
+          text: "hello",
+          turnId: null,
+          streaming: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const result = yield* eventStore.forkThreadEvents({
+        sourceThreadId,
+        targetThreadId,
+        forkOccurredAt: now,
+        forkCommandId: CommandId.make("cmd-fork-roundtrip"),
+        parentDeviceId: null,
+        newTitle: "Forked thread",
+      });
+
+      assert.equal(result.copiedEventCount, 2);
+      assert.equal(result.highestSourceStreamVersion, 1);
+      assert.equal(result.forkedEvent.type, "thread.forked");
+      assert.equal(result.forkedEvent.streamVersion, 2);
+
+      // readThreadStream uses an EXCLUSIVE cursor, so passing 0 skips the
+      // event at stream_version 0. Verify the events we can see (versions 1
+      // and 2): the copied thread.message-sent and the trailing thread.forked.
+      const forkedStream = yield* Stream.runCollect(
+        eventStore.readThreadStream(targetThreadId, 0, 100),
+      ).pipe(Effect.map((chunk) => Array.from(chunk)));
+      assert.equal(forkedStream.length, 2);
+      assert.equal(forkedStream[0]?.type, "thread.message-sent");
+      assert.equal((forkedStream[0]?.payload as { threadId: string }).threadId, targetThreadId);
+      assert.equal(forkedStream[1]?.type, "thread.forked");
+      assert.equal(
+        (forkedStream[1]?.payload as { sourceThreadId: string }).sourceThreadId,
+        sourceThreadId,
+      );
+
+      // Source stream is untouched. readThreadStream with cursor 0 returns
+      // events at stream_version 1+, so just the user message survives the
+      // exclusive-cursor.
+      const sourceStream = yield* Stream.runCollect(
+        eventStore.readThreadStream(sourceThreadId, 0, 100),
+      ).pipe(Effect.map((chunk) => Array.from(chunk)));
+      assert.equal(sourceStream.length, 1);
+      assert.equal(sourceStream[0]?.type, "thread.message-sent");
     }),
   );
 });

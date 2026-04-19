@@ -17,6 +17,7 @@ import {
   ThreadArchivedPayload,
   ThreadCreatedPayload,
   ThreadDeletedPayload,
+  ThreadForkedPayload,
   ThreadInteractionModeSetPayload,
   ThreadMetaUpdatedPayload,
   ThreadProposedPlanUpsertedPayload,
@@ -653,6 +654,20 @@ export function projectEvent(
               updatedAt: event.occurredAt,
             }),
           };
+        }),
+      );
+
+    case "thread.forked":
+      return decodeForEvent(ThreadForkedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((_payload) => {
+          // The in-memory read model already contains the new forked thread —
+          // every copied event from the source stream is replayed through this
+          // projector before `thread.forked` arrives, so the target thread's
+          // base record is already in `nextBase.threads`. The fork lineage
+          // metadata (parentChatId, parentDeviceId, forkedFromStreamVersion)
+          // lives on the projection_threads row, not the in-memory model, so
+          // there's nothing more to update here.
+          return nextBase;
         }),
       );
 
