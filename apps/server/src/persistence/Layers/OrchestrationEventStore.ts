@@ -22,6 +22,8 @@ import {
 } from "../Errors.ts";
 import {
   OrchestrationEventStore,
+  type ForkThreadEventsInput,
+  type ForkThreadEventsResult,
   type OrchestrationEventStoreShape,
 } from "../Services/OrchestrationEventStore.ts";
 
@@ -104,6 +106,137 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
       ? toPersistenceDecodeError(decodeOperation)(cause)
       : toPersistenceSqlError(sqlOperation)(cause);
 }
+
+interface ForkRewriteOverrides {
+  readonly projectId?: string | undefined;
+  readonly title?: string | undefined;
+  readonly branch?: string | null | undefined;
+  readonly worktreePath?: string | null | undefined;
+  readonly hostDeviceId?: string | null | undefined;
+}
+
+interface ForkRewrittenRow {
+  readonly eventId: string;
+  readonly streamVersion: number;
+  readonly type: typeof OrchestrationEventType.Type;
+  readonly occurredAt: typeof IsoDateTime.Type;
+  readonly commandId: typeof CommandId.Type | null;
+  readonly causationEventId: typeof EventId.Type | null;
+  readonly correlationId: typeof CommandId.Type | null;
+  readonly actorKind: typeof OrchestrationActorKind.Type;
+  readonly payloadJson: unknown;
+  readonly metadataJson: typeof OrchestrationEventMetadata.Type;
+}
+
+function rewritePayloadForFork({
+  payload,
+  eventType,
+  targetThreadId,
+  overrides,
+}: {
+  readonly payload: unknown;
+  readonly eventType: typeof OrchestrationEventType.Type;
+  readonly targetThreadId: string;
+  readonly overrides: ForkRewriteOverrides;
+}): unknown {
+  if (typeof payload !== "object" || payload === null) {
+    return payload;
+  }
+
+  const next: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+  if ("threadId" in next) {
+    next.threadId = targetThreadId;
+  }
+
+  if (eventType === "thread.created") {
+    if (overrides.projectId !== undefined) {
+      next.projectId = overrides.projectId;
+    }
+    if (overrides.title !== undefined) {
+      next.title = overrides.title;
+    }
+    if (overrides.branch !== undefined) {
+      next.branch = overrides.branch;
+    }
+    if (overrides.worktreePath !== undefined) {
+      next.worktreePath = overrides.worktreePath;
+    }
+    if (overrides.hostDeviceId !== undefined) {
+      next.hostDeviceId = overrides.hostDeviceId;
+    }
+  }
+
+  if (eventType === "thread.meta-updated") {
+    if (overrides.title !== undefined) {
+      next.title = overrides.title;
+    }
+    if (overrides.branch !== undefined) {
+      next.branch = overrides.branch;
+    }
+    if (overrides.worktreePath !== undefined) {
+      next.worktreePath = overrides.worktreePath;
+    }
+    if (overrides.hostDeviceId !== undefined) {
+      next.hostDeviceId = overrides.hostDeviceId;
+    }
+  }
+
+  return next;
+}
+
+function rewriteEventForFork({
+  event,
+  targetThreadId,
+  sourceThreadId,
+  forkCommandId,
+  overrides,
+}: {
+  readonly event: OrchestrationEvent;
+  readonly targetThreadId: string;
+  readonly sourceThreadId: string;
+  readonly forkCommandId: typeof CommandId.Type;
+  readonly overrides: ForkRewriteOverrides;
+}): ForkRewrittenRow {
+  const rewrittenPayload = rewritePayloadForFork({
+    payload: event.payload,
+    eventType: event.type,
+    targetThreadId,
+    overrides,
+  });
+
+  const baseMetadata = (event.metadata ?? {}) as Record<string, unknown>;
+  const rewrittenMetadata = {
+    ...baseMetadata,
+    forkedFromChatId: sourceThreadId,
+  } as typeof OrchestrationEventMetadata.Type;
+
+  return {
+    eventId: crypto.randomUUID(),
+    streamVersion: event.streamVersion ?? 0,
+    type: event.type,
+    occurredAt: event.occurredAt,
+    commandId: forkCommandId,
+    causationEventId: event.eventId,
+    correlationId: forkCommandId,
+    actorKind: inferActorKind(event),
+    payloadJson: rewrittenPayload,
+    metadataJson: rewrittenMetadata,
+  } satisfies ForkRewrittenRow;
+}
+
+const ForkRewrittenRowRequestSchema = Schema.Struct({
+  eventId: EventId,
+  streamId: ThreadId,
+  streamVersion: NonNegativeInt,
+  type: OrchestrationEventType,
+  occurredAt: IsoDateTime,
+  commandId: Schema.NullOr(CommandId),
+  causationEventId: Schema.NullOr(EventId),
+  correlationId: Schema.NullOr(CommandId),
+  actorKind: OrchestrationActorKind,
+  payloadJson: UnknownFromJsonString,
+  metadataJson: EventMetadataFromJsonString,
+});
 
 const makeEventStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -375,12 +508,215 @@ const makeEventStore = Effect.gen(function* () {
         ),
       );
 
+  const readThreadAllRowsForFork = SqlSchema.findAll({
+    Request: Schema.Struct({ threadId: ThreadId }),
+    Result: OrchestrationEventPersistedRowSchema,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          sequence,
+          stream_version AS "streamVersion",
+          event_id AS "eventId",
+          event_type AS "type",
+          aggregate_kind AS "aggregateKind",
+          stream_id AS "aggregateId",
+          occurred_at AS "occurredAt",
+          command_id AS "commandId",
+          causation_event_id AS "causationEventId",
+          correlation_id AS "correlationId",
+          payload_json AS "payload",
+          metadata_json AS "metadata"
+        FROM orchestration_events
+        WHERE aggregate_kind = 'thread'
+          AND stream_id = ${threadId}
+        ORDER BY stream_version ASC
+      `,
+  });
+
+  const insertForkRewrittenRow = SqlSchema.void({
+    Request: ForkRewrittenRowRequestSchema,
+    execute: (request) =>
+      sql`
+        INSERT INTO orchestration_events (
+          event_id,
+          aggregate_kind,
+          stream_id,
+          stream_version,
+          event_type,
+          occurred_at,
+          command_id,
+          causation_event_id,
+          correlation_id,
+          actor_kind,
+          payload_json,
+          metadata_json
+        )
+        VALUES (
+          ${request.eventId},
+          ${"thread"},
+          ${request.streamId},
+          ${request.streamVersion},
+          ${request.type},
+          ${request.occurredAt},
+          ${request.commandId},
+          ${request.causationEventId},
+          ${request.correlationId},
+          ${request.actorKind},
+          ${request.payloadJson},
+          ${request.metadataJson}
+        )
+      `,
+  });
+
+  const insertForkTrailingEventRow = SqlSchema.findOne({
+    Request: ForkRewrittenRowRequestSchema,
+    Result: OrchestrationEventPersistedRowSchema,
+    execute: (request) =>
+      sql`
+        INSERT INTO orchestration_events (
+          event_id,
+          aggregate_kind,
+          stream_id,
+          stream_version,
+          event_type,
+          occurred_at,
+          command_id,
+          causation_event_id,
+          correlation_id,
+          actor_kind,
+          payload_json,
+          metadata_json
+        )
+        VALUES (
+          ${request.eventId},
+          ${"thread"},
+          ${request.streamId},
+          ${request.streamVersion},
+          ${request.type},
+          ${request.occurredAt},
+          ${request.commandId},
+          ${request.causationEventId},
+          ${request.correlationId},
+          ${request.actorKind},
+          ${request.payloadJson},
+          ${request.metadataJson}
+        )
+        RETURNING
+          sequence,
+          stream_version AS "streamVersion",
+          event_id AS "eventId",
+          event_type AS "type",
+          aggregate_kind AS "aggregateKind",
+          stream_id AS "aggregateId",
+          occurred_at AS "occurredAt",
+          command_id AS "commandId",
+          causation_event_id AS "causationEventId",
+          correlation_id AS "correlationId",
+          payload_json AS "payload",
+          metadata_json AS "metadata"
+      `,
+  });
+
+  const forkThreadEvents: OrchestrationEventStoreShape["forkThreadEvents"] = (
+    input: ForkThreadEventsInput,
+  ) =>
+    Effect.gen(function* () {
+      const targetThreadId = input.targetThreadId;
+      const sourceThreadId = input.sourceThreadId;
+      const overrides: ForkRewriteOverrides = {
+        projectId: input.newProjectId,
+        title: input.newTitle,
+        branch: input.newBranch,
+        worktreePath: input.newWorktreePath,
+        hostDeviceId: input.newHostDeviceId ?? undefined,
+      };
+
+      const sourceRows = yield* readThreadAllRowsForFork({
+        threadId: ThreadId.make(sourceThreadId),
+      });
+      const sourceEventsChunk = yield* Effect.forEach(sourceRows, (row) => decodeEvent(row));
+
+      let highestSourceStreamVersion = 0;
+      for (const event of sourceEventsChunk) {
+        if (event.streamVersion !== undefined && event.streamVersion > highestSourceStreamVersion) {
+          highestSourceStreamVersion = event.streamVersion;
+        }
+      }
+
+      for (const sourceEvent of sourceEventsChunk) {
+        const rewritten = rewriteEventForFork({
+          event: sourceEvent,
+          targetThreadId,
+          sourceThreadId,
+          forkCommandId: input.forkCommandId,
+          overrides,
+        });
+        yield* insertForkRewrittenRow({
+          eventId: rewritten.eventId as typeof EventId.Type,
+          streamId: ThreadId.make(targetThreadId),
+          streamVersion: rewritten.streamVersion,
+          type: rewritten.type,
+          occurredAt: rewritten.occurredAt,
+          commandId: rewritten.commandId,
+          causationEventId: rewritten.causationEventId,
+          correlationId: rewritten.correlationId,
+          actorKind: rewritten.actorKind,
+          payloadJson: rewritten.payloadJson,
+          metadataJson: rewritten.metadataJson,
+        });
+      }
+
+      const forkedEventId = crypto.randomUUID() as typeof EventId.Type;
+      const forkedStreamVersion = highestSourceStreamVersion + 1;
+      const forkedRow = yield* insertForkTrailingEventRow({
+        eventId: forkedEventId,
+        streamId: ThreadId.make(targetThreadId),
+        streamVersion: forkedStreamVersion,
+        type: "thread.forked",
+        occurredAt: input.forkOccurredAt,
+        commandId: input.forkCommandId,
+        causationEventId: null,
+        correlationId: input.forkCommandId,
+        actorKind: "client",
+        payloadJson: {
+          threadId: targetThreadId,
+          sourceThreadId,
+          parentDeviceId: input.parentDeviceId,
+          forkedFromStreamVersion: highestSourceStreamVersion,
+          forkedAt: input.forkOccurredAt,
+        },
+        metadataJson: {
+          ingestedAt: input.forkOccurredAt,
+        },
+      });
+
+      const forkedEvent = yield* decodeEvent(forkedRow).pipe(
+        Effect.mapError(
+          toPersistenceDecodeError("OrchestrationEventStore.forkThreadEvents:rowToEvent"),
+        ),
+      );
+
+      return {
+        copiedEventCount: sourceEventsChunk.length,
+        forkedEvent,
+        highestSourceStreamVersion,
+      } satisfies ForkThreadEventsResult;
+    }).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "OrchestrationEventStore.forkThreadEvents:transaction",
+          "OrchestrationEventStore.forkThreadEvents:decodeRow",
+        ),
+      ),
+    );
+
   return {
     append,
     readFromSequence,
     readThreadStream,
     getLatestThreadStreamVersion,
     readAll: () => readFromSequence(0, Number.MAX_SAFE_INTEGER),
+    forkThreadEvents,
   } satisfies OrchestrationEventStoreShape;
 });
 

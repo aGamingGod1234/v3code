@@ -5,10 +5,13 @@ import { Effect, Layer, Schema, Struct } from "effect";
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
   DeleteProjectionThreadInput,
+  GetForkLineageInput,
   GetProjectionThreadInput,
   ListProjectionThreadsByProjectInput,
   ProjectionThread,
+  ProjectionThreadForkLineage,
   ProjectionThreadRepository,
+  SetForkLineageInput,
   type ProjectionThreadRepositoryShape,
 } from "../Services/ProjectionThreads.ts";
 import { ModelSelection } from "@v3tools/contracts";
@@ -19,6 +22,8 @@ const ProjectionThreadDbRow = ProjectionThread.mapFields(
   }),
 );
 type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
+
+const ForkLineageDbRow = ProjectionThreadForkLineage;
 
 const makeProjectionThreadRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -162,6 +167,38 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       `,
   });
 
+  const setForkLineageRow = SqlSchema.void({
+    Request: SetForkLineageInput,
+    execute: (input) =>
+      sql`
+        UPDATE projection_threads
+        SET
+          parent_chat_id = ${input.forkLineage?.parentChatId ?? null},
+          parent_device_id = ${input.forkLineage?.parentDeviceId ?? null},
+          forked_from_stream_version = ${input.forkLineage?.forkedFromStreamVersion ?? null},
+          forked_at = ${input.forkLineage?.forkedAt ?? null}
+        WHERE thread_id = ${input.threadId}
+      `,
+  });
+
+  const getForkLineageRow = SqlSchema.findOneOption({
+    Request: GetForkLineageInput,
+    Result: ForkLineageDbRow,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          parent_chat_id AS "parentChatId",
+          parent_device_id AS "parentDeviceId",
+          forked_from_stream_version AS "forkedFromStreamVersion",
+          forked_at AS "forkedAt"
+        FROM projection_threads
+        WHERE thread_id = ${threadId}
+          AND parent_chat_id IS NOT NULL
+          AND forked_at IS NOT NULL
+          AND forked_from_stream_version IS NOT NULL
+      `,
+  });
+
   const upsert: ProjectionThreadRepositoryShape["upsert"] = (row) =>
     upsertProjectionThreadRow(row).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.upsert:query")),
@@ -182,11 +219,23 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.deleteById:query")),
     );
 
+  const setForkLineage: ProjectionThreadRepositoryShape["setForkLineage"] = (input) =>
+    setForkLineageRow(input).pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.setForkLineage:query")),
+    );
+
+  const getForkLineage: ProjectionThreadRepositoryShape["getForkLineage"] = (input) =>
+    getForkLineageRow(input).pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.getForkLineage:query")),
+    );
+
   return {
     upsert,
     getById,
     listByProjectId,
     deleteById,
+    setForkLineage,
+    getForkLineage,
   } satisfies ProjectionThreadRepositoryShape;
 });
 

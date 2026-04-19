@@ -1,7 +1,9 @@
 import { Schema } from "effect";
 
-import { NonNegativeInt, ThreadId, TrimmedNonEmptyString } from "../baseSchemas.ts";
+import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "../baseSchemas.ts";
+import { DeviceId } from "../identity.ts";
 import {
+  ChatForkCommand,
   ClientOrchestrationCommand,
   ClientThreadTurnStartCommand,
   DispatchResult,
@@ -14,6 +16,7 @@ export const MESH_WS_METHODS = {
   subscribeChat: "mesh.subscribeChat",
   publishEvent: "mesh.publishEvent",
   sendPrompt: "mesh.sendPrompt",
+  forkChat: "mesh.forkChat",
   subscribePresence: "mesh.subscribePresence",
   subscribePrompts: "mesh.subscribePrompts",
 } as const;
@@ -52,6 +55,20 @@ export const MeshSendPromptInput = Schema.Struct({
   command: ClientThreadTurnStartCommand,
 });
 export type MeshSendPromptInput = typeof MeshSendPromptInput.Type;
+
+export const MeshForkChatInput = Schema.Struct({
+  command: ChatForkCommand,
+});
+export type MeshForkChatInput = typeof MeshForkChatInput.Type;
+
+export const MeshForkChatResult = Schema.Struct({
+  targetThreadId: ThreadId,
+  copiedEventCount: NonNegativeInt,
+  forkedFromStreamVersion: NonNegativeInt,
+  hostedOnDeviceId: Schema.NullOr(DeviceId),
+  targetProjectId: ProjectId,
+});
+export type MeshForkChatResult = typeof MeshForkChatResult.Type;
 
 export const MeshPresenceSnapshot = Schema.Struct({
   devices: Schema.Array(PresenceUpdatePayload),
@@ -93,6 +110,10 @@ export const MeshRpcSchemas = {
   sendPrompt: {
     input: MeshSendPromptInput,
     output: DispatchResult,
+  },
+  forkChat: {
+    input: MeshForkChatInput,
+    output: MeshForkChatResult,
   },
   subscribePresence: {
     input: Schema.Struct({}),

@@ -22,6 +22,14 @@ import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
 
+export const ProjectionThreadForkLineage = Schema.Struct({
+  parentChatId: ThreadId,
+  parentDeviceId: Schema.NullOr(DeviceId),
+  forkedFromStreamVersion: NonNegativeInt,
+  forkedAt: IsoDateTime,
+});
+export type ProjectionThreadForkLineage = typeof ProjectionThreadForkLineage.Type;
+
 export const ProjectionThread = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
@@ -44,6 +52,17 @@ export const ProjectionThread = Schema.Struct({
   deletedAt: Schema.NullOr(IsoDateTime),
 });
 export type ProjectionThread = typeof ProjectionThread.Type;
+
+export const SetForkLineageInput = Schema.Struct({
+  threadId: ThreadId,
+  forkLineage: Schema.NullOr(ProjectionThreadForkLineage),
+});
+export type SetForkLineageInput = typeof SetForkLineageInput.Type;
+
+export const GetForkLineageInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type GetForkLineageInput = typeof GetForkLineageInput.Type;
 
 export const GetProjectionThreadInput = Schema.Struct({
   threadId: ThreadId,
@@ -93,6 +112,23 @@ export interface ProjectionThreadRepositoryShape {
   readonly deleteById: (
     input: DeleteProjectionThreadInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /**
+   * Persist (or clear) the fork lineage columns for a projected thread.
+   *
+   * Used by the `thread.forked` projector to tag a forked target thread with
+   * its parent chat/device + the source stream version.
+   */
+  readonly setForkLineage: (
+    input: SetForkLineageInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /**
+   * Read the fork lineage for a projected thread, if any.
+   */
+  readonly getForkLineage: (
+    input: GetForkLineageInput,
+  ) => Effect.Effect<Option.Option<ProjectionThreadForkLineage>, ProjectionRepositoryError>;
 }
 
 /**
