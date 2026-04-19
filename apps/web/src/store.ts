@@ -171,6 +171,7 @@ function mapMessage(environmentId: EnvironmentId, message: OrchestrationMessage)
     id: message.id,
     role: message.role,
     text: message.text,
+    ...(message.sourceDeviceId !== undefined ? { sourceDeviceId: message.sourceDeviceId } : {}),
     turnId: message.turnId,
     createdAt: message.createdAt,
     streaming: message.streaming,
@@ -231,6 +232,7 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     codexThreadId: null,
     projectId: thread.projectId,
     title: thread.title,
+    hostDeviceId: thread.hostDeviceId ?? null,
     modelSelection: normalizeModelSelection(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
@@ -265,6 +267,7 @@ function mapThreadShell(
     codexThreadId: null,
     projectId: thread.projectId,
     title: thread.title,
+    hostDeviceId: thread.hostDeviceId ?? null,
     modelSelection: normalizeModelSelection(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
@@ -285,6 +288,7 @@ function mapThreadShell(
     environmentId,
     projectId: thread.projectId,
     title: thread.title,
+    hostDeviceId: thread.hostDeviceId ?? null,
     interactionMode: thread.interactionMode,
     session,
     createdAt: thread.createdAt,
@@ -313,6 +317,7 @@ function toThreadShell(thread: Thread): ThreadShell {
     codexThreadId: thread.codexThreadId,
     projectId: thread.projectId,
     title: thread.title,
+    hostDeviceId: thread.hostDeviceId,
     modelSelection: thread.modelSelection,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
@@ -386,6 +391,7 @@ function sidebarThreadSummariesEqual(
     left.id === right.id &&
     left.projectId === right.projectId &&
     left.title === right.title &&
+    left.hostDeviceId === right.hostDeviceId &&
     left.interactionMode === right.interactionMode &&
     threadSessionsEqual(left.session, right.session) &&
     left.createdAt === right.createdAt &&
@@ -409,6 +415,7 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
     left.codexThreadId === right.codexThreadId &&
     left.projectId === right.projectId &&
     left.title === right.title &&
+    left.hostDeviceId === right.hostDeviceId &&
     left.modelSelection === right.modelSelection &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&
@@ -1248,6 +1255,7 @@ function applyEnvironmentOrchestrationEvent(
           id: event.payload.threadId,
           projectId: event.payload.projectId,
           title: event.payload.title,
+          hostDeviceId: event.payload.hostDeviceId ?? null,
           modelSelection: event.payload.modelSelection,
           runtimeMode: event.payload.runtimeMode,
           interactionMode: event.payload.interactionMode,
@@ -1290,6 +1298,9 @@ function applyEnvironmentOrchestrationEvent(
       return updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
         ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+        ...(event.payload.hostDeviceId !== undefined
+          ? { hostDeviceId: event.payload.hostDeviceId }
+          : {}),
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSelection(event.payload.modelSelection) }
           : {}),
@@ -1360,6 +1371,9 @@ function applyEnvironmentOrchestrationEvent(
           ...(event.payload.attachments !== undefined
             ? { attachments: event.payload.attachments }
             : {}),
+          ...(event.payload.sourceDeviceId !== undefined
+            ? { sourceDeviceId: event.payload.sourceDeviceId }
+            : {}),
           turnId: event.payload.turnId,
           streaming: event.payload.streaming,
           createdAt: event.payload.createdAt,
@@ -1388,6 +1402,9 @@ function applyEnvironmentOrchestrationEvent(
                         : {}),
                     ...(message.attachments !== undefined
                       ? { attachments: message.attachments }
+                      : {}),
+                    ...(message.sourceDeviceId !== undefined
+                      ? { sourceDeviceId: message.sourceDeviceId }
                       : {}),
                   },
             )

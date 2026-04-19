@@ -6,6 +6,7 @@ import {
 } from "@v3tools/client-runtime";
 import * as Schema from "effect/Schema";
 import {
+  DeviceId,
   EnvironmentId,
   ProjectId,
   ThreadId,
@@ -494,6 +495,7 @@ describe("composerDraftStore project draft thread mapping", () => {
   const sharedDraftId = DraftId.make("draft-shared");
   const localDraftId = DraftId.make("draft-local");
   const remoteDraftId = DraftId.make("draft-remote");
+  const hostDeviceId = DeviceId.make("device-host");
 
   beforeEach(() => {
     resetComposerDraftStore();
@@ -528,10 +530,44 @@ describe("composerDraftStore project draft thread mapping", () => {
       logicalProjectKey: scopedProjectKey(projectRef),
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
+      hostDeviceId: null,
       envMode: "worktree",
       runtimeMode: "full-access",
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("stores host device attribution on draft thread creation", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      hostDeviceId,
+    });
+
+    expect(store.getDraftThread(draftId)).toMatchObject({
+      threadId,
+      hostDeviceId,
+    });
+  });
+
+  it("preserves host device attribution across context updates", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      hostDeviceId,
+    });
+
+    store.setDraftThreadContext(draftId, {
+      branch: "feature/preserved-host",
+    });
+
+    expect(store.getDraftThread(draftId)).toMatchObject({
+      threadId,
+      branch: "feature/preserved-host",
+      hostDeviceId,
     });
   });
 

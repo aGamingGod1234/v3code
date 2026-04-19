@@ -35,6 +35,7 @@ import {
   useServerConfigUpdatedSubscription,
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
+import { useMeshSubscriptions } from "../rpc/meshSubscriptions";
 import { useStore } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
@@ -49,8 +50,6 @@ import {
   resolveInitialServerAuthGateState,
   updatePrimaryEnvironmentDescriptor,
 } from "../environments/primary";
-// V3 Phase 1d — always-visible Google sign-in chrome (per Lucas Q1d-1).
-import { V3SignInButton } from "../v3/ui/SignInButton";
 import { V3StartupSignInNudge } from "../v3/ui/StartupSignInNudge";
 import { V3DeviceApprovalToast } from "../v3/ui/DeviceApprovalToast";
 
@@ -98,6 +97,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <AuthenticatedTracingBootstrap />
         <ServerStateBootstrap />
+        <MeshStateBootstrap />
         <EnvironmentConnectionManagerBootstrap />
         <EventRouter />
         <WebSocketConnectionCoordinator />
@@ -109,23 +109,10 @@ function RootRouteView() {
             </AppSidebarLayout>
           </CommandPalette>
         </WebSocketConnectionSurface>
-        <V3SignInOverlay />
         <V3StartupSignInNudge />
         <V3DeviceApprovalToast />
       </AnchoredToastProvider>
     </ToastProvider>
-  );
-}
-
-// V3 Phase 1d — pinned to the top-right corner of the viewport so the
-// sign-in affordance is always available without disturbing the chat
-// layout. P3 (sidebar rewrite) replaces this overlay with a proper
-// account chip in the new sidebar's signed-in bar.
-function V3SignInOverlay() {
-  return (
-    <div className="pointer-events-none fixed top-2 right-2 z-50">
-      <V3SignInButton />
-    </div>
   );
 }
 
@@ -203,6 +190,11 @@ function errorDetails(error: unknown): string {
 function ServerStateBootstrap() {
   useEffect(() => startServerStateSync(getPrimaryEnvironmentConnection().client.server), []);
 
+  return null;
+}
+
+function MeshStateBootstrap() {
+  useMeshSubscriptions();
   return null;
 }
 

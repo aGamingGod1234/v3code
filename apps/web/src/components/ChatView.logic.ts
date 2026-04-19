@@ -1,4 +1,5 @@
 import {
+  type DeviceId,
   type EnvironmentId,
   ProjectId,
   type ModelSelection,
@@ -35,6 +36,7 @@ export function buildLocalDraftThread(
     codexThreadId: null,
     projectId: draftThread.projectId,
     title: "New thread",
+    hostDeviceId: null,
     modelSelection: fallbackModelSelection,
     runtimeMode: draftThread.runtimeMode,
     interactionMode: draftThread.interactionMode,
@@ -200,6 +202,32 @@ export function deriveComposerSendState(options: {
     hasSendableContent:
       trimmedPrompt.length > 0 || options.imageCount > 0 || sendableTerminalContexts.length > 0,
   };
+}
+
+export function deriveRemoteHostInputDisabledReason(input: {
+  currentDeviceId: DeviceId | null;
+  hostDeviceId: DeviceId | null | undefined;
+  devices: ReadonlyArray<{
+    id: DeviceId;
+    name: string;
+    online: boolean;
+  }>;
+}): string | null {
+  if (
+    input.currentDeviceId === null ||
+    input.hostDeviceId === null ||
+    input.hostDeviceId === undefined ||
+    input.hostDeviceId === input.currentDeviceId
+  ) {
+    return null;
+  }
+
+  const hostDevice = input.devices.find((device) => device.id === input.hostDeviceId);
+  if (!hostDevice || hostDevice.online) {
+    return null;
+  }
+
+  return `${hostDevice.name} is offline. Reconnect that device to send prompts to this thread.`;
 }
 
 export function buildExpiredTerminalContextToastCopy(

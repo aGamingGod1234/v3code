@@ -1,16 +1,11 @@
 // V3 Google sign-in button.
 //
-// Lucas's P1d Q1d-1 answer: always-visible in the top-right corner; nudge
-// the user toward sign-in for cross-device sync, but not aggressively. So
-// this button is mounted in the root layout and shows one of three
-// states:
+// Sidebar-mounted V3 sign-in affordance. P3 moves the control into the
+// persistent sidebar/account surfaces while keeping the same three states:
 //   - "signed in" — chip with the user's email + a quiet sign-out
 //   - "configured + signed out" — primary "Sign in with Google" affordance
 //   - "not configured" — disabled affordance with a tooltip explaining
 //     the operator hasn't set V3CODE_GOOGLE_CLIENT_ID
-//
-// The full visual treatment lands in P3 (sidebar rewrite). This is the
-// minimum surface that unblocks the auth flow.
 
 import { useEffect, useState } from "react";
 import { ChromeIcon, LogOutIcon } from "lucide-react";

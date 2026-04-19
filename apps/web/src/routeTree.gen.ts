@@ -15,6 +15,7 @@ import { Route as PairRouteImport } from './routes/pair'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
+import { Route as SettingsDevicesRouteImport } from './routes/settings.devices'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
@@ -49,6 +50,11 @@ const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
   path: '/general',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsDevicesRoute = SettingsDevicesRouteImport.update({
+  id: '/devices',
+  path: '/devices',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
   id: '/connections',
   path: '/connections',
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
+  '/settings/devices': typeof SettingsDevicesRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
+  '/settings/devices': typeof SettingsDevicesRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
+  '/settings/devices': typeof SettingsDevicesRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/settings/archived'
     | '/settings/connections'
+    | '/settings/devices'
     | '/settings/general'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/settings/archived'
     | '/settings/connections'
+    | '/settings/devices'
     | '/settings/general'
     | '/'
     | '/$environmentId/$threadId'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/settings/archived'
     | '/settings/connections'
+    | '/settings/devices'
     | '/settings/general'
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
@@ -194,6 +206,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsGeneralRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/devices': {
+      id: '/settings/devices'
+      path: '/devices'
+      fullPath: '/settings/devices'
+      preLoaderRoute: typeof SettingsDevicesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/connections': {
       id: '/settings/connections'
       path: '/connections'
@@ -242,12 +261,14 @@ const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 interface SettingsRouteChildren {
   SettingsArchivedRoute: typeof SettingsArchivedRoute
   SettingsConnectionsRoute: typeof SettingsConnectionsRoute
+  SettingsDevicesRoute: typeof SettingsDevicesRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsArchivedRoute: SettingsArchivedRoute,
   SettingsConnectionsRoute: SettingsConnectionsRoute,
+  SettingsDevicesRoute: SettingsDevicesRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,
 }
 

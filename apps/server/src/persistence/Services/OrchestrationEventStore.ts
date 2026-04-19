@@ -46,6 +46,22 @@ export interface OrchestrationEventStoreShape {
   ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
 
   /**
+   * Replay events for a single thread after the provided per-thread stream version.
+   */
+  readonly readThreadStream: (
+    threadId: string,
+    streamVersionExclusive: number,
+    limit?: number,
+  ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
+
+  /**
+   * Return the latest persisted stream version for a thread.
+   */
+  readonly getLatestThreadStreamVersion: (
+    threadId: string,
+  ) => Effect.Effect<number, OrchestrationEventStoreError>;
+
+  /**
    * Read all events from the beginning of the stream.
    *
    * @returns Stream containing all stored events.

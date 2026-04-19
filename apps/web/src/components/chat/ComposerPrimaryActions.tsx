@@ -21,6 +21,7 @@ interface ComposerPrimaryActionsProps {
   isSendBusy: boolean;
   isConnecting: boolean;
   isPreparingWorktree: boolean;
+  inputDisabledReason: string | null;
   hasSendableContent: boolean;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
@@ -54,6 +55,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   isSendBusy,
   isConnecting,
   isPreparingWorktree,
+  inputDisabledReason,
   hasSendableContent,
   onPreviousPendingQuestion,
   onInterrupt,
@@ -69,7 +71,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
               variant="outline"
               className="rounded-full"
               onClick={onPreviousPendingQuestion}
-              disabled={pendingAction.isResponding}
+              disabled={pendingAction.isResponding || inputDisabledReason !== null}
               aria-label="Previous question"
             >
               <ChevronLeftIcon className="size-3.5" />
@@ -80,7 +82,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
               variant="outline"
               className="rounded-full"
               onClick={onPreviousPendingQuestion}
-              disabled={pendingAction.isResponding}
+              disabled={pendingAction.isResponding || inputDisabledReason !== null}
             >
               Previous
             </Button>
@@ -91,6 +93,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           size="sm"
           className={cn("rounded-full", compact ? "px-3" : "px-4")}
           disabled={
+            inputDisabledReason !== null ||
             pendingAction.isResponding ||
             (pendingAction.isLastQuestion ? !pendingAction.isComplete : !pendingAction.canAdvance)
           }
@@ -128,7 +131,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           type="submit"
           size="sm"
           className={cn("rounded-full", compact ? "h-9 px-3 sm:h-8" : "h-9 px-4 sm:h-8")}
-          disabled={isSendBusy || isConnecting}
+          disabled={isSendBusy || isConnecting || inputDisabledReason !== null}
         >
           {isConnecting || isSendBusy ? "Sending..." : "Refine"}
         </Button>
@@ -141,7 +144,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           type="submit"
           size="sm"
           className="h-9 rounded-l-full rounded-r-none px-4 sm:h-8"
-          disabled={isSendBusy || isConnecting}
+          disabled={isSendBusy || isConnecting || inputDisabledReason !== null}
         >
           {isConnecting || isSendBusy ? "Sending..." : "Implement"}
         </Button>
@@ -153,7 +156,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
                 variant="default"
                 className="h-9 rounded-l-none rounded-r-full border-l-white/12 px-2 sm:h-8"
                 aria-label="Implementation actions"
-                disabled={isSendBusy || isConnecting}
+                disabled={isSendBusy || isConnecting || inputDisabledReason !== null}
               />
             }
           >
@@ -161,7 +164,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           </MenuTrigger>
           <MenuPopup align="end" side="top">
             <MenuItem
-              disabled={isSendBusy || isConnecting}
+              disabled={isSendBusy || isConnecting || inputDisabledReason !== null}
               onClick={() => void onImplementPlanInNewThread()}
             >
               Implement in a new thread
@@ -176,15 +179,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     <button
       type="submit"
       className="flex h-9 w-9 enabled:cursor-pointer items-center justify-center rounded-full bg-primary/90 text-primary-foreground transition-all duration-150 hover:bg-primary hover:scale-105 disabled:pointer-events-none disabled:opacity-30 disabled:hover:scale-100 sm:h-8 sm:w-8"
-      disabled={isSendBusy || isConnecting || !hasSendableContent}
+      disabled={isSendBusy || isConnecting || inputDisabledReason !== null || !hasSendableContent}
       aria-label={
-        isConnecting
+        inputDisabledReason ??
+        (isConnecting
           ? "Connecting"
           : isPreparingWorktree
             ? "Preparing worktree"
             : isSendBusy
               ? "Sending"
-              : "Send message"
+              : "Send message")
       }
     >
       {isConnecting || isSendBusy ? (

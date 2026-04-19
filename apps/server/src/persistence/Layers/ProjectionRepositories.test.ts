@@ -76,6 +76,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         threadId: ThreadId.make("thread-null-options"),
         projectId: ProjectId.make("project-null-options"),
         title: "Null options thread",
+        hostDeviceId: null,
         modelSelection: {
           provider: "claudeAgent",
           model: "claude-opus-4-6",
@@ -92,6 +93,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         pendingApprovalCount: 0,
         pendingUserInputCount: 0,
         hasActionableProposedPlan: 0,
+        lastStreamVersion: 0,
         deletedAt: null,
       });
 

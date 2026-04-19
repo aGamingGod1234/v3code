@@ -5,6 +5,7 @@ import {
   type CursorReasoningOption,
   ClaudeAgentEffort,
   CodexReasoningEffort,
+  DeviceId,
   type EnvironmentId,
   ModelSelection,
   ProjectId,
@@ -164,6 +165,7 @@ const PersistedDraftThreadState = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
+  hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   envMode: DraftThreadEnvModeSchema,
   promotedTo: Schema.optionalKey(
     Schema.NullOr(
@@ -224,6 +226,7 @@ export interface DraftSessionState {
   interactionMode: ProviderInteractionMode;
   branch: string | null;
   worktreePath: string | null;
+  hostDeviceId?: DeviceId | null;
   envMode: DraftThreadEnvMode;
   promotedTo?: ScopedThreadRef | null;
 }
@@ -284,6 +287,7 @@ interface ComposerDraftStoreState {
       threadId?: ThreadId;
       branch?: string | null;
       worktreePath?: string | null;
+      hostDeviceId?: DeviceId | null;
       createdAt?: string;
       envMode?: DraftThreadEnvMode;
       runtimeMode?: RuntimeMode;
@@ -298,6 +302,7 @@ interface ComposerDraftStoreState {
       threadId?: ThreadId;
       branch?: string | null;
       worktreePath?: string | null;
+      hostDeviceId?: DeviceId | null;
       createdAt?: string;
       envMode?: DraftThreadEnvMode;
       runtimeMode?: RuntimeMode;
@@ -310,6 +315,7 @@ interface ComposerDraftStoreState {
     options: {
       branch?: string | null;
       worktreePath?: string | null;
+      hostDeviceId?: DeviceId | null;
       projectRef?: ScopedProjectRef;
       createdAt?: string;
       envMode?: DraftThreadEnvMode;
@@ -1065,6 +1071,7 @@ function createDraftThreadState(
     threadId?: ThreadId;
     branch?: string | null;
     worktreePath?: string | null;
+    hostDeviceId?: DeviceId | null;
     createdAt?: string;
     envMode?: DraftThreadEnvMode;
     runtimeMode?: RuntimeMode;
@@ -1098,6 +1105,7 @@ function createDraftThreadState(
       options?.interactionMode ?? existingThread?.interactionMode ?? DEFAULT_INTERACTION_MODE,
     branch: nextBranch,
     worktreePath: nextWorktreePath,
+    hostDeviceId: options?.hostDeviceId ?? existingThread?.hostDeviceId ?? null,
     envMode:
       options?.envMode ??
       (nextWorktreePath
@@ -1135,6 +1143,7 @@ function draftThreadsEqual(left: DraftThreadState | undefined, right: DraftThrea
     left.interactionMode === right.interactionMode &&
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath &&
+    left.hostDeviceId === right.hostDeviceId &&
     left.envMode === right.envMode &&
     scopedThreadRefsEqual(left.promotedTo, right.promotedTo)
   );
@@ -1230,6 +1239,7 @@ function normalizePersistedDraftThreads(
       const createdAt = candidateDraftThread.createdAt;
       const branch = candidateDraftThread.branch;
       const worktreePath = candidateDraftThread.worktreePath;
+      const hostDeviceId = candidateDraftThread.hostDeviceId;
       const normalizedWorktreePath = typeof worktreePath === "string" ? worktreePath : null;
       const promotedToCandidate = candidateDraftThread.promotedTo;
       const promotedToRecord =
@@ -1276,6 +1286,10 @@ function normalizePersistedDraftThreads(
             : DEFAULT_INTERACTION_MODE,
         branch: typeof branch === "string" ? branch : null,
         worktreePath: normalizedWorktreePath,
+        hostDeviceId:
+          typeof hostDeviceId === "string" && hostDeviceId.length > 0
+            ? (hostDeviceId as DeviceId)
+            : null,
         envMode: normalizeDraftThreadEnvMode(candidateDraftThread.envMode, normalizedWorktreePath),
         promotedTo,
       };
@@ -1321,6 +1335,7 @@ function normalizePersistedDraftThreads(
           interactionMode: DEFAULT_INTERACTION_MODE,
           branch: null,
           worktreePath: null,
+          hostDeviceId: null,
           envMode: "local",
           promotedTo: null,
         };
@@ -1825,6 +1840,7 @@ function toHydratedDraftThreadState(
     interactionMode: persistedDraftThread.interactionMode,
     branch: persistedDraftThread.branch,
     worktreePath: persistedDraftThread.worktreePath,
+    hostDeviceId: persistedDraftThread.hostDeviceId ?? null,
     envMode: persistedDraftThread.envMode,
     promotedTo: persistedDraftThread.promotedTo
       ? scopeThreadRef(
@@ -2024,6 +2040,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               interactionMode: options.interactionMode ?? existing.interactionMode,
               branch: nextBranch,
               worktreePath: nextWorktreePath,
+              hostDeviceId: options.hostDeviceId ?? existing.hostDeviceId ?? null,
               envMode:
                 options.envMode ??
                 (nextWorktreePath
@@ -2042,6 +2059,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               nextDraftThread.interactionMode === existing.interactionMode &&
               nextDraftThread.branch === existing.branch &&
               nextDraftThread.worktreePath === existing.worktreePath &&
+              nextDraftThread.hostDeviceId === existing.hostDeviceId &&
               nextDraftThread.envMode === existing.envMode &&
               scopedThreadRefsEqual(nextDraftThread.promotedTo, existing.promotedTo);
             if (isUnchanged) {

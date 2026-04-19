@@ -1,7 +1,9 @@
 import type { ComponentType } from "react";
-import { ArchiveIcon, ArrowLeftIcon, Link2Icon, Settings2Icon } from "lucide-react";
+import { ArchiveIcon, ArrowLeftIcon, Link2Icon, MonitorIcon, Settings2Icon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { useAccountState } from "../../hooks/useAccountState";
+import { SignedInBar } from "../sidebar/SignedInBar";
 import {
   SidebarContent,
   SidebarFooter,
@@ -11,10 +13,12 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "../ui/sidebar";
+import { V3SignInButton } from "../../v3/ui/SignInButton";
 
 export type SettingsSectionPath =
   | "/settings/general"
   | "/settings/connections"
+  | "/settings/devices"
   | "/settings/archived";
 
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
@@ -24,15 +28,32 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
 }> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },
+  { label: "Devices", to: "/settings/devices", icon: MonitorIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
 ];
 
-export function SettingsSidebarNav({ pathname }: { pathname: string }) {
+export function SettingsSidebarNav({
+  pathname,
+  showMeshChrome = true,
+}: {
+  readonly pathname: string;
+  readonly showMeshChrome?: boolean;
+}) {
+  const account = useAccountState();
   const navigate = useNavigate();
 
   return (
     <>
       <SidebarContent className="overflow-x-hidden">
+        {showMeshChrome ? (
+          <SidebarGroup className="px-2 pt-2 pb-0">
+            {account.isSignedIn ? (
+              <SignedInBar account={account} />
+            ) : (
+              <V3SignInButton className="w-full justify-center rounded-xl" />
+            )}
+          </SidebarGroup>
+        ) : null}
         <SidebarGroup className="px-2 py-3">
           <SidebarMenu>
             {SETTINGS_NAV_ITEMS.map((item) => {

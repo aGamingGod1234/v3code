@@ -15,10 +15,12 @@ import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { useUiStateStore } from "../uiStateStore";
+import { useMeshCurrentDeviceId } from "../rpc/meshState";
 import { useSettings } from "./useSettings";
 
 function useNewThreadState() {
   const projects = useStore(useShallow((store) => selectProjectsAcrossEnvironments(store)));
+  const currentDeviceId = useMeshCurrentDeviceId();
   const projectGroupingSettings = useSettings((settings) => ({
     sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
     sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
@@ -58,6 +60,7 @@ function useNewThreadState() {
       const hasBranchOption = options?.branch !== undefined;
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
+      const nextHostDeviceId = currentDeviceId ?? null;
       const storedDraftThread = getDraftSessionByLogicalProjectKey(logicalProjectKey);
       const latestActiveDraftThread: DraftThreadState | null = currentRouteTarget
         ? currentRouteTarget.kind === "server"
@@ -66,15 +69,24 @@ function useNewThreadState() {
         : null;
       if (storedDraftThread) {
         return (async () => {
-          if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
+          const shouldBackfillHostDeviceId =
+            storedDraftThread.hostDeviceId == null && currentDeviceId !== null;
+          if (
+            hasBranchOption ||
+            hasWorktreePathOption ||
+            hasEnvModeOption ||
+            shouldBackfillHostDeviceId
+          ) {
             setDraftThreadContext(storedDraftThread.draftId, {
               ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
               ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
               ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
+              ...(shouldBackfillHostDeviceId ? { hostDeviceId: nextHostDeviceId } : {}),
             });
           }
           setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, storedDraftThread.draftId, {
             threadId: storedDraftThread.threadId,
+            hostDeviceId: storedDraftThread.hostDeviceId ?? nextHostDeviceId,
           });
           if (
             currentRouteTarget?.kind === "draft" &&
@@ -95,11 +107,19 @@ function useNewThreadState() {
         latestActiveDraftThread.logicalProjectKey === logicalProjectKey &&
         latestActiveDraftThread.promotedTo == null
       ) {
-        if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
+        const shouldBackfillHostDeviceId =
+          latestActiveDraftThread.hostDeviceId == null && currentDeviceId !== null;
+        if (
+          hasBranchOption ||
+          hasWorktreePathOption ||
+          hasEnvModeOption ||
+          shouldBackfillHostDeviceId
+        ) {
           setDraftThreadContext(currentRouteTarget.draftId, {
             ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
             ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
             ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
+            ...(shouldBackfillHostDeviceId ? { hostDeviceId: nextHostDeviceId } : {}),
           });
         }
         setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, currentRouteTarget.draftId, {
@@ -107,6 +127,7 @@ function useNewThreadState() {
           createdAt: latestActiveDraftThread.createdAt,
           runtimeMode: latestActiveDraftThread.runtimeMode,
           interactionMode: latestActiveDraftThread.interactionMode,
+          hostDeviceId: latestActiveDraftThread.hostDeviceId ?? nextHostDeviceId,
           ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
           ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
           ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
@@ -123,6 +144,7 @@ function useNewThreadState() {
           createdAt,
           branch: options?.branch ?? null,
           worktreePath: options?.worktreePath ?? null,
+          hostDeviceId: nextHostDeviceId,
           envMode: options?.envMode ?? "local",
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
@@ -134,7 +156,7 @@ function useNewThreadState() {
         });
       })();
     },
-    [getCurrentRouteTarget, projectGroupingSettings, router, projects],
+    [currentDeviceId, getCurrentRouteTarget, projectGroupingSettings, router, projects],
   );
 }
 

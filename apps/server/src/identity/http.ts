@@ -4,23 +4,31 @@ import {
   GoogleBootstrapInput,
   GoogleBootstrapResult,
   GoogleClientPublicConfig,
+  V3ApproveDeviceInput,
+  V3ApproveDeviceResult,
+  V3DeviceListResult,
+  V3RemoveDeviceInput,
+  V3RemoveDeviceResult,
   UserId,
   UserInfo,
   type VerifiedGoogleIdentity,
 } from "@v3tools/contracts";
 import * as Crypto from "node:crypto";
 
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { deriveAuthClientMetadata } from "../auth/utils.ts";
-import { AuthError } from "../auth/Services/ServerAuth.ts";
+import { AuthError, ServerAuth } from "../auth/Services/ServerAuth.ts";
+import { respondToAuthError } from "../auth/http.ts";
 import { SessionCredentialService } from "../auth/Services/SessionCredentialService.ts";
 import { ServerConfig } from "../config.ts";
 import { DeviceApprovalService } from "./Services/DeviceApprovalService.ts";
+import { DeviceRepository } from "./Services/DeviceRepository.ts";
 import { DeviceSessionRepository } from "./Services/DeviceSessionRepository.ts";
 import { GoogleIdentityError } from "./Errors.ts";
 import { GoogleIdentityService } from "./Services/GoogleIdentityService.ts";
+import { UserContextResolver } from "./Services/UserContextResolver.ts";
 import { UserRepository } from "./Services/UserRepository.ts";
 
 // --- helpers ---------------------------------------------------------------
@@ -62,6 +70,121 @@ const toUserInfo = (user: {
 });
 
 const toDeviceInfoForResult = (device: DeviceInfo): DeviceInfo => device;
+
+const toDeviceInfo = (device: {
+  readonly id: DeviceInfo["id"];
+  readonly userId: DeviceInfo["userId"];
+  readonly name: DeviceInfo["name"];
+  readonly platform: DeviceInfo["platform"];
+  readonly kind: DeviceInfo["kind"];
+  readonly capabilities: DeviceInfo["capabilities"];
+  readonly approved: boolean;
+  readonly firstSeenAt: DeviceInfo["firstSeenAt"];
+  readonly lastSeenAt: DeviceInfo["lastSeenAt"];
+  readonly online?: boolean;
+}): DeviceInfo => ({
+  id: device.id,
+  userId: device.userId,
+  name: device.name,
+  platform: device.platform,
+  kind: device.kind,
+  capabilities: device.capabilities,
+  approved: device.approved,
+  online: device.online ?? false,
+  firstSeenAt: device.firstSeenAt,
+  lastSeenAt: device.lastSeenAt,
+});
+
+const toInternalAuthError =
+  (message: string) =>
+  (cause: unknown): AuthError =>
+    new AuthError({
+      message,
+      status: 500,
+      cause,
+    });
+
+const resolveV3RequestContext = Effect.gen(function* () {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const serverAuth = yield* ServerAuth;
+  const users = yield* UserContextResolver;
+  const devices = yield* DeviceRepository;
+
+  const session = yield* serverAuth.authenticateHttpRequest(request);
+  const userContext = yield* users
+    .resolve(session.sessionId)
+    .pipe(
+      Effect.mapError(
+        toInternalAuthError("Failed to resolve the V3 device context for this session."),
+      ),
+    );
+
+  if (Option.isNone(userContext)) {
+    return yield* new AuthError({
+      message: "This session is not linked to a V3 device.",
+      status: 403,
+    });
+  }
+
+  const currentDevice = yield* devices
+    .get({
+      id: userContext.value.deviceId,
+      userId: userContext.value.userId,
+    })
+    .pipe(Effect.mapError(toInternalAuthError("Failed to load the current V3 device.")));
+
+  if (Option.isNone(currentDevice)) {
+    return yield* new AuthError({
+      message: "This V3 device is no longer registered on the server node.",
+      status: 403,
+    });
+  }
+
+  return {
+    currentDevice: currentDevice.value,
+    session,
+    userId: userContext.value.userId,
+  } as const;
+});
+
+const requireApprovedDeviceContext = Effect.gen(function* () {
+  const context = yield* resolveV3RequestContext;
+  if (!context.currentDevice.approved) {
+    return yield* new AuthError({
+      message: "Approve this device from another signed-in device before managing devices.",
+      status: 403,
+    });
+  }
+  return context;
+});
+
+const resolveOnlineDeviceIds = Effect.fn(function* (currentDeviceId: DeviceInfo["id"]) {
+  const sessions = yield* SessionCredentialService;
+  const deviceSessions = yield* DeviceSessionRepository;
+
+  const activeSessions = yield* sessions
+    .listActive()
+    .pipe(Effect.mapError(toInternalAuthError("Failed to load active V3 sessions.")));
+  const connectedSessions = activeSessions.filter((session) => session.connected);
+  const links = yield* Effect.forEach(
+    connectedSessions,
+    (session) =>
+      deviceSessions
+        .getBySessionId({ sessionId: AuthSessionId.make(session.sessionId) })
+        .pipe(
+          Effect.mapError(toInternalAuthError("Failed to resolve active sessions to V3 devices.")),
+        ),
+    { concurrency: "unbounded" },
+  );
+
+  const deviceIds = new Set<DeviceInfo["id"]>([currentDeviceId]);
+  for (const link of links) {
+    if (Option.isSome(link)) {
+      deviceIds.add(link.value.deviceId);
+    }
+  }
+  return deviceIds;
+});
 
 // --- route -----------------------------------------------------------------
 
@@ -257,4 +380,111 @@ export const googleConfigRouteLayer = HttpRouter.add(
     const encoded = Schema.encodeSync(GoogleClientPublicConfig)(body);
     return HttpServerResponse.jsonUnsafe(encoded, { status: 200 });
   }),
+);
+
+export const listDevicesRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/v3/devices",
+  Effect.gen(function* () {
+    const devices = yield* DeviceRepository;
+    const { currentDevice, userId } = yield* resolveV3RequestContext;
+    const records = yield* devices
+      .listForUser({ userId })
+      .pipe(Effect.mapError(toInternalAuthError("Failed to list V3 devices.")));
+    const onlineDeviceIds = yield* resolveOnlineDeviceIds(currentDevice.id);
+
+    const body: V3DeviceListResult = {
+      currentDeviceId: currentDevice.id,
+      devices: records.map((record) =>
+        toDeviceInfo({
+          id: record.id,
+          userId: record.userId,
+          name: record.name,
+          platform: record.platform,
+          kind: record.kind,
+          capabilities: record.capabilities,
+          approved: record.approved,
+          firstSeenAt: record.firstSeenAt,
+          lastSeenAt: record.lastSeenAt,
+          online: onlineDeviceIds.has(record.id),
+        }),
+      ),
+    };
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(V3DeviceListResult)(body), {
+      status: 200,
+    });
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+export const approveDeviceRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/v3/devices/approve",
+  Effect.gen(function* () {
+    const approvals = yield* DeviceApprovalService;
+    const { userId } = yield* requireApprovedDeviceContext;
+    const payload = yield* HttpServerRequest.schemaBodyJson(V3ApproveDeviceInput).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Invalid approve-device payload.",
+            status: 400,
+            cause,
+          }),
+      ),
+    );
+
+    const approved = yield* approvals
+      .approve({
+        userId,
+        deviceId: payload.deviceId,
+      })
+      .pipe(Effect.mapError(toInternalAuthError("Failed to approve the V3 device.")));
+
+    const body: V3ApproveDeviceResult = { approved };
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(V3ApproveDeviceResult)(body), {
+      status: 200,
+    });
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+export const removeDeviceRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/v3/devices/remove",
+  Effect.gen(function* () {
+    const approvals = yield* DeviceApprovalService;
+    const { currentDevice, userId } = yield* requireApprovedDeviceContext;
+    const payload = yield* HttpServerRequest.schemaBodyJson(V3RemoveDeviceInput).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Invalid remove-device payload.",
+            status: 400,
+            cause,
+          }),
+      ),
+    );
+
+    if (payload.deviceId === currentDevice.id) {
+      return yield* new AuthError({
+        message: "Use another approved device to remove this device.",
+        status: 400,
+      });
+    }
+
+    const removed = yield* DateTime.now.pipe(
+      Effect.flatMap((now) =>
+        approvals.remove({
+          userId,
+          deviceId: payload.deviceId,
+          now,
+        }),
+      ),
+      Effect.mapError(toInternalAuthError("Failed to remove the V3 device.")),
+    );
+
+    const body: V3RemoveDeviceResult = { removed };
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(V3RemoveDeviceResult)(body), {
+      status: 200,
+    });
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );

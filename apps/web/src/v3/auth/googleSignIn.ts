@@ -37,9 +37,12 @@ interface GoogleConfigResponse {
 export const fetchGoogleClientConfig = async (
   signal?: AbortSignal,
 ): Promise<GoogleConfigResponse> => {
-  const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/auth/google/config"), {
+  const requestInit: RequestInit = {
     credentials: "include",
-    signal,
+    ...(signal ? { signal } : {}),
+  };
+  const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/auth/google/config"), {
+    ...requestInit,
   });
   if (!response.ok) {
     throw new Error(`google config request failed (status ${response.status})`);

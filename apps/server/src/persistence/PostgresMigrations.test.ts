@@ -30,6 +30,8 @@ const UPSTREAM_PORT_NAMES = [
   "ProjectionThreadShellSummary",
   "BackfillProjectionThreadShellSummary",
   "CleanupInvalidProjectionPendingApprovals",
+  "ProjectionThreadsMeshSync",
+  "ProjectionThreadMessageSourceDevice",
 ] as const;
 
 describe("PostgresMigrations", () => {
@@ -39,7 +41,7 @@ describe("PostgresMigrations", () => {
     expect(firstName).toBe("V3IdentityBaseline");
   });
 
-  it("registers the 25 upstream-port migrations as ids 2-26 after P2b-mig", () => {
+  it("registers the upstream-port migrations as ids 2+ after the V3 baseline", () => {
     expect(postgresMigrationEntries).toHaveLength(1 + UPSTREAM_PORT_NAMES.length);
     for (let index = 0; index < UPSTREAM_PORT_NAMES.length; index += 1) {
       const [id, name] = postgresMigrationEntries[index + 1]!;

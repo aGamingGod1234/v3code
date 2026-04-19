@@ -254,6 +254,7 @@ export function projectEvent(
             id: payload.threadId,
             projectId: payload.projectId,
             title: payload.title,
+            hostDeviceId: payload.hostDeviceId ?? null,
             modelSelection: payload.modelSelection,
             runtimeMode: payload.runtimeMode,
             interactionMode: payload.interactionMode,
@@ -320,6 +321,7 @@ export function projectEvent(
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             ...(payload.title !== undefined ? { title: payload.title } : {}),
+            ...(payload.hostDeviceId !== undefined ? { hostDeviceId: payload.hostDeviceId } : {}),
             ...(payload.modelSelection !== undefined
               ? { modelSelection: payload.modelSelection }
               : {}),
@@ -377,6 +379,9 @@ export function projectEvent(
             role: payload.role,
             text: payload.text,
             ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
+            ...(payload.sourceDeviceId !== undefined
+              ? { sourceDeviceId: payload.sourceDeviceId }
+              : {}),
             turnId: payload.turnId,
             streaming: payload.streaming,
             createdAt: payload.createdAt,
@@ -402,6 +407,9 @@ export function projectEvent(
                     turnId: message.turnId,
                     ...(message.attachments !== undefined
                       ? { attachments: message.attachments }
+                      : {}),
+                    ...(message.sourceDeviceId !== undefined
+                      ? { sourceDeviceId: message.sourceDeviceId }
                       : {}),
                   }
                 : entry,

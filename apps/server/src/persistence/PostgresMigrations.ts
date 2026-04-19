@@ -9,7 +9,7 @@
  * Registry layout after P2b-mig (2026-04-19):
  *   id 001     : V3IdentityBaseline (V3-only; added first so v3_*
  *                tables exist independent of the upstream T3 schema).
- *   id 002-026 : ports of SQLite migrations 001-025 in the same order.
+ *   id 002+    : ports of subsequent SQLite migrations in the same order.
  *                The SQLite history stays canonical — comments on each
  *                port name the SQLite source.
  *
@@ -52,6 +52,8 @@ import Migration0023 from "./PostgresMigrations/023_AuthSessionLastConnectedAt.t
 import Migration0024 from "./PostgresMigrations/024_ProjectionThreadShellSummary.ts";
 import Migration0025 from "./PostgresMigrations/025_BackfillProjectionThreadShellSummary.ts";
 import Migration0026 from "./PostgresMigrations/026_CleanupInvalidProjectionPendingApprovals.ts";
+import Migration0027 from "./PostgresMigrations/027_ProjectionThreadsMeshSync.ts";
+import Migration0028 from "./PostgresMigrations/028_ProjectionThreadMessageSourceDevice.ts";
 
 export const postgresMigrationEntries = [
   [1, "V3IdentityBaseline", Migration0001],
@@ -80,6 +82,8 @@ export const postgresMigrationEntries = [
   [24, "ProjectionThreadShellSummary", Migration0024],
   [25, "BackfillProjectionThreadShellSummary", Migration0025],
   [26, "CleanupInvalidProjectionPendingApprovals", Migration0026],
+  [27, "ProjectionThreadsMeshSync", Migration0027],
+  [28, "ProjectionThreadMessageSourceDevice", Migration0028],
 ] as const;
 
 export const makePostgresMigrationLoader = (throughId?: number) =>

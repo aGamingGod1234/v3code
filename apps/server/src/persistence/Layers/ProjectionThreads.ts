@@ -31,6 +31,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           thread_id,
           project_id,
           title,
+          host_device_id,
           model_selection_json,
           runtime_mode,
           interaction_mode,
@@ -44,12 +45,14 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count,
           pending_user_input_count,
           has_actionable_proposed_plan,
+          last_stream_version,
           deleted_at
         )
         VALUES (
           ${row.threadId},
           ${row.projectId},
           ${row.title},
+          ${row.hostDeviceId},
           ${JSON.stringify(row.modelSelection)},
           ${row.runtimeMode},
           ${row.interactionMode},
@@ -63,12 +66,14 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.pendingApprovalCount},
           ${row.pendingUserInputCount},
           ${row.hasActionableProposedPlan},
+          ${row.lastStreamVersion},
           ${row.deletedAt}
         )
         ON CONFLICT (thread_id)
         DO UPDATE SET
           project_id = excluded.project_id,
           title = excluded.title,
+          host_device_id = excluded.host_device_id,
           model_selection_json = excluded.model_selection_json,
           runtime_mode = excluded.runtime_mode,
           interaction_mode = excluded.interaction_mode,
@@ -82,6 +87,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count = excluded.pending_approval_count,
           pending_user_input_count = excluded.pending_user_input_count,
           has_actionable_proposed_plan = excluded.has_actionable_proposed_plan,
+          last_stream_version = excluded.last_stream_version,
           deleted_at = excluded.deleted_at
       `,
   });
@@ -95,6 +101,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
+          host_device_id AS "hostDeviceId",
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
@@ -108,6 +115,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
+          last_stream_version AS "lastStreamVersion",
           deleted_at AS "deletedAt"
         FROM projection_threads
         WHERE thread_id = ${threadId}
@@ -123,6 +131,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
+          host_device_id AS "hostDeviceId",
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
@@ -136,6 +145,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
+          last_stream_version AS "lastStreamVersion",
           deleted_at AS "deletedAt"
         FROM projection_threads
         WHERE project_id = ${projectId}

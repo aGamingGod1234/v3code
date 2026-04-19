@@ -64,6 +64,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     codexThreadId: null,
     projectId: ProjectId.make("project-1"),
     title: "Thread",
+    hostDeviceId: null,
     modelSelection: {
       provider: "codex",
       model: "gpt-5-codex",
@@ -117,6 +118,7 @@ function makeState(thread: Thread): AppState {
         codexThreadId: thread.codexThreadId,
         projectId: thread.projectId,
         title: thread.title,
+        hostDeviceId: thread.hostDeviceId,
         modelSelection: thread.modelSelection,
         runtimeMode: thread.runtimeMode,
         interactionMode: thread.interactionMode,
@@ -597,6 +599,7 @@ describe("incremental orchestration updates", () => {
           codexThreadId: thread2.codexThreadId,
           projectId: thread2.projectId,
           title: thread2.title,
+          hostDeviceId: thread2.hostDeviceId,
           modelSelection: thread2.modelSelection,
           runtimeMode: thread2.runtimeMode,
           interactionMode: thread2.interactionMode,

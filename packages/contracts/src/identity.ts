@@ -140,3 +140,33 @@ export const GoogleClientPublicConfig = Schema.Struct({
   clientId: Schema.NullOr(TrimmedNonEmptyString),
 });
 export type GoogleClientPublicConfig = typeof GoogleClientPublicConfig.Type;
+
+// ---------------------------------------------------------------------------
+// Device management API (P3)
+// ---------------------------------------------------------------------------
+
+export const V3DeviceListResult = Schema.Struct({
+  currentDeviceId: DeviceId,
+  devices: Schema.Array(DeviceInfo),
+});
+export type V3DeviceListResult = typeof V3DeviceListResult.Type;
+
+export const V3ApproveDeviceInput = Schema.Struct({
+  deviceId: DeviceId,
+});
+export type V3ApproveDeviceInput = typeof V3ApproveDeviceInput.Type;
+
+export const V3ApproveDeviceResult = Schema.Struct({
+  approved: Schema.Boolean,
+});
+export type V3ApproveDeviceResult = typeof V3ApproveDeviceResult.Type;
+
+export const V3RemoveDeviceInput = Schema.Struct({
+  deviceId: DeviceId,
+});
+export type V3RemoveDeviceInput = typeof V3RemoveDeviceInput.Type;
+
+export const V3RemoveDeviceResult = Schema.Struct({
+  removed: Schema.Boolean,
+});
+export type V3RemoveDeviceResult = typeof V3RemoveDeviceResult.Type;

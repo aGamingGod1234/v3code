@@ -66,13 +66,25 @@ import {
 } from "./auth/http.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
-import { googleBootstrapRouteLayer, googleConfigRouteLayer } from "./identity/http.ts";
+import {
+  approveDeviceRouteLayer,
+  googleBootstrapRouteLayer,
+  googleConfigRouteLayer,
+  listDevicesRouteLayer,
+  removeDeviceRouteLayer,
+} from "./identity/http.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
 import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
+import { ChatSubscriptionManagerLive } from "./mesh/Layers/ChatSubscriptionManager.ts";
+import { DeviceRegistryLive } from "./mesh/Layers/DeviceRegistry.ts";
+import { MeshPublisherLive } from "./mesh/Layers/MeshPublisher.ts";
+import { PromptRouterLive } from "./mesh/Layers/PromptRouter.ts";
+import { PresenceBroadcasterLive } from "./mesh/Layers/PresenceBroadcaster.ts";
+import { MeshEventIngestionLive } from "./orchestration/Layers/MeshEventIngestion.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import {
   clearPersistedServerRuntimeState,
@@ -242,6 +254,15 @@ const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(OrchestrationLayerLive),
 );
 
+const MeshLayerLive = Layer.mergeAll(
+  PresenceBroadcasterLive,
+  DeviceRegistryLive.pipe(Layer.provide(PresenceBroadcasterLive)),
+  ChatSubscriptionManagerLive,
+  PromptRouterLive,
+  MeshEventIngestionLive,
+  MeshPublisherLive.pipe(Layer.provide(ChatSubscriptionManagerLive)),
+).pipe(Layer.provideMerge(OrchestrationLayerLive), Layer.provideMerge(WorkspacePathsLive));
+
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
   Layer.provideMerge(CheckpointingLayerLive),
@@ -253,6 +274,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProviderRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(WorkspaceLayerLive),
+  Layer.provideMerge(MeshLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
@@ -280,8 +302,11 @@ export const makeRoutesLayer = Layer.mergeAll(
   authPairingCredentialRouteLayer,
   authSessionRouteLayer,
   authWebSocketTokenRouteLayer,
+  approveDeviceRouteLayer,
   googleBootstrapRouteLayer,
   googleConfigRouteLayer,
+  listDevicesRouteLayer,
+  removeDeviceRouteLayer,
   attachmentsRouteLayer,
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,

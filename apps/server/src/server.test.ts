@@ -87,6 +87,17 @@ import {
   BrowserTraceCollector,
   type BrowserTraceCollectorShape,
 } from "./observability/Services/BrowserTraceCollector.ts";
+import {
+  ChatSubscriptionManager,
+  type ChatSubscriptionManagerShape,
+} from "./mesh/Services/ChatSubscriptionManager.ts";
+import { DeviceRegistry, type DeviceRegistryShape } from "./mesh/Services/DeviceRegistry.ts";
+import { MeshPublisher, type MeshPublisherShape } from "./mesh/Services/MeshPublisher.ts";
+import {
+  PresenceBroadcaster,
+  type PresenceBroadcasterShape,
+} from "./mesh/Services/PresenceBroadcaster.ts";
+import { PromptRouter, type PromptRouterShape } from "./mesh/Services/PromptRouter.ts";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
 import {
   ProjectSetupScriptRunner,
@@ -96,6 +107,10 @@ import {
   RepositoryIdentityResolver,
   type RepositoryIdentityResolverShape,
 } from "./project/Services/RepositoryIdentityResolver.ts";
+import {
+  MeshEventIngestion,
+  type MeshEventIngestionShape,
+} from "./orchestration/Services/MeshEventIngestion.ts";
 import {
   ServerEnvironment,
   type ServerEnvironmentShape,
@@ -350,6 +365,12 @@ const buildAppUnderTest = (options?: {
     serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
     serverEnvironment?: Partial<ServerEnvironmentShape>;
     repositoryIdentityResolver?: Partial<RepositoryIdentityResolverShape>;
+    chatSubscriptionManager?: Partial<ChatSubscriptionManagerShape>;
+    deviceRegistry?: Partial<DeviceRegistryShape>;
+    meshEventIngestion?: Partial<MeshEventIngestionShape>;
+    meshPublisher?: Partial<MeshPublisherShape>;
+    presenceBroadcaster?: Partial<PresenceBroadcasterShape>;
+    promptRouter?: Partial<PromptRouterShape>;
   };
 }) =>
   Effect.gen(function* () {
@@ -517,6 +538,48 @@ const buildAppUnderTest = (options?: {
               diff: "",
             }),
           ...options?.layers?.checkpointDiffQuery,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(ChatSubscriptionManager)({
+          publishThreadEvent: () => Effect.void,
+          subscribeThread: () => Stream.empty,
+          ...options?.layers?.chatSubscriptionManager,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(DeviceRegistry)({
+          register: () => Effect.void,
+          unregister: () => Effect.void,
+          isOnline: () => Effect.succeed(false),
+          getAnyOnlineSessionId: () => Effect.succeed(Option.none()),
+          ...options?.layers?.deviceRegistry,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(MeshEventIngestion)({
+          publishCommand: () => Effect.succeed({ sequence: 0 }),
+          ...options?.layers?.meshEventIngestion,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(MeshPublisher)({
+          publishThreadEvent: () => Effect.void,
+          ...options?.layers?.meshPublisher,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(PresenceBroadcaster)({
+          publish: () => Effect.void,
+          stream: Stream.empty,
+          ...options?.layers?.presenceBroadcaster,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(PromptRouter)({
+          publishToSession: () => Effect.void,
+          subscribeSession: () => Stream.empty,
+          ...options?.layers?.promptRouter,
         }),
       ),
     );

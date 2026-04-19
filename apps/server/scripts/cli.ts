@@ -151,8 +151,13 @@ const buildCmd = Command.make(
           cwd: serverDir,
           stdout: config.verbose ? "inherit" : "ignore",
           stderr: "inherit",
-          // Windows needs shell mode to resolve `.cmd` shims on PATH.
-          shell: process.platform === "win32",
+          // `process.execPath` is an absolute path to node.exe. On
+          // Windows the install path contains a space (`C:\Program
+          // Files\nodejs\node.exe`), which breaks `shell: true`
+          // interpolation (the shell sees `C:\Program` as the command).
+          // We don't need a shell here — we're invoking an absolute
+          // executable directly — so keep `shell` off on all platforms.
+          shell: false,
         }),
       );
 

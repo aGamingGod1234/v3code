@@ -269,6 +269,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   compact: boolean;
   activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
   isPreparingWorktree: boolean;
+  inputDisabledReason: string | null;
   pendingAction: {
     questionIndex: number;
     isLastQuestion: boolean;
@@ -289,7 +290,9 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   return (
     <>
       {props.activeContextWindow ? <ContextWindowMeter usage={props.activeContextWindow} /> : null}
-      {props.isPreparingWorktree ? (
+      {props.inputDisabledReason ? (
+        <span className="text-muted-foreground/70 text-xs">{props.inputDisabledReason}</span>
+      ) : props.isPreparingWorktree ? (
         <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
       ) : null}
       <ComposerPrimaryActions
@@ -301,6 +304,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         isSendBusy={props.isSendBusy}
         isConnecting={props.isConnecting}
         isPreparingWorktree={props.isPreparingWorktree}
+        inputDisabledReason={props.inputDisabledReason}
         hasSendableContent={props.hasSendableContent}
         onPreviousPendingQuestion={props.onPreviousPendingQuestion}
         onInterrupt={props.onInterrupt}
@@ -368,6 +372,7 @@ export interface ChatComposerProps {
   isConnecting: boolean;
   isSendBusy: boolean;
   isPreparingWorktree: boolean;
+  inputDisabledReason: string | null;
 
   // Pending approvals / inputs
   activePendingApproval: PendingApproval | null;
@@ -498,6 +503,7 @@ export const ChatComposer = memo(
       resolvedTheme,
       settings,
       gitCwd,
+      inputDisabledReason,
       promptRef,
       composerImagesRef,
       composerTerminalContextsRef,
@@ -1886,17 +1892,20 @@ export const ChatComposer = memo(
                 onCommandKeyDown={onComposerCommandKey}
                 onPaste={onComposerPaste}
                 placeholder={
-                  isComposerApprovalState
-                    ? (activePendingApproval?.detail ?? "Resolve this approval request to continue")
-                    : activePendingProgress
-                      ? "Type your own answer, or leave this blank to use the selected option"
-                      : showPlanFollowUpPrompt && activeProposedPlan
-                        ? "Add feedback to refine the plan, or leave this blank to implement it"
-                        : phase === "disconnected"
-                          ? "Ask for follow-up changes or attach images"
-                          : "Ask anything, @tag files/folders, or use / to show available commands"
+                  inputDisabledReason
+                    ? inputDisabledReason
+                    : isComposerApprovalState
+                      ? (activePendingApproval?.detail ??
+                        "Resolve this approval request to continue")
+                      : activePendingProgress
+                        ? "Type your own answer, or leave this blank to use the selected option"
+                        : showPlanFollowUpPrompt && activeProposedPlan
+                          ? "Add feedback to refine the plan, or leave this blank to implement it"
+                          : phase === "disconnected"
+                            ? "Ask for follow-up changes or attach images"
+                            : "Ask anything, @tag files/folders, or use / to show available commands"
                 }
-                disabled={isConnecting || isComposerApprovalState}
+                disabled={isConnecting || isComposerApprovalState || inputDisabledReason !== null}
               />
             </div>
 
@@ -1987,6 +1996,7 @@ export const ChatComposer = memo(
                   <ComposerFooterPrimaryActions
                     compact={isComposerPrimaryActionsCompact}
                     activeContextWindow={activeContextWindow}
+                    inputDisabledReason={inputDisabledReason}
                     pendingAction={pendingPrimaryAction}
                     isRunning={phase === "running"}
                     showPlanFollowUpPrompt={

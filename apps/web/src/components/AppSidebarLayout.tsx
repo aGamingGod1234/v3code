@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-import ThreadSidebar from "./Sidebar";
+import ThreadSidebar from "./sidebar/DeviceSidebar";
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
 
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";

@@ -11,11 +11,15 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getServerModeState,
   getServerConfig,
+  getUserSessionState,
   onProvidersUpdated,
   onServerConfigUpdated,
   onWelcome,
   resetServerStateForTests,
+  setServerModeState,
+  setUserSessionState,
   startServerStateSync,
 } from "./serverState";
 
@@ -138,6 +142,37 @@ afterEach(() => {
 });
 
 describe("serverState", () => {
+  it("stores derived server mode and user session state", () => {
+    setServerModeState("server-node");
+    setUserSessionState({
+      signedIn: true,
+      email: "lucas@example.com",
+      displayName: "Lucas",
+      avatarUrl: "https://example.com/avatar.png",
+      pendingApproval: true,
+    });
+
+    expect(getServerModeState()).toBe("server-node");
+    expect(getUserSessionState()).toEqual({
+      signedIn: true,
+      email: "lucas@example.com",
+      displayName: "Lucas",
+      avatarUrl: "https://example.com/avatar.png",
+      pendingApproval: true,
+    });
+
+    resetServerStateForTests();
+
+    expect(getServerModeState()).toBe("web");
+    expect(getUserSessionState()).toEqual({
+      signedIn: false,
+      email: null,
+      displayName: null,
+      avatarUrl: null,
+      pendingApproval: false,
+    });
+  });
+
   it("bootstraps the server config snapshot and replays it to late subscribers", async () => {
     serverApi.getConfig.mockResolvedValueOnce(baseServerConfig);
 

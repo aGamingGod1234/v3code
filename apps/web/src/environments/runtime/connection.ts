@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  MeshPromptStreamItem,
   OrchestrationShellSnapshot,
   OrchestrationShellStreamEvent,
   ServerConfig,
@@ -24,6 +25,11 @@ interface OrchestrationHandlers {
   readonly applyShellEvent: (
     event: OrchestrationShellStreamEvent,
     environmentId: EnvironmentId,
+  ) => void;
+  readonly applyPromptForward: (
+    item: MeshPromptStreamItem,
+    environmentId: EnvironmentId,
+    client: WsRpcClient,
   ) => void;
   readonly syncShellSnapshot: (
     snapshot: OrchestrationShellSnapshot,
@@ -139,11 +145,17 @@ export function createEnvironmentConnection(
       input.applyTerminalEvent(event, environmentId);
     },
   );
+  const unsubPrompts = input.client.mesh.subscribePrompts(
+    (item: Parameters<Parameters<WsRpcClient["mesh"]["subscribePrompts"]>[0]>[0]) => {
+      input.applyPromptForward(item, environmentId, input.client);
+    },
+  );
 
   const cleanup = () => {
     disposed = true;
     unsubShell();
     unsubTerminalEvent();
+    unsubPrompts();
     unsubLifecycle();
     unsubConfig();
   };

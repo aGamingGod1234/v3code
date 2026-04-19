@@ -29,6 +29,7 @@ function toProjectionThreadMessage(
     turnId: row.turnId,
     role: row.role,
     text: row.text,
+    sourceDeviceId: row.sourceDeviceId,
     isStreaming: row.isStreaming === 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -52,6 +53,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           role,
           text,
           attachments_json,
+          source_device_id,
           is_streaming,
           created_at,
           updated_at
@@ -70,6 +72,14 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
               WHERE message_id = ${row.messageId}
             )
           ),
+          COALESCE(
+            ${row.sourceDeviceId},
+            (
+              SELECT source_device_id
+              FROM projection_thread_messages
+              WHERE message_id = ${row.messageId}
+            )
+          ),
           ${row.isStreaming ? 1 : 0},
           ${row.createdAt},
           ${row.updatedAt}
@@ -83,6 +93,10 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           attachments_json = COALESCE(
             excluded.attachments_json,
             projection_thread_messages.attachments_json
+          ),
+          source_device_id = COALESCE(
+            excluded.source_device_id,
+            projection_thread_messages.source_device_id
           ),
           is_streaming = excluded.is_streaming,
           created_at = excluded.created_at,
@@ -103,6 +117,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           role,
           text,
           attachments_json AS "attachments",
+          source_device_id AS "sourceDeviceId",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -124,6 +139,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           role,
           text,
           attachments_json AS "attachments",
+          source_device_id AS "sourceDeviceId",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
           updated_at AS "updatedAt"

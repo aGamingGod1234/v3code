@@ -284,6 +284,18 @@ provisions the OAuth Client ID via the Google Cloud Console.
 - **Behaviour change for upstream-aware rebase**: V3 now requires a single-instance lock for OAuth deep-link forwarding to work. T3 today does not call `requestSingleInstanceLock`; if upstream adds its own single-instance handling, merge the two.
 - **Last rebase verified**: 2026-04-18
 
+### `packages/contracts/src/index.ts` (P3 update on top of P1a)
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 â€” device model + sidebar rewrite
+- **Reason**: Re-export the new mesh device payload schemas from the
+  package root.
+- **What changed**:
+  - Added: named exports for `HelloPayload` and
+    `PresenceUpdatePayload` from `./mesh/device.ts`.
+- **Conflict risk on rebase**: low â€” additive index export.
+- **Last rebase verified**: 2026-04-19
+
 ### `apps/web/src/routes/__root.tsx`
 
 - **Modified**: 2026-04-18 (P1d)
@@ -1060,3 +1072,560 @@ src/persistence/PostgresMigrations.test.ts
 src/persistence/Layers/Postgres.test.ts
 src/persistence/Layers/PersistenceSelector.test.ts`) is now
   **66 pass + 1 todo**.
+
+### Phase 3 — device model + sidebar rewrite (initial slice)
+
+This P3 slice lands the first coherent device-aware UI on top of the
+P1/P2 identity backend. The server now exposes authenticated V3 device
+management routes (`GET /api/v3/devices`, `POST /api/v3/devices/approve`,
+`POST /api/v3/devices/remove`) with live presence derived from active
+auth sessions, and the web client consumes that through dedicated hooks
+for account state, device lists, server mode, banner visibility, and
+device-grouped chat chrome.
+
+The sidebar rewrite is intentionally incremental: the legacy project /
+thread machinery in `Sidebar.tsx` stays intact, while signed-in account
+state, device groups, archived entry points, and the configure-server
+banner are layered around it. `DeviceSidebar.tsx` is now the real entry
+seam and switches to an explicit `LegacyProjectSidebar.tsx` path when
+the user is signed out. Because thread shells still do not expose
+`host_device_id`, chat attribution is currently exact only for the
+current device; other device groups render real device presence and
+approval state but defer deep chat attribution until the thread model
+grows host-device metadata.
+
+**Modified upstream files:**
+
+### `apps/server/src/server.ts` (P3 update on top of P2d-persist)
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Register the new device-management HTTP routes so the web
+  sidebar/settings surfaces can query and mutate V3 devices.
+- **What changed**:
+  - Added: `listDevicesRouteLayer`, `approveDeviceRouteLayer`, and
+    `removeDeviceRouteLayer` imports from `identity/http.ts`.
+  - Added: the three routes to `makeRoutesLayer`.
+- **Conflict risk on rebase**: medium — `server.ts` route registration
+  continues to change upstream.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/components/AppSidebarLayout.tsx`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Switch the layout import seam to the new sidebar entry
+  module.
+- **What changed**:
+  - Replaced: direct `./Sidebar` import with `./sidebar/DeviceSidebar`.
+- **Conflict risk on rebase**: low — one-line import seam.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/components/Sidebar.tsx`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Keep the legacy project/thread behaviors while layering in
+  the signed-in account bar, device groups, and archived mesh entrypoint.
+- **What changed**:
+  - Added: `useAccountState()` and `useChatsByDevice()` wiring at the
+    top-level sidebar seam.
+  - Added: a `mode` prop so the shared project/thread implementation can
+    render either mesh chrome or the extracted legacy signed-out path.
+  - Added: signed-in account chrome (`SignedInBar`) or signed-out
+    `V3SignInButton` at the top of the main sidebar content.
+  - Added: device groups above the legacy project list.
+  - Added: archived shortcut row at the bottom of the scroll content.
+- **Conflict risk on rebase**: high — `Sidebar.tsx` remains a major
+  upstream hotspot.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/components/settings/SettingsSidebarNav.tsx`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Add the new devices settings route and surface the same
+  account chrome within settings mode.
+- **What changed**:
+  - Added: `/settings/devices` to `SettingsSectionPath` +
+    `SETTINGS_NAV_ITEMS`.
+  - Added: signed-in account chrome (or sign-in button) above the
+    settings nav items.
+- **Conflict risk on rebase**: medium — settings nav is still evolving
+  upstream.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/routeTree.gen.ts`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Register `/settings/devices` in the generated TanStack
+  router manifest so typed navigation compiles.
+- **What changed**:
+  - Added: `settings.devices` import, route registration, path/id/fullPath
+    unions, and `SettingsRouteChildren` entry.
+- **Conflict risk on rebase**: medium — generated file; regenerate if
+  upstream route layout shifts.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/routes/__root.tsx`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Remove the temporary top-right sign-in overlay now that
+  sign-in lives in the sidebar/account bar.
+- **What changed**:
+  - Removed: `V3SignInOverlay` and its `V3SignInButton` import.
+  - Left the startup nudge + approval toast mounted at the layout root.
+- **Conflict risk on rebase**: medium — root layout often changes when
+  global chrome moves.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/routes/_chat.tsx`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Inject the configure-server banner at the chat layout seam.
+- **What changed**:
+  - Added: `ConfigureServerBanner` above the existing shortcut manager +
+    outlet.
+- **Conflict risk on rebase**: low — localized layout addition.
+- **Last rebase verified**: 2026-04-19
+
+**Modified V3-owned files:**
+
+### `packages/contracts/src/identity.ts`
+
+- **Modified**: 2026-04-19 (P3) — V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Define wire schemas for device list / approve / remove
+  routes.
+- **What changed**:
+  - Added: `V3DeviceListResult`, `V3ApproveDeviceInput`,
+    `V3ApproveDeviceResult`, `V3RemoveDeviceInput`, and
+    `V3RemoveDeviceResult`.
+- **Conflict risk on rebase**: low — V3-owned identity contract surface.
+- **Last rebase verified**: 2026-04-19
+
+### `packages/contracts/src/mesh/device.ts`
+
+- **Modified**: 2026-04-19 (P3) â€” new V3-owned file.
+- **V3 phase**: Phase 3 â€” device model + sidebar rewrite
+- **Reason**: Define the mesh device payload schemas called out in the
+  Phase 3 plan without coupling them to the auth bootstrap wire types.
+- **What changed**:
+  - Added: `HelloPayload`.
+  - Added: `PresenceUpdatePayload`.
+  - Re-exported: `DeviceInfo` for mesh-facing contract consumers.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/identity/http.ts`
+
+- **Modified**: 2026-04-19 (P3) — V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Add authenticated device-management routes on top of the
+  existing Google bootstrap/config routes.
+- **What changed**:
+  - Added: V3 request-context helpers that authenticate the request,
+    resolve the V3 user/device, and gate mutating routes on an already
+    approved current device.
+  - Added: online-presence derivation by joining active auth sessions to
+    `v3_device_sessions`.
+  - Added: `listDevicesRouteLayer`, `approveDeviceRouteLayer`, and
+    `removeDeviceRouteLayer`.
+- **Conflict risk on rebase**: low — V3-owned file.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/components/chat/ConfigureServerBanner.tsx`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Surface the Drive App Data "multiple devices but no server
+  URL" setup nudge inside chat routes.
+- **What changed**:
+  - Added: alert banner with setup + dismiss actions.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/components/settings/DevicesSettingsPanel.tsx`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Ship the approve/remove UI promised by the earlier pending
+  approval toast.
+- **What changed**:
+  - Added: signed-out empty state with `V3SignInButton`.
+  - Added: device list with current-device badge, online/pending badges,
+    and approve/remove buttons wired to the new API hooks.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/components/sidebar/{ArchivedSection,ChatItem,DeviceGroup,DeviceSidebar,LegacyProjectSidebar,SignedInBar}.tsx`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned files.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Break the new mesh sidebar chrome into small reusable pieces
+  without trying to rewrite the entire legacy sidebar in one pass.
+- **What changed**:
+  - Added: account bar component, device-group chrome, chat row renderer,
+    archived shortcut row, a `DeviceSidebar` entry module, and an
+    explicit `LegacyProjectSidebar` path for signed-out users.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/hooks/{useAccountState,useChatsByDevice,useDevices,useServerMode,useShouldShowConfigureBanner}.ts`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned files.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Centralize the client-side mesh/account/device state and
+  keep UI components thin.
+- **What changed**:
+  - Added: device query + approve/remove mutations.
+  - Added: account-state hook combining sign-in snapshot, drive snapshot,
+    live devices, and inferred server mode.
+  - Added: banner-visibility hook with 7-day dismissal persistence.
+  - Added: current-device chat grouping hook for the sidebar.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/hooks/{useServerMode,useShouldShowConfigureBanner}.test.ts`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned files.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Pin the new pure client-side decisions that drive the
+  sidebar and setup banner.
+- **What changed**:
+  - Added: server-mode inference tests (desktop vs loopback web vs remote
+    server-node).
+  - Added: configure-server-banner visibility tests.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/routes/settings.devices.tsx`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Register the Devices settings screen in the route tree.
+- **What changed**:
+  - Added: file route pointing at `DevicesSettingsPanel`.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/v3/ui/DeviceApprovalToast.tsx`
+
+- **Modified**: 2026-04-19 (P3) — V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Connect the pending-approval toast to the new Devices panel.
+- **What changed**:
+  - Added: toast action that navigates to `/settings/devices`.
+  - Updated: top-of-file comment now that the approve UI has shipped.
+- **Conflict risk on rebase**: low — localized V3-owned file.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/v3/ui/SignInButton.tsx`
+
+- **Modified**: 2026-04-19 (P3) — V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Update the component comment now that sign-in lives in the
+  sidebar rather than the temporary root overlay.
+- **What changed**:
+  - Updated: top-of-file docs to describe the sidebar-mounted usage.
+- **Conflict risk on rebase**: low — comment-only V3-owned change.
+- **Last rebase verified**: 2026-04-19
+
+**Test coverage**
+
+- New web hook tests: +4 (`useShouldShowConfigureBanner.test.ts`) +3
+  (`useServerMode.test.ts`).
+- `bun run --cwd apps/server typecheck` passes.
+- `bun run --cwd packages/contracts typecheck` passes.
+- `bun run --cwd apps/web typecheck` still fails only on the two
+  pre-existing web issues in `src/components/ui/input.tsx` and
+  `src/v3/auth/googleSignIn.ts`.
+
+### Phase 3 — mesh state + draft host-device plumbing
+
+This follow-up P3 slice fills in the client-side state seams that the
+initial sidebar rewrite deliberately deferred. The web app now mirrors
+derived mesh state into shared atoms (`serverMode`, `userSession`, and a
+device snapshot) at the authenticated root, and new draft sessions carry
+an optional `hostDeviceId` so future server/thread wiring can attribute
+cross-device chat history without another draft-store rewrite.
+
+**Modified upstream files:**
+
+### `apps/web/src/components/ChatView.tsx`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Stamp pull-request and worktree draft sessions with the
+  current mesh device when the user is signed in.
+- **What changed**:
+  - Added: `useMeshCurrentDeviceId()` wiring.
+  - Updated: `openOrReuseProjectDraftThread()` to preserve existing host
+    attribution and backfill missing `hostDeviceId` values on reused
+    drafts.
+- **Conflict risk on rebase**: high — `ChatView.tsx` remains a large
+  upstream hotspot.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/composerDraftStore.ts`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Extend draft-session metadata with optional host-device
+  attribution ahead of the server-side thread migration.
+- **What changed**:
+  - Added: optional persisted + hydrated `hostDeviceId` support on draft
+    sessions.
+  - Updated: draft creation, normalization, hydration, equality checks,
+    and mutable context updates to preserve host-device attribution.
+- **Conflict risk on rebase**: medium — core store file, but the change
+  is localized to draft-session metadata.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/composerDraftStore.test.ts`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Lock the new draft host-device metadata into store
+  behavior.
+- **What changed**:
+  - Added: coverage that `setProjectDraftThreadId()` stores
+    `hostDeviceId`.
+  - Added: coverage that `setDraftThreadContext()` preserves
+    `hostDeviceId` across unrelated context edits.
+- **Conflict risk on rebase**: low — test-only file.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/hooks/useDevices.ts`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Prevent stale cached device data from leaking through after
+  sign-out while the new mesh snapshot bootstrap mirrors device state.
+- **What changed**:
+  - Updated: derived return values now collapse to an empty device
+    snapshot when the user is signed out.
+- **Conflict risk on rebase**: low — localized derived-state tweak.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/hooks/useHandleNewThread.ts`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Carry host-device attribution through the main "new draft
+  thread" flow, not just the pull-request shortcut path.
+- **What changed**:
+  - Added: `useMeshCurrentDeviceId()` wiring.
+  - Updated: new and reused logical-project draft sessions now preserve
+    or backfill `hostDeviceId` alongside existing branch/worktree/env
+    context.
+- **Conflict risk on rebase**: medium — shared new-thread hook.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/routes/__root.tsx`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Bootstrap the new mesh/client derived state at the
+  authenticated app root.
+- **What changed**:
+  - Added: `MeshStateBootstrap`, mounted next to the existing
+    `ServerStateBootstrap`.
+  - Added: `useMeshSubscriptions()` import/wiring.
+- **Conflict risk on rebase**: medium — root layout still changes when
+  global bootstraps move.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/rpc/serverState.test.ts`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Cover the new shared atoms that mirror client-derived
+  server mode and user-session state.
+- **What changed**:
+  - Added: a reset/get/set test for `serverModeAtom` and
+    `userSessionAtom`.
+- **Conflict risk on rebase**: low — test-only file.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/rpc/serverState.ts`
+
+- **Modified**: 2026-04-19 (P3)
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Expose the shared state atoms the plan called out for
+  derived server mode and user-session UI state.
+- **What changed**:
+  - Added: `serverModeAtom` + `userSessionAtom`.
+  - Added: get/set/use helpers and test reset handling for both atoms.
+- **Conflict risk on rebase**: low — additive atom surface.
+- **Last rebase verified**: 2026-04-19
+
+**Modified V3-owned files:**
+
+### `apps/web/src/rpc/meshState.ts`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Centralize the mesh device snapshot in the same atom-based
+  state layer as server config.
+- **What changed**:
+  - Added: `MeshDeviceSnapshot` type, getter/setter/reset helpers, and
+    React hooks for the current device id and full snapshot.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/rpc/meshState.test.ts`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Cover the new mesh device atom state.
+- **What changed**:
+  - Added: set/get/reset coverage for the mesh device snapshot.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/rpc/meshSubscriptions.ts`
+
+- **Modified**: 2026-04-19 (P3) — new V3-owned file.
+- **V3 phase**: Phase 3 — device model + sidebar rewrite
+- **Reason**: Mirror existing hook-derived mesh/account state into the
+  shared atom layer from a single root bootstrap.
+- **What changed**:
+  - Added: `useMeshSubscriptions()` hook that publishes server mode,
+    user-session state, and mesh device snapshots.
+  - Added: signed-out reset behavior so device state clears cleanly when
+    the Google session disappears.
+- **Conflict risk on rebase**: none (V3-owned).
+- **Last rebase verified**: 2026-04-19
+
+**Test coverage**
+
+- New web tests: +1 (`rpc/serverState.test.ts`) +1 (`rpc/meshState.test.ts`) +2
+  (`composerDraftStore.test.ts`).
+- `bun run --cwd apps/web test src/rpc/serverState.test.ts src/rpc/meshState.test.ts src/composerDraftStore.test.ts src/hooks/useShouldShowConfigureBanner.test.ts src/hooks/useServerMode.test.ts`
+  passes (**77 tests**).
+- `bun run --cwd apps/web typecheck` still fails only on the two
+  pre-existing web issues in `src/components/ui/input.tsx` and
+  `src/v3/auth/googleSignIn.ts`.
+
+### Phase 4 — chat sync v1 (event store + subscribe/publish)
+
+This P4 slice wires the previously-added mesh contracts into the live
+server/runtime graph, switches thread-detail subscriptions over to the
+mesh chat stream with cursor-based gap detection, and finally carries
+`hostDeviceId` through the web store so device-grouped chat attribution
+is driven by projected thread metadata instead of the current-device
+fallback.
+
+**Modified upstream files:**
+
+### `apps/server/src/server.ts` (P4 update on top of P3)
+
+- **Modified**: 2026-04-19 (P4)
+- **V3 phase**: Phase 4 — chat sync v1
+- **Reason**: Provide the mesh runtime layers so websocket mesh RPCs can
+  resolve their services at runtime.
+- **What changed**:
+  - Added: mesh layer imports (`ChatSubscriptionManagerLive`,
+    `PresenceBroadcasterLive`, `DeviceRegistryLive`,
+    `MeshEventIngestionLive`, `MeshPublisherLive`).
+  - Added: `MeshLayerLive` composition and merged it into
+    `RuntimeDependenciesLive`.
+- **Conflict risk on rebase**: medium — `server.ts` remains a hotspot for
+  runtime layer wiring.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts`
+
+- **Modified**: 2026-04-19 (P4)
+- **V3 phase**: Phase 4 — chat sync v1
+- **Reason**: Expose mesh snapshots cheaply enough for chat replay /
+  reconnect paths.
+- **What changed**:
+  - Added: `hostDeviceId` / `lastStreamVersion` reads on projected thread
+    rows.
+  - Added: `getThreadMeshSnapshot()` that reuses projection-state rows to
+    compute `snapshotSequence` instead of materializing the full read
+    model.
+- **Conflict risk on rebase**: medium — upstream continues to evolve the
+  projection query file and its SQL row shapes.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/environmentApi.ts`
+
+- **Modified**: 2026-04-19 (P4)
+- **V3 phase**: Phase 4 — chat sync v1
+- **Reason**: Route thread-mutating user commands through the new mesh
+  publish path without changing every callsite in the UI.
+- **What changed**:
+  - Added: `dispatchCommand` wrapper that sends `thread.*` commands via
+    `mesh.publishEvent` and leaves `project.*` commands on the legacy
+    orchestration RPC.
+- **Conflict risk on rebase**: medium — small file, but it sits on a
+  core API seam upstream also touches.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/environments/runtime/service.ts`
+
+- **Modified**: 2026-04-19 (P4)
+- **V3 phase**: Phase 4 — chat sync v1
+- **Reason**: Make thread-detail subscriptions replayable and resilient to
+  dropped mesh events.
+- **What changed**:
+  - Replaced: `orchestration.subscribeThread` with `mesh.subscribeChat`
+    for retained thread-detail subscriptions.
+  - Added: per-subscription mesh cursor tracking plus restart-on-gap
+    behavior driven by the new pure gap-detection helper.
+- **Conflict risk on rebase**: medium — active runtime-connection file
+  with cached-subscription logic.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/rpc/wsRpcClient.ts`
+
+- **Modified**: 2026-04-19 (P4)
+- **V3 phase**: Phase 4 — chat sync v1
+- **Reason**: Surface the mesh RPC methods to the web runtime.
+- **What changed**:
+  - Added: `mesh.publishEvent`, `mesh.subscribeChat`, and
+    `mesh.subscribePresence` client methods.
+- **Conflict risk on rebase**: medium — RPC client surface tends to grow
+  upstream as new subscriptions are added.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/store.ts`
+
+- **Modified**: 2026-04-19 (P4)
+- **V3 phase**: Phase 4 — chat sync v1
+- **Reason**: Preserve projected thread host-device attribution all the
+  way through shell/detail snapshots and event application.
+- **What changed**:
+  - Added: `hostDeviceId` to mapped thread, thread-shell, and sidebar
+    summary state.
+  - Updated: thread equality and `thread.created` /
+    `thread.meta-updated` application paths to keep host attribution in
+    sync.
+- **Conflict risk on rebase**: high — `store.ts` is a core upstream
+  hotspot.
+- **Last rebase verified**: 2026-04-19
+
+**Modified V3-owned files:**
+
+- `apps/server/src/mesh/Layers/ChatSubscriptionManager.ts` — fixes the
+  replay/live race by buffering live events while replay runs, and makes
+  the thread→subscriber reverse index refcount-safe.
+- `apps/server/src/mesh/Layers/DeviceRegistry.ts` — stops trying to
+  self-provide `PresenceBroadcaster` so the service can be composed
+  cleanly from `server.ts`.
+- `apps/server/src/mesh/meshWsHandlers.ts` — eagerly resolves
+  `MeshPublisher` when mesh handlers are built so live orchestration
+  events are mirrored into chat subscriptions.
+- `apps/web/src/hooks/useChatsByDevice.ts` — groups chats by the
+  projected `hostDeviceId` instead of pinning everything to the current
+  device.
+- `apps/web/src/environmentApi.test.ts` — pins mesh publish routing for
+  thread commands.
+- `apps/web/src/mesh/gapDetection.ts` + `.test.ts` — pure cursor-based
+  gap detection used by reconnect handling.
