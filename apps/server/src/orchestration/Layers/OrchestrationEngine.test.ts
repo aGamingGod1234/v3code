@@ -95,6 +95,13 @@ describe("OrchestrationEngine", () => {
             detail: "historical replay should not be used during bootstrap",
           }),
         ),
+      forkThreadEvents: () =>
+        Effect.fail(
+          new PersistenceSqlError({
+            operation: "test.forkThreadEvents",
+            detail: "fork should not be called during bootstrap",
+          }),
+        ),
     };
 
     const projectionSnapshot = {
@@ -628,6 +635,13 @@ describe("OrchestrationEngine", () => {
       readAll() {
         return Stream.fromIterable(events);
       },
+      forkThreadEvents: () =>
+        Effect.fail(
+          new PersistenceSqlError({
+            operation: "test.forkThreadEvents",
+            detail: "fork should not be called in this test",
+          }),
+        ),
     };
 
     const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
@@ -854,6 +868,13 @@ describe("OrchestrationEngine", () => {
       readAll() {
         return Stream.fromIterable(events);
       },
+      forkThreadEvents: () =>
+        Effect.fail(
+          new PersistenceSqlError({
+            operation: "test.forkThreadEvents",
+            detail: "fork should not be called in this test",
+          }),
+        ),
     };
 
     let shouldFailProjection = true;

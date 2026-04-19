@@ -1629,3 +1629,328 @@ fallback.
   thread commands.
 - `apps/web/src/mesh/gapDetection.ts` + `.test.ts` — pure cursor-based
   gap detection used by reconnect handling.
+
+## Phase 6 — Fork chat (2026-04-19)
+
+P6 lands the `chat.fork` command, the `thread.forked` event, the SQL
+event-log copy that preserves source `stream_version`, the
+`mesh.forkChat` RPC, and a minimal source-side fork dialog in
+`ChatHeader`. Server invariants reject fork while the source thread has
+a `running`/`starting` provider session or a streaming message
+in-flight; the UI also disables the action when the orchestration
+session is live.
+
+**New V3-owned files (no rebase risk):**
+
+- `apps/server/src/persistence/Migrations/029_ProjectionThreadsForkLineage.ts`
+  adds `parent_chat_id`, `parent_device_id`,
+  `forked_from_stream_version`, `forked_at` columns + index on
+  `projection_threads`.
+- `apps/server/src/orchestration/decider.fork.test.ts` 5 unit tests
+  for `validateChatForkCommand` (source missing, running, starting,
+  target collision, happy path).
+- `apps/web/src/components/chat/ForkChatButton.tsx` header trigger +
+  modal dialog for picking the new title; disables when the
+  orchestration session is `running`/`starting`.
+
+**Modified upstream files:**
+
+### `packages/contracts/src/orchestration.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Add the `chat.fork` command + `thread.forked` event so
+  forking a chat is first-class in the orchestration domain.
+- **What changed**:
+  - Added: `ChatForkCommand` exported struct (sourceThreadId,
+    targetThreadId, optional targetProjectId, targetDeviceId,
+    targetTitle, targetBranch, targetWorktreePath, sourceDeviceId).
+  - Added: `chat.fork` to `DispatchableClientOrchestrationCommand` and
+    `ClientOrchestrationCommand` unions.
+  - Added: `thread.forked` to `OrchestrationEventType` literal union,
+    `ThreadForkedPayload` struct, and the matching `OrchestrationEvent`
+    discriminated-union variant.
+- **Conflict risk on rebase**: high — `OrchestrationEventType` and the
+  `OrchestrationEvent` union are upstream hotspots; new entries appended
+  at the tail to minimize collisions.
+- **Last rebase verified**: 2026-04-19
+
+### `packages/contracts/src/rpc.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Register the new `mesh.forkChat` WebSocket RPC.
+- **What changed**:
+  - Added: `MeshForkChatInput` and `MeshForkChatResult` imports from
+    `mesh/chat.ts`.
+  - Added: `WsMeshForkChatRpc` Rpc.make declaration.
+  - Added: `WsMeshForkChatRpc` entry in the `WsRpcGroup.make` call.
+- **Conflict risk on rebase**: medium — appended at the tail of the
+  mesh RPC block.
+- **Last rebase verified**: 2026-04-19
+
+### `packages/contracts/src/mesh/chat.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Surface the new `mesh.forkChat` method id, input/output
+  schemas, and rpc-schema entry.
+- **What changed**:
+  - Added: `ProjectId`, `DeviceId`, `ChatForkCommand` imports.
+  - Added: `forkChat` to `MESH_WS_METHODS`.
+  - Added: `MeshForkChatInput` and `MeshForkChatResult` schemas plus the
+    matching `MeshRpcSchemas.forkChat` entry.
+- **Conflict risk on rebase**: low — V3-owned subtree.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/Migrations.ts` (P6 update on top of P5)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Register migration 029.
+- **What changed**:
+  - Added: import of `Migration0029` from
+    `./Migrations/029_ProjectionThreadsForkLineage.ts`.
+  - Added: `[29, "ProjectionThreadsForkLineage", Migration0029]` entry
+    in `migrationEntries`.
+- **Conflict risk on rebase**: medium — append-only, but upstream may
+  claim ID 29; renumber if so.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/orchestration/decider.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Add a `chat.fork` switch case (returns invariant error so
+  callers route through the engine) and export
+  `validateChatForkCommand` for the engine + tests.
+- **What changed**:
+  - Added: `ThreadId` import.
+  - Added: `requireThreadAbsent` import (alphabetised with the other
+    invariants).
+  - Added: `case "chat.fork":` in `decideOrchestrationCommand` that
+    fails with an invariant error instructing the engine to handle the
+    command directly.
+  - Added: `ChatForkValidationResult` interface plus
+    `validateChatForkCommand` exported helper that re-validates source
+    presence, target absence, target project, no running session, and no
+    streaming message in-flight.
+- **Conflict risk on rebase**: high — switch over upstream
+  `OrchestrationCommand` union; new case appended near the tail.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/orchestration/projector.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Project the new `thread.forked` event into the in-memory
+  read model (no-op beyond schema validation; the copied source events
+  already build the target thread row).
+- **What changed**:
+  - Added: `ThreadForkedPayload` import alongside the other payloads.
+  - Added: `case "thread.forked":` that decodes the payload and returns
+    the snapshot unchanged (lineage lives on the projection_threads row,
+    not the in-memory model).
+- **Conflict risk on rebase**: high — switch over upstream event types;
+  new case appended near the tail.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/orchestration/Schemas.ts` (P6 update on top of P0)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Re-export `ThreadForkedPayload` so the projector can
+  decode it through the server-internal alias surface.
+- **What changed**:
+  - Added: `ThreadForkedPayload as ContractsThreadForkedPayloadSchema`
+    import.
+  - Added: `ThreadForkedPayload` re-export.
+- **Conflict risk on rebase**: low — V3 entries appended.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/orchestration/Layers/OrchestrationEngine.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Fork has special transactional semantics — the SQL copy
+  plus the appended `thread.forked` event must commit atomically and
+  bypass the decider/append loop. The engine intercepts `chat.fork`
+  before the standard path.
+- **What changed**:
+  - Added: `validateChatForkCommand` import.
+  - Added: `chat.fork` arm in `commandToAggregateRef` (uses
+    `targetThreadId`).
+  - Refactored: `processEnvelope` body into `processStandardEnvelope`
+    plus a new `processForkEnvelope` helper. The fork helper validates
+    against the in-memory read model, opens a SQL transaction, calls
+    `eventStore.forkThreadEvents`, then re-projects the new target
+    thread's events through the projection pipeline + in-memory read
+    model so subscribers see the forked chat.
+- **Conflict risk on rebase**: high — engine `processEnvelope` is the
+  central event dispatch loop and tends to be edited upstream.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/orchestration/Layers/ProjectionPipeline.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Persist fork lineage on the target's projection_threads
+  row when `thread.forked` arrives.
+- **What changed**:
+  - Added: `case "thread.forked":` that calls
+    `projectionThreadRepository.setForkLineage` with parent chat id,
+    parent device id, and source stream version, then refreshes the
+    row's `lastStreamVersion` + `updatedAt`.
+- **Conflict risk on rebase**: high — projection pipeline is a hotspot.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/Services/OrchestrationEventStore.ts` (P6 update on top of T3 baseline)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Declare the new `forkThreadEvents` operation on the
+  service shape so the engine can call it through DI.
+- **What changed**:
+  - Added: type imports (`CommandId`, `DeviceId`, `ThreadId`).
+  - Added: `ForkThreadEventsInput` and `ForkThreadEventsResult`
+    interfaces.
+  - Added: `forkThreadEvents` method on
+    `OrchestrationEventStoreShape`.
+- **Conflict risk on rebase**: medium — service shape is V3-extended;
+  new entries appended.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/Layers/OrchestrationEventStore.ts` (P6 update on top of T3 baseline)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Implement `forkThreadEvents`: read the source thread's
+  rows in a single ordered query, rewrite each event's
+  `payload.threadId` (and optionally project / title / branch / worktree
+  / host device on `thread.created` / `thread.meta-updated`), tag
+  `metadata.forkedFromChatId`, and append a trailing `thread.forked`
+  event at `max_stream_version + 1`. Caller wraps the call in a SQL
+  transaction.
+- **What changed**:
+  - Added: `ForkThreadEventsInput` / `ForkThreadEventsResult` imports.
+  - Added: `ForkRewrittenRow` interface,
+    `ForkRewrittenRowRequestSchema` schema, and
+    `rewritePayloadForFork` / `rewriteEventForFork` pure helpers.
+  - Added: `readThreadAllRowsForFork` (inclusive-cursor variant of
+    `readThreadStream` for fork copies).
+  - Added: `insertForkRewrittenRow` (per-row copy via SqlSchema.void).
+  - Added: `insertForkTrailingEventRow` (returns the new
+    `thread.forked` event row for in-memory projection).
+  - Added: `forkThreadEvents` shape implementation; returned from the
+    layer's service shape.
+- **Conflict risk on rebase**: medium — appended below existing
+  helpers; the existing append/read paths are untouched.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/Services/ProjectionThreads.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Expose fork lineage as an orthogonal column-level concept
+  (set/get) without mutating the public `ProjectionThread` schema (which
+  the snapshot query and event store both depend on).
+- **What changed**:
+  - Added: `ProjectionThreadForkLineage` schema +
+    `SetForkLineageInput` / `GetForkLineageInput` schemas.
+  - Added: `setForkLineage` / `getForkLineage` methods on
+    `ProjectionThreadRepositoryShape`.
+- **Conflict risk on rebase**: low — V3-extended interface.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/Layers/ProjectionThreads.ts` (P6 update on top of P4)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Implement the new `setForkLineage` / `getForkLineage`
+  methods against the migration-029 columns. The existing
+  upsert/getById/listByProjectId continue to ignore the fork columns so
+  unrelated callers stay unchanged.
+- **What changed**:
+  - Added: `Struct` import + `GetForkLineageInput`,
+    `ProjectionThreadForkLineage`, and `SetForkLineageInput` imports.
+  - Added: `ForkLineageDbRow` schema alias.
+  - Added: `setForkLineageRow` (UPDATE) and `getForkLineageRow`
+    (SELECT WHERE NOT NULL) SqlSchema queries.
+  - Added: `setForkLineage` / `getForkLineage` shape implementations
+    in the returned service.
+- **Conflict risk on rebase**: low — appended.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/persistence/Layers/OrchestrationEventStore.test.ts` (P6 update on top of T3 baseline)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Cover the new `forkThreadEvents` round-trip.
+- **What changed**:
+  - Added: `DEFAULT_PROVIDER_INTERACTION_MODE`, `MessageId`, and
+    `ThreadId` imports.
+  - Added: `forkThreadEvents copies the source stream and appends
+thread.forked` test asserting copied event count, highest source
+    stream version, the new `thread.forked` event, payload threadId
+    rewrites, and source-stream non-mutation.
+- **Conflict risk on rebase**: low — appended after the existing tests.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/orchestration/Layers/OrchestrationEngine.test.ts` (P6 update on top of T3 baseline)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Three existing engine tests build mock event stores; they
+  now need to satisfy the extended `OrchestrationEventStoreShape`.
+- **What changed**:
+  - Added: `forkThreadEvents` stub to each of the three mock stores
+    (returns a `PersistenceSqlError` since none of the existing tests
+    exercise the fork path).
+- **Conflict risk on rebase**: low — additive.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/server/src/mesh/meshWsHandlers.ts` (P6 update on top of P5)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Wire the new `mesh.forkChat` RPC handler. The handler
+  stamps the source device id from the authenticated session, dispatches
+  the `chat.fork` command through the engine, and reads back the target
+  thread shell to populate the result payload.
+- **What changed**:
+  - Added: `ChatForkCommand` and `ProjectId` type imports.
+  - Added: `OrchestrationEngineService` import + yield in the handler
+    factory.
+  - Added: `[MESH_WS_METHODS.forkChat]` handler entry.
+- **Conflict risk on rebase**: low — V3-owned subtree.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/hooks/useThreadActions.ts` (P6 update on top of T3 baseline)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Add a `forkThread` hook method that dispatches `chat.fork`
+  via the existing `orchestration.dispatchCommand` path (server engine
+  intercepts) and navigates to the new thread on success.
+- **What changed**:
+  - Added: `forkThread` callback returning the new
+    `ScopedThreadRef | null` (null on validation/dispatch failure with a
+    user-visible error toast).
+  - Added: `forkThread` to the returned hook surface.
+- **Conflict risk on rebase**: medium — `useThreadActions` is upstream
+  but additive.
+- **Last rebase verified**: 2026-04-19
+
+### `apps/web/src/components/chat/ChatHeader.tsx` (P6 update on top of P0 split)
+
+- **Modified**: 2026-04-19 (P6)
+- **V3 phase**: Phase 6 — fork chat
+- **Reason**: Inject the new `ForkChatButton` into the header action
+  cluster.
+- **What changed**:
+  - Added: `ForkChatButton` import.
+  - Added: `<ForkChatButton threadRef={...} />` rendered after
+    `GitActionsControl`.
+- **Conflict risk on rebase**: medium — header action cluster is
+  upstream-touched but the addition is additive.
+- **Last rebase verified**: 2026-04-19

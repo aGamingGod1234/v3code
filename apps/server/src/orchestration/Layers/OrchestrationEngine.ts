@@ -35,7 +35,7 @@ import {
   OrchestrationCommandPreviouslyRejectedError,
   type OrchestrationDispatchError,
 } from "../Errors.ts";
-import { decideOrchestrationCommand } from "../decider.ts";
+import { decideOrchestrationCommand, validateChatForkCommand } from "../decider.ts";
 import { createEmptyReadModel, projectEvent } from "../projector.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
@@ -62,6 +62,11 @@ function commandToAggregateRef(command: OrchestrationCommand): {
         aggregateKind: "project",
         aggregateId: command.projectId,
       };
+    case "chat.fork":
+      return {
+        aggregateKind: "thread",
+        aggregateId: command.targetThreadId,
+      };
     default:
       return {
         aggregateKind: "thread",
@@ -81,6 +86,156 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
   const commandQueue = yield* Queue.unbounded<CommandEnvelope>();
   const eventPubSub = yield* PubSub.unbounded<OrchestrationEvent>();
+
+  interface CommittedCommandResult {
+    readonly committedEvents: ReadonlyArray<OrchestrationEvent>;
+    readonly lastSequence: number;
+    readonly nextReadModel: OrchestrationReadModel;
+  }
+
+  const processStandardEnvelope = (command: OrchestrationCommand) =>
+    Effect.gen(function* () {
+      const eventBase = yield* decideOrchestrationCommand({
+        command,
+        readModel,
+      });
+      const eventBases = Array.isArray(eventBase) ? eventBase : [eventBase];
+      const result = yield* sql
+        .withTransaction(
+          Effect.gen(function* () {
+            const committedEvents: OrchestrationEvent[] = [];
+            let nextReadModel = readModel;
+
+            for (const nextEvent of eventBases) {
+              const savedEvent = yield* eventStore.append(nextEvent);
+              nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
+              yield* projectionPipeline.projectEvent(savedEvent);
+              committedEvents.push(savedEvent);
+            }
+
+            const lastSavedEvent = committedEvents.at(-1) ?? null;
+            if (lastSavedEvent === null) {
+              return yield* new OrchestrationCommandInvariantError({
+                commandType: command.type,
+                detail: "Command produced no events.",
+              });
+            }
+
+            yield* commandReceiptRepository.upsert({
+              commandId: command.commandId,
+              aggregateKind: lastSavedEvent.aggregateKind,
+              aggregateId: lastSavedEvent.aggregateId,
+              acceptedAt: lastSavedEvent.occurredAt,
+              resultSequence: lastSavedEvent.sequence,
+              status: "accepted",
+              error: null,
+            });
+
+            return {
+              committedEvents,
+              lastSequence: lastSavedEvent.sequence,
+              nextReadModel,
+            } satisfies CommittedCommandResult;
+          }),
+        )
+        .pipe(
+          Effect.catchTag("SqlError", (sqlError) =>
+            Effect.fail(
+              toPersistenceSqlError("OrchestrationEngine.processEnvelope:transaction")(sqlError),
+            ),
+          ),
+        );
+      return result;
+    });
+
+  const processForkEnvelope = (command: Extract<OrchestrationCommand, { type: "chat.fork" }>) =>
+    Effect.gen(function* () {
+      // Validate against the live in-memory read model before opening the
+      // transaction so invariant errors don't trigger SQL rollback noise.
+      const validation = yield* validateChatForkCommand({ command, readModel });
+
+      const result = yield* sql
+        .withTransaction(
+          Effect.gen(function* () {
+            // Re-read the source from the projection store too — the in-memory
+            // read model snapshot is authoritative for invariant checks but
+            // doesn't expose the per-projection pendingApprovalCount counter
+            // that the projection pipeline maintains.
+            const projectedSource = yield* projectionSnapshotQuery.getThreadShellById(
+              command.sourceThreadId,
+            );
+            if (Option.isSome(projectedSource) && projectedSource.value.hasPendingApprovals) {
+              return yield* new OrchestrationCommandInvariantError({
+                commandType: command.type,
+                detail: `Source thread '${command.sourceThreadId}' has unresolved approval requests and cannot be forked. Resolve them first.`,
+              });
+            }
+
+            const targetProjectId =
+              command.targetProjectId ?? (validation.sourceThread.projectId as ProjectId);
+            const newHostDeviceId =
+              command.targetDeviceId !== undefined ? command.targetDeviceId : undefined;
+            const forkResult = yield* eventStore.forkThreadEvents({
+              sourceThreadId: command.sourceThreadId,
+              targetThreadId: command.targetThreadId,
+              ...(targetProjectId !== validation.sourceThread.projectId
+                ? { newProjectId: targetProjectId }
+                : {}),
+              ...(command.targetTitle !== undefined ? { newTitle: command.targetTitle } : {}),
+              ...(command.targetBranch !== undefined ? { newBranch: command.targetBranch } : {}),
+              ...(command.targetWorktreePath !== undefined
+                ? { newWorktreePath: command.targetWorktreePath }
+                : {}),
+              ...(newHostDeviceId !== undefined ? { newHostDeviceId } : {}),
+              forkOccurredAt: command.createdAt,
+              forkCommandId: command.commandId,
+              parentDeviceId: validation.sourceThread.hostDeviceId as never,
+            });
+
+            // Stream the new target thread's events back through the projection
+            // pipeline + in-memory read-model so all consumers (sidebar, mesh
+            // subscribers, etc.) see the forked chat in the same shape they'd
+            // see a freshly-created one.
+            const newThreadEvents = yield* Stream.runCollect(
+              eventStore.readThreadStream(command.targetThreadId, 0, Number.MAX_SAFE_INTEGER),
+            ).pipe(Effect.map((chunk) => Array.from(chunk)));
+
+            let nextReadModel = readModel;
+            for (const event of newThreadEvents) {
+              nextReadModel = yield* projectEvent(nextReadModel, event);
+              yield* projectionPipeline.projectEvent(event);
+            }
+
+            const lastEvent = newThreadEvents.at(-1) ?? forkResult.forkedEvent;
+
+            yield* commandReceiptRepository.upsert({
+              commandId: command.commandId,
+              aggregateKind: "thread",
+              aggregateId: command.targetThreadId,
+              acceptedAt: command.createdAt,
+              resultSequence: lastEvent.sequence,
+              status: "accepted",
+              error: null,
+            });
+
+            return {
+              committedEvents: newThreadEvents,
+              lastSequence: lastEvent.sequence,
+              nextReadModel,
+            } satisfies CommittedCommandResult;
+          }),
+        )
+        .pipe(
+          Effect.catchTag("SqlError", (sqlError) =>
+            Effect.fail(
+              toPersistenceSqlError("OrchestrationEngine.processForkEnvelope:transaction")(
+                sqlError,
+              ),
+            ),
+          ),
+        );
+      return result;
+    });
 
   const processEnvelope = (envelope: CommandEnvelope): Effect.Effect<void> => {
     const dispatchStartSequence = readModel.snapshotSequence;
@@ -133,56 +288,10 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           });
         }
 
-        const eventBase = yield* decideOrchestrationCommand({
-          command: envelope.command,
-          readModel,
-        });
-        const eventBases = Array.isArray(eventBase) ? eventBase : [eventBase];
-        const committedCommand = yield* sql
-          .withTransaction(
-            Effect.gen(function* () {
-              const committedEvents: OrchestrationEvent[] = [];
-              let nextReadModel = readModel;
-
-              for (const nextEvent of eventBases) {
-                const savedEvent = yield* eventStore.append(nextEvent);
-                nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
-                yield* projectionPipeline.projectEvent(savedEvent);
-                committedEvents.push(savedEvent);
-              }
-
-              const lastSavedEvent = committedEvents.at(-1) ?? null;
-              if (lastSavedEvent === null) {
-                return yield* new OrchestrationCommandInvariantError({
-                  commandType: envelope.command.type,
-                  detail: "Command produced no events.",
-                });
-              }
-
-              yield* commandReceiptRepository.upsert({
-                commandId: envelope.command.commandId,
-                aggregateKind: lastSavedEvent.aggregateKind,
-                aggregateId: lastSavedEvent.aggregateId,
-                acceptedAt: lastSavedEvent.occurredAt,
-                resultSequence: lastSavedEvent.sequence,
-                status: "accepted",
-                error: null,
-              });
-
-              return {
-                committedEvents,
-                lastSequence: lastSavedEvent.sequence,
-                nextReadModel,
-              } as const;
-            }),
-          )
-          .pipe(
-            Effect.catchTag("SqlError", (sqlError) =>
-              Effect.fail(
-                toPersistenceSqlError("OrchestrationEngine.processEnvelope:transaction")(sqlError),
-              ),
-            ),
-          );
+        const committedCommand =
+          envelope.command.type === "chat.fork"
+            ? yield* processForkEnvelope(envelope.command)
+            : yield* processStandardEnvelope(envelope.command);
 
         readModel = committedCommand.nextReadModel;
         for (const [index, event] of committedCommand.committedEvents.entries()) {
