@@ -1954,3 +1954,258 @@ thread.forked` test asserting copied event count, highest source
 - **Conflict risk on rebase**: medium — header action cluster is
   upstream-touched but the addition is additive.
 - **Last rebase verified**: 2026-04-19
+
+## Phase 7 — Web app cloud mode (2026-04-20)
+
+P7 delivers the cloud-mode variant of `apps/web`: a `VITE_V3_CLOUD_MODE`
+build flag, an `/app/*` static route on the server node that serves the
+variant bundle, a browser-hosted Google sign-in redirect flow, a
+GitHubRepoBrowser component for the "no local filesystem" case, and a
+Cloudflare Pages deploy template for operators who want the bundle on
+its own hostname. All deliverables are additive; the legacy Electron +
+pairing flow is untouched.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `apps/web/src/build-flags.ts` (+ `.test.ts`) — `IS_CLOUD_MODE`,
+  `IS_HOST_CAPABLE_BUILD`, `CLOUD_MODE_BASE_PATH` constants fed from
+  `import.meta.env.VITE_V3_CLOUD_MODE`.
+- `apps/web/src/v3/cloudMode.ts` — `useIsCloudMode` / `isCloudBrowser`
+  helpers for downstream consumers.
+- `apps/web/src/v3/ui/CloudSignInBootstrap.tsx` — one-shot component
+  mounted in `__root.tsx` that consumes the post-callback cookies left
+  by `/api/auth/google/callback` and forwards the Drive access token
+  into `captureDriveAppDataSnapshot`.
+- `apps/web/src/components/cloudMode/{GitHubRepoBrowser.tsx,githubApi.ts,githubApi.test.ts,githubTokenStore.ts,githubTokenStore.test.ts,index.ts}` —
+  GitHub repo picker used when cloud-mode users need to supply a
+  working directory without a local filesystem.
+- `apps/server/src/identity/browserGoogleOAuth.ts` (+ `.test.ts`) —
+  PKCE + HMAC-signed envelope utilities for the browser OAuth flow,
+  plus `buildGoogleAuthorizeUrl` / `exchangeAuthorizationCode` /
+  `sanitizeReturnTo` helpers.
+- `deploy/cloudflare-pages/{README.md,wrangler.toml}` — Cloudflare
+  Pages deploy template for the cloud-mode bundle.
+- `scripts/build-web-cloud.ts` — cross-platform helper that sets
+  `VITE_V3_CLOUD_MODE=1` and runs `vite build --outDir dist-cloud`.
+- `apps/web/public/_redirects` — SPA fallback rules for
+  Cloudflare Pages / Netlify. Static content so no rebase risk.
+
+**Modified upstream files (each needs MESH_CHANGES review on rebase):**
+
+### `apps/web/vite.config.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Teach the bundler about the `VITE_V3_CLOUD_MODE` flag so
+  `apps/web/src/build-flags.ts` can dead-code-eliminate Electron-only
+  branches, and set `base` to `/app/` when the flag is on so the
+  assets render correctly under the server-node's `/app/*` route.
+- **What changed**:
+  - Added: `cloudModeRaw` / `isCloudMode` / `cloudModeBase` /
+    `baseForBuild` at the top of the module.
+  - Added: `"import.meta.env.VITE_V3_CLOUD_MODE"` +
+    `"import.meta.env.VITE_V3_CLOUD_MODE_BASE"` entries under
+    `define`.
+  - Added: top-level `base: baseForBuild`.
+- **Conflict risk on rebase**: low — additions are at module top and
+  inside the existing `define`/config objects. Upstream keeps vite
+  config mostly static.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/package.json`
+
+- **Modified**: 2026-04-20 (P7) — no change. (The `build:cloud` script
+  lives at the monorepo root as `build:web-cloud` so upstream's
+  `apps/web/package.json` is left alone; rebase risk stays at zero.)
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/vite-env.d.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Type the new `VITE_V3_CLOUD_MODE` env var so TS consumers
+  of `import.meta.env.VITE_V3_CLOUD_MODE` compile cleanly.
+- **What changed**:
+  - Added: `readonly VITE_V3_CLOUD_MODE: string;` on
+    `ImportMetaEnv`.
+- **Conflict risk on rebase**: low — interface member addition.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/main.tsx`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Strip the `/app` base prefix from `window.location`
+  before TanStack Router reads it, so deep-link refreshes on a cloud
+  bundle land on the right route. The router itself never sees the
+  base path — the static server route returns `index.html` for SPA
+  fallbacks under `/app/*`.
+- **What changed**:
+  - Added: import of `CLOUD_MODE_BASE_PATH` + `IS_CLOUD_MODE` from
+    `./build-flags`.
+  - Added: pre-router URL rewrite block that calls
+    `window.history.replaceState` when the path starts with
+    `CLOUD_MODE_BASE_PATH`.
+  - Modified: comment on the `history` constant to describe the new
+    browser-history path in cloud mode.
+- **Conflict risk on rebase**: low — additive block above the existing
+  `history` constant.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/routes/__root.tsx`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Mount the new `V3CloudSignInBootstrap` so browser
+  sessions pick up the cookies that `/api/auth/google/callback` drops
+  on redirect-back.
+- **What changed**:
+  - Added: `import { V3CloudSignInBootstrap } from "../v3/ui/CloudSignInBootstrap";`
+  - Added: `<V3CloudSignInBootstrap />` inside the authenticated
+    layout alongside `V3StartupSignInNudge`.
+- **Conflict risk on rebase**: low — one import + one tag.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/routes/pair.tsx`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Loopback pairing is a single-device flow; in cloud mode
+  the user must sign in via Google, so we redirect `/pair` → `/` so
+  the `V3SignInButton` + nudge surface drives the flow instead.
+- **What changed**:
+  - Added: `import { IS_CLOUD_MODE } from "../build-flags";`
+  - Added: `if (IS_CLOUD_MODE) throw redirect({ to: "/", replace: true });`
+    inside `beforeLoad`.
+- **Conflict risk on rebase**: low — additive `if` branch.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/v3/auth/googleSignIn.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Add the browser (cloud-mode) sign-in path. `startV3GoogleSignIn`
+  now branches on `IS_CLOUD_MODE` and navigates the browser to the
+  server-hosted `/api/auth/google/authorize` redirect. Adds
+  `startV3GoogleSignInBrowser`, `consumeBrowserSignInCookies`, and
+  `consumeBrowserDriveAccessToken` helpers.
+- **What changed**:
+  - Added: `IS_CLOUD_MODE` import.
+  - Added: cloud-mode branch at the top of `startV3GoogleSignIn`.
+  - Added: `startV3GoogleSignInBrowser`, `consumeBrowserSignInCookies`,
+    `consumeBrowserDriveAccessToken`, and helper cookie accessors.
+  - Modified: top-of-file comment to document the browser flow.
+- **Conflict risk on rebase**: low — V3-owned module; P1d already
+  introduced this file.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/config.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Add `googleClientSecret`, `serverPublicUrl`, and
+  `cloudModeStaticDir` fields on `ServerConfigShape` so the browser
+  OAuth flow + `/app/*` static route have the data they need. Add a
+  `resolveCloudModeStaticDir` Effect that mirrors `resolveStaticDir`
+  for the new bundle.
+- **What changed**:
+  - Added: three new fields on `ServerConfigShape`.
+  - Added: three `undefined` defaults in `ServerConfig.layerTest`.
+  - Added: exported `resolveCloudModeStaticDir` Effect.
+- **Conflict risk on rebase**: medium — `ServerConfigShape` is a
+  hotspot. Upstream additions in the same shape need to be merged
+  around these three fields.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/cli.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Wire the three new config fields through the CLI's
+  env-var + TOML precedence resolver so both desktop-mode and
+  server-node operators can enable browser sign-in / cloud hosting.
+- **What changed**:
+  - Added: `resolveCloudModeStaticDir` import from `./config.ts`.
+  - Added: `googleClientSecret`, `serverPublicUrl`, and
+    `cloudModeStaticDir` entries in `EnvServerConfig`.
+  - Added: `resolvedCloudStaticDir` branch inside `resolveServerConfig`
+    that prefers the env override and falls back to the resolver.
+  - Added: `googleClientSecret`, `serverPublicUrl`, and
+    `cloudModeStaticDir` into the returned `ServerConfigShape`.
+- **Conflict risk on rebase**: medium — the Env/Config assembly block
+  gets touched by upstream regularly, but the additions are purely
+  additive.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/http.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Serve the cloud-mode bundle at `/app/*` with SPA fallback
+  to `index.html`, separate from the legacy `staticAndDevRouteLayer`
+  at `*`. Cache-controls tune TTLs for hashed assets vs `index.html`
+  so a redeploy propagates immediately.
+- **What changed**:
+  - Added: `cloudModeStaticRouteLayer` exported alongside the existing
+    static routes.
+  - Added: internal `CLOUD_MODE_PATH_PREFIX` + `decodeCloudModeRelativePath`
+    helpers.
+- **Conflict risk on rebase**: medium — upstream static/dev route is
+  in the same file but the new layer is additive and registered
+  _before_ the `*` catch-all in `server.ts`.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/server.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Register the two new OAuth routes and the
+  `cloudModeStaticRouteLayer` in `makeRoutesLayer`.
+- **What changed**:
+  - Added: `cloudModeStaticRouteLayer` import from `./http.ts`.
+  - Added: `googleAuthorizeRouteLayer` + `googleCallbackRouteLayer`
+    imports from `./identity/http.ts`.
+  - Added: all three layers into `Layer.mergeAll(...)`.
+- **Conflict risk on rebase**: low — additive imports + list
+  extension.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/identity/http.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Add the two browser-mode Google sign-in routes:
+  `GET /api/auth/google/authorize` + `GET /api/auth/google/callback`.
+  Both share the existing `DeviceApprovalService` / `UserRepository` /
+  `SessionCredentialService` machinery so the resulting session looks
+  identical to the desktop bootstrap.
+- **What changed**:
+  - Added: imports for `DeviceCapability`, `DeviceId`, `DeviceKind`,
+    `DevicePlatform`, `ServerSecretStore`, and every helper from
+    `./browserGoogleOAuth.ts`.
+  - Added: constants for the short-lived OAuth flow secret and the
+    user-input length caps.
+  - Added: `pickRequestOrigin`, `extractQueryParam`, `decodeList`,
+    `truncate`, `flowVerificationToAuthError`,
+    `googleTokenExchangeToAuthError` helpers.
+  - Added: `googleAuthorizeRouteLayer` and `googleCallbackRouteLayer`
+    exported at the bottom of the module.
+- **Conflict risk on rebase**: low — V3-owned file; appended at EOF.
+- **Last rebase verified**: 2026-04-20
+
+## Phase 7 — known gaps / deferred
+
+- **Runtime TLS bridging on the redirect URI.** The cloud flow
+  computes `redirectUri` from `serverPublicUrl` (with request origin
+  fallback). The operator must keep the Google Cloud Console's
+  registered redirect URI in sync; the wizard surfaces this as a
+  callout in P2d.
+- **GitHub App flow.** `GitHubRepoBrowser` currently uses a PAT stored
+  in `localStorage`. P8 replaces it with the server-node-mediated
+  installation-token flow (D8), at which point the PAT path in
+  `githubTokenStore.ts` can be deleted.
+- **Drive App Data refresh.** The browser consumes a one-time Drive
+  access token delivered on the callback cookie. Refreshing the token
+  in long-lived cloud-mode sessions is deferred to P7.1 (out of
+  scope). Users who lose the token just see the "configure server"
+  banner reappear on next sign-in.

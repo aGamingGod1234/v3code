@@ -235,6 +235,10 @@ const authTestLayer = ServerAuthLive.pipe(
   Layer.provide(ServerSecretStoreLive),
 );
 
+// V3 Phase 7 — the browser Google sign-in routes yield `ServerSecretStore`
+// directly to derive the OAuth flow signing key. Re-expose the live layer
+// here (same pattern as `server.ts`'s `V3IdentityLayerLive`) so the test
+// router seam satisfies the route context without spinning up a real FS.
 const v3IdentityTestLayer = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
@@ -242,7 +246,7 @@ const v3IdentityTestLayer = Layer.mergeAll(
   DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
   UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
-).pipe(Layer.provide(SqlitePersistenceMemory));
+).pipe(Layer.provide(SqlitePersistenceMemory), Layer.provideMerge(ServerSecretStoreLive));
 
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
@@ -406,6 +410,9 @@ const buildAppUnderTest = (options?: {
       googleClientId: undefined,
       authorizedEmails: [],
       postgresUrl: undefined,
+      googleClientSecret: undefined,
+      serverPublicUrl: undefined,
+      cloudModeStaticDir: undefined,
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);

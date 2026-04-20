@@ -83,6 +83,28 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   // refuses to construct when this is undefined. In desktop / web
   // modes the SQLite layer ignores it entirely.
   readonly postgresUrl: string | undefined;
+  // V3 Phase 7 — browser Google sign-in + cloud-mode hosting.
+  //
+  // `googleClientSecret`: the OAuth 2.0 client secret that Google hands
+  // out when you register a "Web application" client. Required only for
+  // the *browser* sign-in flow; the desktop flow uses PKCE without a
+  // secret. Populated from `V3CODE_GOOGLE_CLIENT_SECRET` env or
+  // `[auth].google_client_secret` in `config.toml`.
+  //
+  // `serverPublicUrl`: the externally-reachable origin of this server
+  // (e.g. `https://v3.agaminggod.com`). Used to build the OAuth
+  // `redirect_uri` so Google calls back to the server-node instead of
+  // an Electron deep-link. Populated from `V3CODE_SERVER_PUBLIC_URL`
+  // env or `[server].public_url` in `config.toml`.
+  //
+  // `cloudModeStaticDir`: directory containing a pre-built cloud-mode
+  // web bundle (`VITE_V3_CLOUD_MODE=1 vite build --outDir dist-cloud`).
+  // When set, the server mounts its contents at `/app/*` in addition to
+  // the existing `staticDir` at `/`. Populated from
+  // `V3CODE_CLOUD_MODE_STATIC_DIR` env or the monorepo fallback.
+  readonly googleClientSecret: string | undefined;
+  readonly serverPublicUrl: string | undefined;
+  readonly cloudModeStaticDir: string | undefined;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -186,6 +208,9 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           googleClientId: undefined,
           authorizedEmails: [],
           postgresUrl: undefined,
+          googleClientSecret: undefined,
+          serverPublicUrl: undefined,
+          cloudModeStaticDir: undefined,
         } satisfies ServerConfigShape;
       }),
     );
@@ -208,6 +233,51 @@ export const resolveStaticDir = Effect.fn(function* () {
   );
   if (monorepoStat) {
     return monorepoClient;
+  }
+  return undefined;
+});
+
+/**
+ * V3 Phase 7 — resolve the cloud-mode static directory.
+ *
+ * Resolution order:
+ *   1. `V3CODE_CLOUD_MODE_STATIC_DIR` (set by operator / bundler).
+ *   2. `<server-bundle>/client-cloud/` — how we ship cloud assets
+ *      alongside the electron bundle.
+ *   3. Monorepo fallback `apps/web/dist-cloud/` for local dev.
+ *
+ * Returns `undefined` when no build has been produced yet — the server
+ * then falls through to its legacy static behaviour for `/app`
+ * requests, responding with a 503 so the operator can deploy or build
+ * the bundle.
+ */
+export const resolveCloudModeStaticDir = Effect.fn(function* () {
+  const { join, resolve } = yield* Path.Path;
+  const { exists } = yield* FileSystem.FileSystem;
+  const override = process.env.V3CODE_CLOUD_MODE_STATIC_DIR?.trim();
+  if (override && override.length > 0) {
+    const explicitStat = yield* exists(join(override, "index.html")).pipe(
+      Effect.orElseSucceed(() => false),
+    );
+    if (explicitStat) {
+      return resolve(override);
+    }
+  }
+
+  const bundledCloud = resolve(join(import.meta.dirname, "client-cloud"));
+  const bundledStat = yield* exists(join(bundledCloud, "index.html")).pipe(
+    Effect.orElseSucceed(() => false),
+  );
+  if (bundledStat) {
+    return bundledCloud;
+  }
+
+  const monorepoCloud = resolve(join(import.meta.dirname, "../../web/dist-cloud"));
+  const monorepoStat = yield* exists(join(monorepoCloud, "index.html")).pipe(
+    Effect.orElseSucceed(() => false),
+  );
+  if (monorepoStat) {
+    return monorepoCloud;
   }
   return undefined;
 });

@@ -40,6 +40,7 @@
     "build": "turbo run build",
     "build:marketing": "turbo run build --filter=@v3tools/marketing",
     "build:desktop": "turbo run build --filter=@v3tools/desktop --filter=t3",
+    "build:web-cloud": "node scripts/build-web-cloud.ts",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives",
     "test": "turbo run test",

@@ -90,6 +90,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
     }),
   );
@@ -155,6 +158,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
     }),
   );
@@ -170,6 +176,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -224,6 +233,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
     }),
   );
@@ -296,6 +308,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
       assert.equal(join(baseDir, "dev"), resolved.stateDir);
     }),
@@ -364,6 +379,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -420,6 +438,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
     }),
   );
@@ -487,6 +508,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
     }),
   );
@@ -549,6 +573,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
       });
     }),
   );
