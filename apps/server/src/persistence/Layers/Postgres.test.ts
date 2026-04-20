@@ -52,6 +52,9 @@ const makeConfig = (overrides: Partial<ServerConfigShape>): ServerConfigShape =>
     googleClientId: undefined,
     authorizedEmails: [],
     postgresUrl: undefined,
+    googleClientSecret: undefined,
+    serverPublicUrl: undefined,
+    cloudModeStaticDir: undefined,
     ...overrides,
   }) satisfies ServerConfigShape;
 

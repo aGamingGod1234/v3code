@@ -4,6 +4,7 @@ import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 import { ServerConfig } from "./config.ts";
 import {
   attachmentsRouteLayer,
+  cloudModeStaticRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
   serverEnvironmentRouteLayer,
@@ -68,7 +69,9 @@ import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import {
   approveDeviceRouteLayer,
+  googleAuthorizeRouteLayer,
   googleBootstrapRouteLayer,
+  googleCallbackRouteLayer,
   googleConfigRouteLayer,
   listDevicesRouteLayer,
   removeDeviceRouteLayer,
@@ -240,6 +243,13 @@ const AuthLayerLive = ServerAuthLive.pipe(
 // V3 identity layer (Phase 1+). Additive to AuthLayerLive; does not touch
 // ServerAuth's existing shape. Provides Google ID-token verification, user /
 // device repositories, and the device approval service + bus.
+//
+// P7 addition: the browser Google sign-in routes use `ServerSecretStore`
+// to derive the short-lived OAuth flow signing key, so the same live
+// secret-store layer the auth module uses is threaded in *and re-exposed*
+// here via `provideMerge`. The auth module still scopes its own copy
+// internally via `Layer.provide`, so the two layers are independent
+// consumers of the same (idempotent) file-backed store.
 const V3IdentityLayerLive = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
@@ -247,7 +257,7 @@ const V3IdentityLayerLive = Layer.mergeAll(
   DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
   UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
-).pipe(Layer.provideMerge(PersistenceLayerLive));
+).pipe(Layer.provideMerge(PersistenceLayerLive), Layer.provideMerge(ServerSecretStoreLive));
 
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(ProviderLayerLive),
@@ -303,7 +313,9 @@ export const makeRoutesLayer = Layer.mergeAll(
   authSessionRouteLayer,
   authWebSocketTokenRouteLayer,
   approveDeviceRouteLayer,
+  googleAuthorizeRouteLayer,
   googleBootstrapRouteLayer,
+  googleCallbackRouteLayer,
   googleConfigRouteLayer,
   listDevicesRouteLayer,
   removeDeviceRouteLayer,
@@ -313,6 +325,9 @@ export const makeRoutesLayer = Layer.mergeAll(
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
   serverEnvironmentRouteLayer,
+  // V3 Phase 7 — cloud-mode bundle at `/app/*`. Registered before the
+  // `*` catch-all so HttpRouter's prefix match picks it up.
+  cloudModeStaticRouteLayer,
   staticAndDevRouteLayer,
   websocketRpcRouteLayer,
 ).pipe(Layer.provide(browserApiCorsLayer));

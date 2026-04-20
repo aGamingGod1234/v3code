@@ -79,6 +79,9 @@ const makeCliTestServerConfig = (baseDir: string) =>
       googleClientId: undefined,
       authorizedEmails: [],
       postgresUrl: undefined,
+      googleClientSecret: undefined,
+      serverPublicUrl: undefined,
+      cloudModeStaticDir: undefined,
     } satisfies ServerConfigShape;
   });
 

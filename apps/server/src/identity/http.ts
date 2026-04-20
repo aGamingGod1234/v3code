@@ -1,6 +1,10 @@
 import {
   AuthSessionId,
+  DeviceCapability,
+  DeviceId,
   DeviceInfo,
+  DeviceKind,
+  DevicePlatform,
   GoogleBootstrapInput,
   GoogleBootstrapResult,
   GoogleClientPublicConfig,
@@ -22,7 +26,23 @@ import { deriveAuthClientMetadata } from "../auth/utils.ts";
 import { AuthError, ServerAuth } from "../auth/Services/ServerAuth.ts";
 import { respondToAuthError } from "../auth/http.ts";
 import { SessionCredentialService } from "../auth/Services/SessionCredentialService.ts";
+import { ServerSecretStore } from "../auth/Services/ServerSecretStore.ts";
 import { ServerConfig } from "../config.ts";
+import {
+  buildGoogleAuthorizeUrl,
+  exchangeAuthorizationCode,
+  flowExpiresAt,
+  generateNonce,
+  generatePkcePair,
+  GoogleTokenExchangeError,
+  OAUTH_FLOW_COOKIE_NAME,
+  OAuthFlowVerificationError,
+  resolveRedirectUri,
+  sanitizeReturnTo,
+  signFlowEnvelope,
+  verifyFlowEnvelope,
+  type OAuthFlowEnvelope,
+} from "./browserGoogleOAuth.ts";
 import { DeviceApprovalService } from "./Services/DeviceApprovalService.ts";
 import { DeviceRepository } from "./Services/DeviceRepository.ts";
 import { DeviceSessionRepository } from "./Services/DeviceSessionRepository.ts";
@@ -30,6 +50,12 @@ import { GoogleIdentityError } from "./Errors.ts";
 import { GoogleIdentityService } from "./Services/GoogleIdentityService.ts";
 import { UserContextResolver } from "./Services/UserContextResolver.ts";
 import { UserRepository } from "./Services/UserRepository.ts";
+
+const OAUTH_FLOW_SECRET_NAME = "v3-google-oauth-flow-key";
+const OAUTH_FLOW_SECRET_BYTES = 32;
+const MAX_DEVICE_NAME_LENGTH = 120;
+const MAX_RETURN_TO_LENGTH = 512;
+const MAX_APP_VERSION_LENGTH = 32;
 
 // --- helpers ---------------------------------------------------------------
 
@@ -486,5 +512,440 @@ export const removeDeviceRouteLayer = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe(Schema.encodeSync(V3RemoveDeviceResult)(body), {
       status: 200,
     });
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+// ---------------------------------------------------------------------------
+// V3 Phase 7 — browser Google sign-in (cloud-mode web app).
+//
+// The desktop flow (P1d) uses Electron's PKCE-over-system-browser dance and
+// calls `POST /api/auth/google/bootstrap` directly with the id_token it
+// receives on its custom-scheme callback. Browsers cannot hold a Google OAuth
+// client secret and cannot register a custom URI scheme, so the cloud-mode
+// bundle delegates to a server-hosted redirect-based flow:
+//
+//     GET /api/auth/google/authorize   → redirect to Google consent
+//     GET /api/auth/google/callback    → code exchange + bootstrap + redirect back
+//
+// Both routes reuse the existing device-approval + session-credential
+// machinery, so `mesh.*` RPCs and device listings pick up the browser
+// session without any additional wiring.
+
+const pickRequestOrigin = Effect.gen(function* () {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const urlOpt = HttpServerRequest.toURL(request);
+  if (Option.isNone(urlOpt)) {
+    return "http://localhost";
+  }
+  return urlOpt.value.origin;
+});
+
+const extractQueryParam = (
+  request: HttpServerRequest.HttpServerRequest,
+  name: string,
+): string | null => {
+  const urlOpt = HttpServerRequest.toURL(request);
+  if (Option.isNone(urlOpt)) return null;
+  return urlOpt.value.searchParams.get(name);
+};
+
+const truncate = (input: string | null, limit: number): string =>
+  input === null ? "" : input.slice(0, limit);
+
+const decodeList = (input: string | null): ReadonlyArray<string> => {
+  if (!input) return [];
+  return input
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+};
+
+export const googleAuthorizeRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/auth/google/authorize",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const config = yield* ServerConfig;
+    if (!config.googleClientId || config.googleClientId.length === 0) {
+      return HttpServerResponse.text(
+        "Google sign-in is not configured on this server (V3CODE_GOOGLE_CLIENT_ID unset).",
+        { status: 500 },
+      );
+    }
+    if (!config.googleClientSecret || config.googleClientSecret.length === 0) {
+      return HttpServerResponse.text(
+        "Browser Google sign-in requires V3CODE_GOOGLE_CLIENT_SECRET (or [auth].google_client_secret in config.toml).",
+        { status: 500 },
+      );
+    }
+
+    const rawDeviceId = extractQueryParam(request, "device_id");
+    if (!rawDeviceId) {
+      return HttpServerResponse.text("Missing device_id query parameter.", { status: 400 });
+    }
+    const rawPlatform = extractQueryParam(request, "platform") ?? "web";
+    const rawKind = extractQueryParam(request, "kind") ?? "browser";
+    const rawCapabilities = decodeList(extractQueryParam(request, "capabilities"));
+    const rawDeviceName = truncate(
+      extractQueryParam(request, "device_name"),
+      MAX_DEVICE_NAME_LENGTH,
+    );
+    const rawReturnTo = truncate(extractQueryParam(request, "return_to"), MAX_RETURN_TO_LENGTH);
+    const rawAppVersion = truncate(
+      extractQueryParam(request, "app_version") ?? "0.0.0-browser",
+      MAX_APP_VERSION_LENGTH,
+    );
+    const loginHint = extractQueryParam(request, "login_hint") ?? undefined;
+
+    const deviceIdOption = Schema.decodeUnknownOption(DeviceId)(rawDeviceId);
+    if (Option.isNone(deviceIdOption)) {
+      return HttpServerResponse.text("Invalid device_id.", { status: 400 });
+    }
+    const platformOption = Schema.decodeUnknownOption(DevicePlatform)(rawPlatform);
+    if (Option.isNone(platformOption)) {
+      return HttpServerResponse.text(`Unsupported platform '${rawPlatform}'.`, { status: 400 });
+    }
+    const kindOption = Schema.decodeUnknownOption(DeviceKind)(rawKind);
+    if (Option.isNone(kindOption)) {
+      return HttpServerResponse.text(`Unsupported device kind '${rawKind}'.`, { status: 400 });
+    }
+    const capabilityOptions = rawCapabilities.map((entry) =>
+      Schema.decodeUnknownOption(DeviceCapability)(entry),
+    );
+    if (capabilityOptions.some((entry) => Option.isNone(entry))) {
+      return HttpServerResponse.text("Unsupported capability in capabilities list.", {
+        status: 400,
+      });
+    }
+    const validCapabilities = capabilityOptions
+      .flatMap((opt) => (Option.isSome(opt) ? [opt.value] : []))
+      .filter((cap, index, self) => self.indexOf(cap) === index);
+
+    const origin = yield* pickRequestOrigin;
+    const redirectUri = resolveRedirectUri({
+      publicUrl: config.serverPublicUrl,
+      requestOrigin: origin,
+    });
+    const resolvedReturnTo = sanitizeReturnTo(rawReturnTo, origin);
+    const deviceName =
+      rawDeviceName.trim().length > 0 ? rawDeviceName.trim() : `V3 Browser (${rawPlatform})`;
+
+    const secretStore = yield* ServerSecretStore;
+    const flowKey = yield* secretStore
+      .getOrCreateRandom(OAUTH_FLOW_SECRET_NAME, OAUTH_FLOW_SECRET_BYTES)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to access OAuth flow secret.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const { verifier, challenge } = generatePkcePair();
+    const nonce = generateNonce();
+    const nowMs = yield* DateTime.now.pipe(Effect.map((value) => DateTime.toEpochMillis(value)));
+    const nowSeconds = Math.floor(nowMs / 1000);
+    const envelope: OAuthFlowEnvelope = {
+      v: 1,
+      verifier,
+      nonce,
+      deviceId: deviceIdOption.value,
+      deviceName,
+      platform: platformOption.value,
+      kind: kindOption.value,
+      capabilities: validCapabilities.length > 0 ? validCapabilities : ["view_only"],
+      appVersion: rawAppVersion,
+      returnTo: resolvedReturnTo,
+      exp: flowExpiresAt(nowSeconds),
+    };
+    const signed = signFlowEnvelope(envelope, flowKey);
+
+    const googleUrl = buildGoogleAuthorizeUrl({
+      clientId: config.googleClientId,
+      redirectUri,
+      codeChallenge: challenge,
+      state: signed,
+      ...(loginHint !== undefined ? { loginHint } : {}),
+    });
+
+    const redirectResponse = HttpServerResponse.empty({ status: 302 }).pipe(
+      HttpServerResponse.setHeader("Location", googleUrl),
+    );
+    return yield* HttpServerResponse.setCookie(OAUTH_FLOW_COOKIE_NAME, signed, {
+      httpOnly: true,
+      path: "/api/auth/google",
+      sameSite: "lax",
+      maxAge: 600,
+    })(redirectResponse).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Failed to set OAuth flow cookie.",
+            status: 500,
+            cause,
+          }),
+      ),
+    );
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+const flowVerificationToAuthError = (error: OAuthFlowVerificationError): AuthError =>
+  new AuthError({
+    message:
+      error.reason === "expired"
+        ? "Your sign-in took too long — please try again."
+        : "Could not verify the sign-in flow.",
+    status: 400,
+    cause: error,
+  });
+
+const googleTokenExchangeToAuthError = (error: GoogleTokenExchangeError): AuthError =>
+  new AuthError({
+    message: "Google rejected the sign-in code exchange.",
+    status: 500,
+    cause: error,
+  });
+
+const cookieWriteError = new AuthError({
+  message: "Failed to set response cookie.",
+  status: 500,
+});
+
+export const googleCallbackRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/auth/google/callback",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const config = yield* ServerConfig;
+    if (!config.googleClientId || !config.googleClientSecret) {
+      return HttpServerResponse.text("Google sign-in is not fully configured on this server.", {
+        status: 500,
+      });
+    }
+
+    const stateParam = extractQueryParam(request, "state");
+    const codeParam = extractQueryParam(request, "code");
+    const errorParam = extractQueryParam(request, "error");
+    if (errorParam) {
+      return HttpServerResponse.text(`Google declined the sign-in: ${errorParam}`, { status: 400 });
+    }
+    if (!stateParam || !codeParam) {
+      return HttpServerResponse.text("Callback missing code or state.", { status: 400 });
+    }
+
+    const secretStore = yield* ServerSecretStore;
+    const flowKey = yield* secretStore
+      .getOrCreateRandom(OAUTH_FLOW_SECRET_NAME, OAUTH_FLOW_SECRET_BYTES)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to access OAuth flow secret.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const nowMs = yield* DateTime.now.pipe(Effect.map((value) => DateTime.toEpochMillis(value)));
+    const envelope = yield* Effect.try({
+      try: () => verifyFlowEnvelope(stateParam, flowKey, Math.floor(nowMs / 1000)),
+      catch: (cause) =>
+        cause instanceof OAuthFlowVerificationError
+          ? flowVerificationToAuthError(cause)
+          : new AuthError({
+              message: "Invalid sign-in state.",
+              status: 400,
+              cause,
+            }),
+    });
+
+    const origin = yield* pickRequestOrigin;
+    const redirectUri = resolveRedirectUri({
+      publicUrl: config.serverPublicUrl,
+      requestOrigin: origin,
+    });
+
+    const tokens = yield* Effect.tryPromise({
+      try: () =>
+        exchangeAuthorizationCode({
+          clientId: config.googleClientId as string,
+          clientSecret: config.googleClientSecret as string,
+          code: codeParam,
+          codeVerifier: envelope.verifier,
+          redirectUri,
+          fetchImpl: fetch,
+        }),
+      catch: (cause) =>
+        cause instanceof GoogleTokenExchangeError
+          ? googleTokenExchangeToAuthError(cause)
+          : new AuthError({
+              message: "Google token exchange failed.",
+              status: 500,
+              cause,
+            }),
+    });
+
+    const google = yield* GoogleIdentityService;
+    const verified = yield* google
+      .verifyIdToken(tokens.id_token)
+      .pipe(Effect.mapError(googleErrorToAuthError));
+
+    if (!isEmailAuthorized(verified, config.authorizedEmails)) {
+      return yield* new AuthError({
+        message: `This server node is not configured to accept sign-in from ${verified.email}.`,
+        status: 403,
+      });
+    }
+
+    const now = yield* DateTime.now;
+    const userId = UserId.make(
+      Crypto.createHash("sha256")
+        .update(`v3-user:${verified.googleSub}`)
+        .digest("hex")
+        .slice(0, 32),
+    );
+    const users = yield* UserRepository;
+    const userRecord = yield* users
+      .upsertFromGoogle({
+        id: userId,
+        googleSub: verified.googleSub,
+        email: verified.email,
+        displayName: verified.displayName,
+        avatarUrl: verified.avatarUrl,
+        now,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to persist Google-authenticated user.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const approvals = yield* DeviceApprovalService;
+    const deviceIdForReg = DeviceId.make(envelope.deviceId);
+    const platformForReg = envelope.platform as DevicePlatform;
+    const kindForReg = envelope.kind as DeviceKind;
+    const capabilitiesForReg = envelope.capabilities as ReadonlyArray<DeviceCapability>;
+    const approvalResult = yield* approvals
+      .registerOrResume({
+        userId,
+        deviceId: deviceIdForReg,
+        deviceName: envelope.deviceName,
+        platform: platformForReg,
+        kind: kindForReg,
+        capabilities: capabilitiesForReg,
+        now,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to register device.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const sessions = yield* SessionCredentialService;
+    const clientMetadata = deriveAuthClientMetadata({
+      request,
+      label: envelope.deviceName,
+    });
+    const issued = yield* sessions
+      .issue({
+        method: "browser-session-cookie",
+        subject: verified.googleSub,
+        role: "owner",
+        client: clientMetadata,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to issue session.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const deviceSessions = yield* DeviceSessionRepository;
+    yield* deviceSessions
+      .link({
+        sessionId: AuthSessionId.make(issued.sessionId),
+        deviceId: deviceIdForReg,
+        now,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to link session to device.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    // One-time handoff: drop the access_token into a very short-lived,
+    // non-HttpOnly cookie so the renderer can pull it into JS once and
+    // forward it to the Drive App Data client. The cookie is scoped to
+    // `/app/` + cleared by the renderer after consumption; if the
+    // operator has not deployed the cloud bundle yet we just never
+    // set it. Bootstrap result payload unused here — the browser has
+    // no JSON response surface to inspect, it just follows the
+    // redirect — so we stash `user_email`, `needs_approval`, and a
+    // `device_id` in a non-sensitive cookie so the renderer can
+    // display the signed-in chip on first paint without a second
+    // round-trip.
+    const payloadCookie = Buffer.from(
+      JSON.stringify({
+        email: verified.email,
+        displayName: userRecord.displayName,
+        avatarUrl: userRecord.avatarUrl,
+        pendingApproval: approvalResult.needsApproval,
+        deviceId: deviceIdForReg,
+        setAt: new Date(DateTime.toEpochMillis(now)).toISOString(),
+      }),
+      "utf8",
+    ).toString("base64");
+
+    const baseResponse = HttpServerResponse.empty({ status: 302 }).pipe(
+      HttpServerResponse.setHeader("Location", envelope.returnTo || "/app/"),
+    );
+    const withSession = yield* HttpServerResponse.setCookie(sessions.cookieName, issued.token, {
+      expires: DateTime.toDate(issued.expiresAt),
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+    })(baseResponse).pipe(Effect.mapError(() => cookieWriteError));
+    const withSnapshot = yield* HttpServerResponse.setCookie("v3_signin_snapshot", payloadCookie, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60,
+    })(withSession).pipe(Effect.mapError(() => cookieWriteError));
+    const withDriveToken = yield* HttpServerResponse.setCookie(
+      "v3_drive_access_token",
+      tokens.access_token,
+      {
+        path: "/",
+        sameSite: "lax",
+        maxAge: Math.min(tokens.expires_in ?? 3600, 3600),
+      },
+    )(withSnapshot).pipe(Effect.mapError(() => cookieWriteError));
+    return yield* HttpServerResponse.setCookie(OAUTH_FLOW_COOKIE_NAME, "", {
+      path: "/api/auth/google",
+      sameSite: "lax",
+      maxAge: 0,
+    })(withDriveToken).pipe(Effect.mapError(() => cookieWriteError));
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );

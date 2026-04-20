@@ -35,6 +35,7 @@ import {
   DEFAULT_PORT,
   deriveServerPaths,
   ensureServerDirectories,
+  resolveCloudModeStaticDir,
   resolveStaticDir,
   ServerConfig,
   RuntimeMode,
@@ -200,6 +201,19 @@ const EnvServerConfig = Config.all({
     Config.map(Option.getOrUndefined),
   ),
   postgresUrl: Config.string("V3CODE_POSTGRES_URL").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  // V3 Phase 7 — browser Google sign-in + cloud-mode web hosting.
+  googleClientSecret: Config.string("V3CODE_GOOGLE_CLIENT_SECRET").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  serverPublicUrl: Config.string("V3CODE_SERVER_PUBLIC_URL").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudModeStaticDir: Config.string("V3CODE_CLOUD_MODE_STATIC_DIR").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
@@ -369,6 +383,13 @@ export const resolveServerConfig = (
       () => Boolean(devUrl),
     );
     const staticDir = devUrl ? undefined : yield* resolveStaticDir();
+    // V3 Phase 7: cloud bundle directory is independent of the legacy
+    // static bundle. When present, the server mounts it at `/app/*`.
+    // `resolveCloudModeStaticDir` prefers `V3CODE_CLOUD_MODE_STATIC_DIR`,
+    // then `<server-bundle>/client-cloud/`, then the monorepo
+    // `apps/web/dist-cloud/` fallback for local dev. Operators who have
+    // not yet produced a cloud build get `undefined` here.
+    const resolvedCloudStaticDir = env.cloudModeStaticDir ?? (yield* resolveCloudModeStaticDir());
     const host = Option.getOrElse(
       resolveOptionPrecedence(
         normalizedFlags.host,
@@ -417,6 +438,9 @@ export const resolveServerConfig = (
           ? parseAuthorizedEmails(env.authorizedEmails)
           : (tomlConfig?.auth?.authorized_emails ?? []).map((entry) => entry.trim().toLowerCase()),
       postgresUrl: env.postgresUrl ?? tomlConfig?.database?.postgres_url,
+      googleClientSecret: env.googleClientSecret ?? tomlConfig?.auth?.google_client_secret,
+      serverPublicUrl: env.serverPublicUrl ?? tomlConfig?.server?.public_url,
+      cloudModeStaticDir: resolvedCloudStaticDir,
     };
 
     return config;
