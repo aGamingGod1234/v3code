@@ -12,6 +12,8 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       : command.type.startsWith("thread.")
         ? rpcClient.mesh.publishEvent({ command })
         : rpcClient.orchestration.dispatchCommand(command);
+  const forkChat: EnvironmentApi["orchestration"]["forkChat"] = (command) =>
+    rpcClient.mesh.forkChat({ command });
 
   return {
     terminal: {
@@ -45,6 +47,7 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
     },
     orchestration: {
       dispatchCommand,
+      forkChat,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       subscribeShell: (callback, options) =>

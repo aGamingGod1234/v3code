@@ -74,6 +74,7 @@ import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import { OrchestrationEventStore } from "./persistence/Services/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import {
   ProviderRegistry,
@@ -213,16 +214,6 @@ const makeDefaultOrchestrationThreadShell = (
     ...overrides,
   };
 };
-
-const workspaceAndProjectServicesLayer = Layer.mergeAll(
-  WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
-  WorkspaceFileSystemLive.pipe(
-    Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
-  ),
-  ProjectFaviconResolverLive,
-);
 
 const browserOtlpTracingLayer = Layer.mergeAll(
   FetchHttpClient.layer,
@@ -580,6 +571,24 @@ const buildAppUnderTest = (options?: {
           publishToSession: () => Effect.void,
           subscribeSession: () => Stream.empty,
           ...options?.layers?.promptRouter,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(OrchestrationEventStore)({
+          append: () =>
+            Effect.die(
+              new Error("OrchestrationEventStore.append is not implemented in server tests."),
+            ),
+          readFromSequence: () => Stream.empty,
+          readThreadStream: () => Stream.empty,
+          getLatestThreadStreamVersion: () => Effect.succeed(0),
+          readAll: () => Stream.empty,
+          forkThreadEvents: () =>
+            Effect.die(
+              new Error(
+                "OrchestrationEventStore.forkThreadEvents is not implemented in server tests.",
+              ),
+            ),
         }),
       ),
     );

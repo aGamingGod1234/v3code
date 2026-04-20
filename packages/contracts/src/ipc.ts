@@ -42,6 +42,7 @@ import type {
 } from "./terminal.ts";
 import type { ServerUpsertKeybindingInput } from "./server.ts";
 import type {
+  ChatForkCommand,
   ClientOrchestrationCommand,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
@@ -53,6 +54,7 @@ import type {
 } from "./orchestration.ts";
 import type { EnvironmentId } from "./baseSchemas.ts";
 import { EditorId } from "./editor.ts";
+import type { MeshForkChatResult } from "./mesh/chat.ts";
 import { ServerSettings, type ClientSettings, type ServerSettingsPatch } from "./settings.ts";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -352,6 +354,7 @@ export interface EnvironmentApi {
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
+    forkChat: (command: ChatForkCommand) => Promise<MeshForkChatResult>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,

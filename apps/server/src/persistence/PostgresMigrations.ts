@@ -54,6 +54,7 @@ import Migration0025 from "./PostgresMigrations/025_BackfillProjectionThreadShel
 import Migration0026 from "./PostgresMigrations/026_CleanupInvalidProjectionPendingApprovals.ts";
 import Migration0027 from "./PostgresMigrations/027_ProjectionThreadsMeshSync.ts";
 import Migration0028 from "./PostgresMigrations/028_ProjectionThreadMessageSourceDevice.ts";
+import Migration0029 from "./PostgresMigrations/029_ProjectionThreadsForkLineage.ts";
 
 export const postgresMigrationEntries = [
   [1, "V3IdentityBaseline", Migration0001],
@@ -84,6 +85,7 @@ export const postgresMigrationEntries = [
   [26, "CleanupInvalidProjectionPendingApprovals", Migration0026],
   [27, "ProjectionThreadsMeshSync", Migration0027],
   [28, "ProjectionThreadMessageSourceDevice", Migration0028],
+  [29, "ProjectionThreadsForkLineage", Migration0029],
 ] as const;
 
 export const makePostgresMigrationLoader = (throughId?: number) =>

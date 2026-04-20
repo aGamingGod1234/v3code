@@ -29,6 +29,7 @@ import {
   type ProposedPlan,
   type SidebarThreadSummary,
   type Thread,
+  type ThreadForkLineage,
   type ThreadSession,
   type ThreadShell,
   type ThreadTurnState,
@@ -225,6 +226,19 @@ function mapProject(
   };
 }
 
+function mapThreadForkLineage(
+  forkLineage: OrchestrationThread["forkLineage"] | OrchestrationThreadShell["forkLineage"],
+): ThreadForkLineage | null {
+  return forkLineage
+    ? {
+        parentChatId: forkLineage.parentChatId,
+        parentDeviceId: forkLineage.parentDeviceId,
+        forkedFromStreamVersion: forkLineage.forkedFromStreamVersion,
+        forkedAt: forkLineage.forkedAt,
+      }
+    : null;
+}
+
 function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): Thread {
   return {
     id: thread.id,
@@ -245,6 +259,7 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     updatedAt: thread.updatedAt,
     latestTurn: thread.latestTurn,
     pendingSourceProposedPlan: thread.latestTurn?.sourceProposedPlan,
+    forkLineage: mapThreadForkLineage(thread.forkLineage),
     branch: thread.branch,
     worktreePath: thread.worktreePath,
     turnDiffSummaries: thread.checkpoints.map(mapTurnDiffSummary),
@@ -275,6 +290,7 @@ function mapThreadShell(
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
     updatedAt: thread.updatedAt,
+    forkLineage: mapThreadForkLineage(thread.forkLineage),
     branch: thread.branch,
     worktreePath: thread.worktreePath,
   };
@@ -325,6 +341,7 @@ function toThreadShell(thread: Thread): ThreadShell {
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
     updatedAt: thread.updatedAt,
+    forkLineage: thread.forkLineage ?? null,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
   };
@@ -382,6 +399,20 @@ function threadSessionsEqual(
   );
 }
 
+function threadForkLineagesEqual(
+  left: ThreadForkLineage | null | undefined,
+  right: ThreadForkLineage | null | undefined,
+): boolean {
+  if (left === right) return true;
+  if (left == null || right == null) return false;
+  return (
+    left.parentChatId === right.parentChatId &&
+    left.parentDeviceId === right.parentDeviceId &&
+    left.forkedFromStreamVersion === right.forkedFromStreamVersion &&
+    left.forkedAt === right.forkedAt
+  );
+}
+
 function sidebarThreadSummariesEqual(
   left: SidebarThreadSummary | undefined,
   right: SidebarThreadSummary,
@@ -423,6 +454,7 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
     left.createdAt === right.createdAt &&
     left.archivedAt === right.archivedAt &&
     left.updatedAt === right.updatedAt &&
+    threadForkLineagesEqual(left.forkLineage, right.forkLineage) &&
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath
   );

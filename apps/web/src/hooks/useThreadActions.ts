@@ -1,5 +1,5 @@
 import { parseScopedThreadKey, scopeProjectRef, scopeThreadRef } from "@v3tools/client-runtime";
-import { type ScopedThreadRef, ThreadId } from "@v3tools/contracts";
+import { type DeviceId, type ScopedThreadRef, ThreadId } from "@v3tools/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
@@ -22,8 +22,10 @@ import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
+import { useMeshDeviceSnapshot } from "../rpc/meshState";
 
 export function useThreadActions() {
+  const meshDeviceSnapshot = useMeshDeviceSnapshot();
   const sidebarThreadSortOrder = useSettings((settings) => settings.sidebarThreadSortOrder);
   const confirmThreadDelete = useSettings((settings) => settings.confirmThreadDelete);
   const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
@@ -40,6 +42,7 @@ export function useThreadActions() {
   const handleNewThreadRef = useRef(handleNewThread);
   handleNewThreadRef.current = handleNewThread;
   const queryClient = useQueryClient();
+  const currentDeviceId = meshDeviceSnapshot.currentDeviceId;
 
   const resolveThreadTarget = useCallback((target: ScopedThreadRef) => {
     const state = useStore.getState();
@@ -249,6 +252,7 @@ export function useThreadActions() {
       target: ScopedThreadRef,
       options: {
         readonly title?: string;
+        readonly targetDeviceId?: DeviceId | null;
         readonly branch?: string | null;
         readonly worktreePath?: string | null;
       } = {},
@@ -265,20 +269,36 @@ export function useThreadActions() {
         commandId: newCommandId(),
         sourceThreadId: thread.id,
         targetThreadId,
+        ...(options.targetDeviceId !== undefined ? { targetDeviceId: options.targetDeviceId } : {}),
         ...(options.title !== undefined ? { targetTitle: options.title } : {}),
         ...(options.branch !== undefined ? { targetBranch: options.branch } : {}),
-        ...(options.worktreePath !== undefined ? { targetWorktreePath: options.worktreePath } : {}),
+        ...(options.worktreePath !== undefined
+          ? { targetWorktreePath: options.worktreePath }
+          : { targetWorktreePath: null }),
         createdAt: new Date().toISOString(),
       };
 
       try {
-        await api.orchestration.dispatchCommand(command);
+        const result = await api.orchestration.forkChat(command);
         const targetRef = scopeThreadRef(target.environmentId, targetThreadId);
-        await router.navigate({
-          to: "/$environmentId/$threadId",
-          params: buildThreadRouteParams(targetRef),
-          replace: false,
-        });
+        if (result.hostedOnDeviceId === null || result.hostedOnDeviceId === currentDeviceId) {
+          await router.navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(targetRef),
+            replace: false,
+          });
+        } else {
+          const targetDevice = meshDeviceSnapshot.devices.find(
+            (device) => device.id === result.hostedOnDeviceId,
+          );
+          toastManager.add({
+            type: "success",
+            title: `Fork sent to ${targetDevice?.name ?? "another device"}`,
+            description: targetDevice?.online
+              ? "Open the new chat there to choose a local folder."
+              : "The new chat will be ready when that device reconnects.",
+          });
+        }
         return targetRef;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error forking chat.";
@@ -290,7 +310,7 @@ export function useThreadActions() {
         return null;
       }
     },
-    [resolveThreadTarget, router],
+    [currentDeviceId, meshDeviceSnapshot.devices, resolveThreadTarget, router],
   );
 
   const confirmAndDeleteThread = useCallback(
