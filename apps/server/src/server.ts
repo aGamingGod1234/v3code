@@ -69,6 +69,11 @@ import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import {
   approveDeviceRouteLayer,
+  githubAuthorizeRouteLayer,
+  githubCallbackRouteLayer,
+  githubConfigRouteLayer,
+  githubDisconnectRouteLayer,
+  githubStatusRouteLayer,
   googleAuthorizeRouteLayer,
   googleBootstrapRouteLayer,
   googleCallbackRouteLayer,
@@ -76,9 +81,17 @@ import {
   listDevicesRouteLayer,
   removeDeviceRouteLayer,
 } from "./identity/http.ts";
+import {
+  adminContainersRouteLayer,
+  adminEventLogRouteLayer,
+  adminLogsRouteLayer,
+  adminSessionsRouteLayer,
+  adminSummaryRouteLayer,
+} from "./admin/http.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { GitHubIdentityServiceLive } from "./identity/Layers/GitHubIdentityService.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
 import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
@@ -256,6 +269,11 @@ const V3IdentityLayerLive = Layer.mergeAll(
   DeviceSessionRepositoryLive,
   DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
+  // V3 Phase 1e — GitHub identity for "Connect GitHub" in settings and
+  // the P8 Cloud env container token minting. The Live layer falls back
+  // to a `not-configured` stub when either env var is missing, so it's
+  // safe to always merge.
+  GitHubIdentityServiceLive,
   UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
 ).pipe(Layer.provideMerge(PersistenceLayerLive), Layer.provideMerge(ServerSecretStoreLive));
 
@@ -312,7 +330,19 @@ export const makeRoutesLayer = Layer.mergeAll(
   authPairingCredentialRouteLayer,
   authSessionRouteLayer,
   authWebSocketTokenRouteLayer,
+  // V3 Phase 2g — admin panel read-only endpoints. Always registered;
+  // each route 404s outside server-node mode.
+  adminContainersRouteLayer,
+  adminEventLogRouteLayer,
+  adminLogsRouteLayer,
+  adminSessionsRouteLayer,
+  adminSummaryRouteLayer,
   approveDeviceRouteLayer,
+  githubAuthorizeRouteLayer,
+  githubCallbackRouteLayer,
+  githubConfigRouteLayer,
+  githubDisconnectRouteLayer,
+  githubStatusRouteLayer,
   googleAuthorizeRouteLayer,
   googleBootstrapRouteLayer,
   googleCallbackRouteLayer,

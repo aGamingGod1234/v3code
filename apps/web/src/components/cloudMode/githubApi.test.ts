@@ -70,13 +70,17 @@ describe("listAuthenticatedUserRepos", () => {
       fetchImpl,
     });
     expect(result.repos).toHaveLength(1);
-    expect(result.repos[0].defaultBranch).toBe("v3-dev");
-    expect(result.repos[0].private).toBe(true);
+    const firstRepo = result.repos[0];
+    if (!firstRepo) throw new Error("expected one repo");
+    expect(firstRepo.defaultBranch).toBe("v3-dev");
+    expect(firstRepo.private).toBe(true);
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toContain("/user/repos");
-    expect(calls[0].url).toContain("sort=pushed");
-    expect(calls[0].headers.get("Authorization")).toBe("Bearer ghp_xxx");
-    expect(calls[0].headers.get("X-GitHub-Api-Version")).toBe("2022-11-28");
+    const firstCall = calls[0];
+    if (!firstCall) throw new Error("expected one captured fetch call");
+    expect(firstCall.url).toContain("/user/repos");
+    expect(firstCall.url).toContain("sort=pushed");
+    expect(firstCall.headers.get("Authorization")).toBe("Bearer ghp_xxx");
+    expect(firstCall.headers.get("X-GitHub-Api-Version")).toBe("2022-11-28");
   });
 
   it("switches to /search/repositories when a query is present", async () => {

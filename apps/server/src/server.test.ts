@@ -124,6 +124,7 @@ import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { GitHubIdentityServiceLive } from "./identity/Layers/GitHubIdentityService.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
 import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
@@ -236,8 +237,9 @@ const v3IdentityTestLayer = Layer.mergeAll(
   DeviceSessionRepositoryLive,
   DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
+  GitHubIdentityServiceLive,
   UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
-).pipe(Layer.provide(SqlitePersistenceMemory), Layer.provideMerge(ServerSecretStoreLive));
+).pipe(Layer.provideMerge(SqlitePersistenceMemory), Layer.provideMerge(ServerSecretStoreLive));
 
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
@@ -404,6 +406,9 @@ const buildAppUnderTest = (options?: {
       googleClientSecret: undefined,
       serverPublicUrl: undefined,
       cloudModeStaticDir: undefined,
+      githubClientId: undefined,
+      githubClientSecret: undefined,
+      githubOauthScopes: "read:user repo",
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);

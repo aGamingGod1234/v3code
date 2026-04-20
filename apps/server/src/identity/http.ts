@@ -5,6 +5,9 @@ import {
   DeviceInfo,
   DeviceKind,
   DevicePlatform,
+  GitHubClientPublicConfig,
+  GitHubConnectionStatus,
+  GitHubDisconnectResult,
   GoogleBootstrapInput,
   GoogleBootstrapResult,
   GoogleClientPublicConfig,
@@ -15,6 +18,7 @@ import {
   V3RemoveDeviceResult,
   UserId,
   UserInfo,
+  type GitHubOAuthScope,
   type VerifiedGoogleIdentity,
 } from "@v3tools/contracts";
 import * as Crypto from "node:crypto";
@@ -43,10 +47,24 @@ import {
   verifyFlowEnvelope,
   type OAuthFlowEnvelope,
 } from "./browserGoogleOAuth.ts";
+import {
+  buildGitHubAuthorizeUrl,
+  flowExpiresAt as githubFlowExpiresAt,
+  generateGitHubFlowNonce,
+  GITHUB_FLOW_COOKIE_NAME,
+  GitHubFlowVerificationError,
+  resolveGitHubRedirectUri,
+  sanitizeGitHubReturnTo,
+  signGitHubFlowEnvelope,
+  verifyGitHubFlowEnvelope,
+  type GitHubFlowEnvelope,
+} from "./browserGitHubOAuth.ts";
+import { encrypt as encryptToken } from "../identity/tokenEncryption.ts";
 import { DeviceApprovalService } from "./Services/DeviceApprovalService.ts";
 import { DeviceRepository } from "./Services/DeviceRepository.ts";
 import { DeviceSessionRepository } from "./Services/DeviceSessionRepository.ts";
-import { GoogleIdentityError } from "./Errors.ts";
+import { GoogleIdentityError, GitHubIdentityError } from "./Errors.ts";
+import { GitHubIdentityService } from "./Services/GitHubIdentityService.ts";
 import { GoogleIdentityService } from "./Services/GoogleIdentityService.ts";
 import { UserContextResolver } from "./Services/UserContextResolver.ts";
 import { UserRepository } from "./Services/UserRepository.ts";
@@ -56,6 +74,9 @@ const OAUTH_FLOW_SECRET_BYTES = 32;
 const MAX_DEVICE_NAME_LENGTH = 120;
 const MAX_RETURN_TO_LENGTH = 512;
 const MAX_APP_VERSION_LENGTH = 32;
+const GITHUB_FLOW_SECRET_NAME = "v3-github-oauth-flow-key";
+const GITHUB_TOKEN_ENCRYPTION_KEY_NAME = "v3-token-enc-key";
+const GITHUB_TOKEN_ENCRYPTION_KEY_BYTES = 32;
 
 // --- helpers ---------------------------------------------------------------
 
@@ -947,5 +968,325 @@ export const googleCallbackRouteLayer = HttpRouter.add(
       sameSite: "lax",
       maxAge: 0,
     })(withDriveToken).pipe(Effect.mapError(() => cookieWriteError));
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+// ---------------------------------------------------------------------------
+// V3 Phase 1e — GitHub sign-in / connect flow.
+//
+// Four routes:
+//   GET /api/auth/github/config       — public { available, clientId, scopes }
+//   GET /api/auth/github/status       — authenticated { connected, username, ... }
+//   GET /api/auth/github/authorize    — authenticated; redirects to GitHub
+//   GET /api/auth/github/callback     — GitHub callback; exchanges code,
+//                                       persists encrypted token on v3_users,
+//                                       redirects back to the client
+//   POST /api/auth/github/disconnect  — authenticated; clears the token row
+//
+// Unlike Google sign-in, the GitHub flow assumes the user is already
+// signed into V3 — we tie the encrypted token to `UserRepository` via
+// the authenticated session's userId. Browsers and the desktop shell
+// both funnel through the same server-hosted endpoints so there's one
+// code path to reason about.
+
+const githubIdentityErrorToAuthError = (error: GitHubIdentityError): AuthError => {
+  const status: 400 | 500 = error.reason === "not-configured" ? 500 : 400;
+  return new AuthError({
+    message: error.message,
+    status,
+    cause: error,
+  });
+};
+
+const githubFlowVerificationToAuthError = (error: GitHubFlowVerificationError): AuthError =>
+  new AuthError({
+    message:
+      error.reason === "expired"
+        ? "Your GitHub connect flow expired — please try again."
+        : "Could not verify the GitHub connect flow.",
+    status: 400,
+    cause: error,
+  });
+
+export const githubConfigRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/auth/github/config",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig;
+    const available =
+      typeof config.githubClientId === "string" &&
+      config.githubClientId.length > 0 &&
+      typeof config.githubClientSecret === "string" &&
+      config.githubClientSecret.length > 0;
+    const body: GitHubClientPublicConfig = {
+      available,
+      clientId: available ? (config.githubClientId as GitHubClientPublicConfig["clientId"]) : null,
+      scopes: available ? config.githubOauthScopes : "",
+    };
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(GitHubClientPublicConfig)(body), {
+      status: 200,
+    });
+  }),
+);
+
+export const githubStatusRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/auth/github/status",
+  Effect.gen(function* () {
+    const users = yield* UserRepository;
+    const { userId } = yield* resolveV3RequestContext;
+    const tokenOpt = yield* users
+      .getGitHubToken({ id: userId })
+      .pipe(Effect.mapError(toInternalAuthError("Failed to load GitHub connection state.")));
+
+    const body: GitHubConnectionStatus = Option.match(tokenOpt, {
+      onNone: () => ({
+        connected: false,
+        username: null,
+        scopes: [],
+        connectedAt: null,
+      }),
+      onSome: (record) => ({
+        connected: true,
+        username: record.githubUsername,
+        scopes: record.githubScopes
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0)
+          .map((entry) => entry as GitHubOAuthScope),
+        connectedAt: record.connectedAt,
+      }),
+    });
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(GitHubConnectionStatus)(body), {
+      status: 200,
+    });
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+export const githubAuthorizeRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/auth/github/authorize",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const config = yield* ServerConfig;
+    if (!config.githubClientId || !config.githubClientSecret) {
+      return HttpServerResponse.text(
+        "GitHub sign-in is not configured (missing V3CODE_GITHUB_CLIENT_ID or V3CODE_GITHUB_CLIENT_SECRET).",
+        { status: 500 },
+      );
+    }
+
+    // Require an authenticated V3 session.
+    const { userId } = yield* resolveV3RequestContext;
+
+    const rawReturnTo = truncate(extractQueryParam(request, "return_to"), MAX_RETURN_TO_LENGTH);
+    const loginHint = extractQueryParam(request, "login_hint") ?? undefined;
+
+    const origin = yield* pickRequestOrigin;
+    const redirectUri = resolveGitHubRedirectUri(config.serverPublicUrl, origin);
+    const returnTo = sanitizeGitHubReturnTo(rawReturnTo, origin);
+
+    const secretStore = yield* ServerSecretStore;
+    const flowKey = yield* secretStore
+      .getOrCreateRandom(GITHUB_FLOW_SECRET_NAME, OAUTH_FLOW_SECRET_BYTES)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to access GitHub flow secret.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const nowMs = yield* DateTime.now.pipe(Effect.map((value) => DateTime.toEpochMillis(value)));
+    const nowSeconds = Math.floor(nowMs / 1000);
+    const envelope: GitHubFlowEnvelope = {
+      v: 1,
+      nonce: generateGitHubFlowNonce(),
+      userId,
+      returnTo,
+      exp: githubFlowExpiresAt(nowSeconds),
+    };
+    const signed = signGitHubFlowEnvelope(envelope, flowKey);
+
+    const target = buildGitHubAuthorizeUrl({
+      clientId: config.githubClientId,
+      redirectUri,
+      state: signed,
+      scopes: config.githubOauthScopes,
+      ...(loginHint !== undefined ? { loginHint } : {}),
+    });
+    const baseResponse = HttpServerResponse.empty({ status: 302 }).pipe(
+      HttpServerResponse.setHeader("Location", target),
+    );
+    return yield* HttpServerResponse.setCookie(GITHUB_FLOW_COOKIE_NAME, signed, {
+      httpOnly: true,
+      path: "/api/auth/github",
+      sameSite: "lax",
+      maxAge: 600,
+    })(baseResponse).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Failed to set GitHub flow cookie.",
+            status: 500,
+            cause,
+          }),
+      ),
+    );
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+export const githubCallbackRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/auth/github/callback",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const config = yield* ServerConfig;
+    if (!config.githubClientId || !config.githubClientSecret) {
+      return HttpServerResponse.text("GitHub sign-in is not configured on this server.", {
+        status: 500,
+      });
+    }
+
+    const codeParam = extractQueryParam(request, "code");
+    const stateParam = extractQueryParam(request, "state");
+    const errorParam = extractQueryParam(request, "error");
+    if (errorParam) {
+      return HttpServerResponse.text(`GitHub declined the sign-in: ${errorParam}`, {
+        status: 400,
+      });
+    }
+    if (!codeParam || !stateParam) {
+      return HttpServerResponse.text("Callback missing code or state.", { status: 400 });
+    }
+
+    const secretStore = yield* ServerSecretStore;
+    const flowKey = yield* secretStore
+      .getOrCreateRandom(GITHUB_FLOW_SECRET_NAME, OAUTH_FLOW_SECRET_BYTES)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to access GitHub flow secret.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const nowMs = yield* DateTime.now.pipe(Effect.map((value) => DateTime.toEpochMillis(value)));
+    const envelope = yield* Effect.try({
+      try: () => verifyGitHubFlowEnvelope(stateParam, flowKey, Math.floor(nowMs / 1000)),
+      catch: (cause) =>
+        cause instanceof GitHubFlowVerificationError
+          ? githubFlowVerificationToAuthError(cause)
+          : new AuthError({ message: "Invalid GitHub flow state.", status: 400, cause }),
+    });
+
+    // The envelope contains the userId that kicked off the flow. The
+    // currently-signed-in session's userId must match, otherwise a
+    // second browser session could hijack someone else's connect
+    // flow. `resolveV3RequestContext` throws if there is no V3
+    // session at all.
+    const currentContext = yield* resolveV3RequestContext;
+    if (currentContext.userId !== envelope.userId) {
+      return yield* new AuthError({
+        message: "Sign-in session mismatch — please connect GitHub again.",
+        status: 403,
+      });
+    }
+
+    const origin = yield* pickRequestOrigin;
+    const redirectUri = resolveGitHubRedirectUri(config.serverPublicUrl, origin);
+
+    const githubIdentity = yield* GitHubIdentityService;
+    const token = yield* githubIdentity
+      .exchangeCode({ code: codeParam, state: stateParam, redirectUri })
+      .pipe(Effect.mapError(githubIdentityErrorToAuthError));
+    const profile = yield* githubIdentity
+      .fetchUser({ accessToken: token.accessToken })
+      .pipe(Effect.mapError(githubIdentityErrorToAuthError));
+
+    // Encrypt the access token at rest. The encryption key is
+    // persisted in ServerSecretStore and rotates only on an explicit
+    // operator-driven migration.
+    const encKey = yield* secretStore
+      .getOrCreateRandom(GITHUB_TOKEN_ENCRYPTION_KEY_NAME, GITHUB_TOKEN_ENCRYPTION_KEY_BYTES)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to access token encryption key.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+    const encrypted = encryptToken(token.accessToken, encKey);
+    // Pack the auth tag onto the ciphertext so we can restore the
+    // (ciphertext + iv + tag) triple with only two BLOB columns.
+    const packedCiphertext = new Uint8Array(encrypted.ciphertext.length + encrypted.authTag.length);
+    packedCiphertext.set(encrypted.ciphertext, 0);
+    packedCiphertext.set(encrypted.authTag, encrypted.ciphertext.length);
+
+    const users = yield* UserRepository;
+    const now = yield* DateTime.now;
+    yield* users
+      .setGitHubToken({
+        userId: envelope.userId as UserId,
+        githubUsername: profile.login,
+        githubAccessTokenEnc: packedCiphertext,
+        githubTokenEncIv: encrypted.iv,
+        githubScopes: token.scopes.join(","),
+        now,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to persist GitHub connection.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const response = HttpServerResponse.empty({ status: 302 }).pipe(
+      HttpServerResponse.setHeader("Location", envelope.returnTo || "/app/"),
+    );
+    return yield* HttpServerResponse.setCookie(GITHUB_FLOW_COOKIE_NAME, "", {
+      path: "/api/auth/github",
+      sameSite: "lax",
+      maxAge: 0,
+    })(response).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Failed to clear GitHub flow cookie.",
+            status: 500,
+            cause,
+          }),
+      ),
+    );
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+export const githubDisconnectRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/auth/github/disconnect",
+  Effect.gen(function* () {
+    const users = yield* UserRepository;
+    const { userId } = yield* resolveV3RequestContext;
+    const now = yield* DateTime.now;
+    yield* users
+      .clearGitHubToken({ userId, now })
+      .pipe(Effect.mapError(toInternalAuthError("Failed to clear GitHub connection.")));
+    const body: GitHubDisconnectResult = { disconnected: true };
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(GitHubDisconnectResult)(body), {
+      status: 200,
+    });
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );

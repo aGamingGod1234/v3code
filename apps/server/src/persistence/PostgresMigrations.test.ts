@@ -33,6 +33,7 @@ const UPSTREAM_PORT_NAMES = [
   "ProjectionThreadsMeshSync",
   "ProjectionThreadMessageSourceDevice",
   "ProjectionThreadsForkLineage",
+  "V3UserGitHubScopes",
 ] as const;
 
 describe("PostgresMigrations", () => {

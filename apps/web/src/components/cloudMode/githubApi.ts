@@ -262,12 +262,12 @@ export const parseRepoSpec = (input: string): { owner: string; repo: string } | 
   if (trimmed.length === 0) return null;
 
   const urlMatch = trimmed.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
-  if (urlMatch) {
+  if (urlMatch && urlMatch[1] && urlMatch[2]) {
     return { owner: urlMatch[1], repo: urlMatch[2] };
   }
 
   const slashMatch = trimmed.match(/^([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
-  if (slashMatch) {
+  if (slashMatch && slashMatch[1] && slashMatch[2]) {
     return { owner: slashMatch[1], repo: slashMatch[2] };
   }
 

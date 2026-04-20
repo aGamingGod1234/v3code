@@ -217,6 +217,19 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  // V3 Phase 1e — GitHub OAuth app client configuration.
+  githubClientId: Config.string("V3CODE_GITHUB_CLIENT_ID").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  githubClientSecret: Config.string("V3CODE_GITHUB_CLIENT_SECRET").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  githubOauthScopes: Config.string("V3CODE_GITHUB_OAUTH_SCOPES").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
 });
 
 interface CliServerFlags {
@@ -441,6 +454,9 @@ export const resolveServerConfig = (
       googleClientSecret: env.googleClientSecret ?? tomlConfig?.auth?.google_client_secret,
       serverPublicUrl: env.serverPublicUrl ?? tomlConfig?.server?.public_url,
       cloudModeStaticDir: resolvedCloudStaticDir,
+      githubClientId: env.githubClientId ?? tomlConfig?.auth?.github_client_id,
+      githubClientSecret: env.githubClientSecret ?? tomlConfig?.auth?.github_client_secret,
+      githubOauthScopes: env.githubOauthScopes ?? "read:user repo",
     };
 
     return config;

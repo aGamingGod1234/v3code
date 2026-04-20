@@ -1,4 +1,5 @@
 export * from "./baseSchemas.ts";
+export * from "./admin.ts";
 export * from "./auth.ts";
 export * from "./identity.ts";
 export * from "./mesh/chat.ts";

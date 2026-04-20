@@ -43,6 +43,9 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     googleClientSecret: undefined,
     serverPublicUrl: undefined,
     cloudModeStaticDir: undefined,
+    githubClientId: undefined,
+    githubClientSecret: undefined,
+    githubOauthScopes: "read:user repo",
   } satisfies ServerConfigShape;
 });
 

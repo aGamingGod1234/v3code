@@ -2209,3 +2209,155 @@ pairing flow is untouched.
   in long-lived cloud-mode sessions is deferred to P7.1 (out of
   scope). Users who lose the token just see the "configure server"
   banner reappear on next sign-in.
+
+## Phase 6 follow-up — Cross-device fork lineage (2026-04-20)
+
+Landed in commit `8d81ce76` on top of the original P6 fork-chat
+shipped earlier. Closes the "fork to another device" gap in spec
+§6.6.
+
+**New files (V3-owned):**
+
+- `apps/server/src/persistence/Migrations/029_ProjectionThreadsForkLineage.ts`
+  - Postgres mirror — adds `parent_chat_id`, `parent_device_id`,
+    `forked_from_stream_version`, `forked_at` columns + index.
+- `apps/web/src/components/chat/ForkAcceptDialog.tsx` — target-side
+  banner inviting the user to pick a local folder via
+  `localApi.dialogs.pickFolder`.
+
+**Modified upstream / V3-shared files:**
+
+- `packages/contracts/src/orchestration.ts` — `OrchestrationThread` +
+  `OrchestrationThreadShell` gain `forkLineage?`; `ChatForkCommand`
+  gains optional `targetDeviceId`.
+- `packages/contracts/src/mesh/chat.ts` — `MeshPromptStreamItem`
+  becomes a discriminated union with a new `fork_ready` variant.
+  `MeshForkChatResult` now carries real `copiedEventCount`,
+  `forkedFromStreamVersion`, `hostedOnDeviceId`.
+- `apps/server/src/mesh/meshWsHandlers.ts` — post-commit reads the
+  forked event stream, pushes a `fork_ready` stream item to the
+  target session's outbox when the target is another device.
+- `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts`
+  — new `listThreadForkLineageRows` + `getThreadForkLineageRowById`
+  queries joined into snapshot / shell / detail paths.
+- `apps/web/src/hooks/useThreadActions.ts` — `forkThread` accepts
+  `targetDeviceId` and routes through `mesh.forkChat`; non-local
+  targets toast instead of navigating.
+- `apps/web/src/components/chat/ForkChatButton.tsx` — target-device
+  picker sorted current → online → name.
+- `apps/web/src/environments/runtime/service.ts`,
+  `apps/web/src/rpc/wsRpcClient.ts`,
+  `apps/web/src/environmentApi.ts` — `mesh.forkChat` RPC wiring +
+  `fork_ready` handler that renders a "Open chat" toast.
+- `apps/web/src/store.ts`, `apps/web/src/types.ts`,
+  `packages/contracts/src/ipc.ts` —
+  `ThreadForkLineage` mirrored into client state.
+
+## Phase 1e — GitHub identity (2026-04-20)
+
+Closes the "GitHub connect" exit gate on master-plan P1 (§6) that
+shipped only Google in P1a–P1d. Required by P8 for GitHub App
+installation tokens on Cloud env containers; also replaces the
+browser-stored PAT path in the P7 GitHubRepoBrowser.
+
+**New files (V3-owned):**
+
+- `packages/contracts/src/identity.ts` — adds `GitHubOAuthScope`,
+  `GitHubUserSummary`, `GitHubClientPublicConfig`,
+  `GitHubConnectionStatus`, `GitHubDisconnectResult`.
+- `apps/server/src/identity/browserGitHubOAuth.ts` (+ `.test.ts`)
+  — HMAC-signed flow envelope + authorize-URL builder +
+  redirect-uri / return-to sanitisers. 17 tests.
+- `apps/server/src/identity/Services/GitHubIdentityService.ts` +
+  `apps/server/src/identity/Layers/GitHubIdentityService.ts`
+  (+ `.test.ts`) — `exchangeCode` + `fetchUser`, plus a
+  `not-configured` stub Live layer. 8 tests.
+- `apps/server/src/persistence/Migrations/030_V3UserGitHubScopes.ts`
+  - Postgres mirror — adds `github_scopes` + `github_connected_at`
+    columns to `v3_users` (token + iv + auth_tag + username columns
+    already existed from migration 026).
+- `apps/web/src/v3/auth/connectGitHub.ts` — renderer-side helpers
+  (`fetchGitHubClientConfig`, `fetchGitHubConnectionStatus`,
+  `startConnectGitHub`, `disconnectGitHub`).
+- `apps/web/src/v3/ui/ConnectGitHubButton.tsx` — three-state
+  affordance rendered in Settings → Devices → Integrations.
+
+**Modified upstream / V3-shared files:**
+
+- `apps/server/src/identity/Errors.ts` — adds `GitHubIdentityError`
+  with reasons `not-configured | invalid-state | token-exchange |
+profile-fetch | user-cancelled | unknown`.
+- `apps/server/src/identity/Services/UserRepository.ts` +
+  `Layers/UserRepository.ts` — adds `setGitHubToken`,
+  `clearGitHubToken`, `getGitHubToken` (encrypted at rest via the
+  existing `tokenEncryption.ts` AES-256-GCM helpers; ciphertext +
+  authTag packed together so the existing two-BLOB-column storage
+  holds everything).
+- `apps/server/src/identity/http.ts` — five routes: `/config`,
+  `/status`, `/authorize`, `/callback`, `/disconnect`.
+- `apps/server/src/config.ts` — `githubClientId`,
+  `githubClientSecret`, `githubOauthScopes` (default
+  `"read:user repo"`) fields.
+- `apps/server/src/cli.ts` — env-var + TOML wiring for the three
+  new config fields.
+- `apps/server/src/server.ts` — `V3IdentityLayerLive` merges
+  `GitHubIdentityServiceLive`; `makeRoutesLayer` picks up the five
+  GitHub routes.
+- `apps/server/src/persistence/Migrations.ts` +
+  `persistence/PostgresMigrations.ts` +
+  `PostgresMigrations.test.ts` — migration 030 registration and
+  test fixture update.
+- `apps/web/src/components/settings/DevicesSettingsPanel.tsx` —
+  new "Integrations" section hosting `<V3ConnectGitHubButton />`.
+
+**Config / test fixtures:**
+
+`cli.test.ts`, `cli-config.test.ts`, `server.test.ts`,
+`environment/Layers/ServerEnvironment.test.ts`,
+`persistence/Layers/Postgres.test.ts` — all extended with the three
+new `ServerConfigShape` fields.
+
+## Phase 2e — Deploy templates (2026-04-20)
+
+Adds the Fly.io + Railway templates master plan §10.2 queued. Kept
+alongside the P7 Cloudflare Pages template.
+
+**New files (V3-owned):**
+
+- `deploy/flyio/{README.md,fly.toml,Dockerfile}` — server-node on
+  Fly with managed Postgres attached. Bun-based multi-stage image,
+  WebSocket-aware health check at `/.well-known/t3/environment`.
+- `deploy/railway/{README.md,railway.json,Dockerfile}` — Railway
+  mirror, minus Docker-in-Docker (so P8 Cloud env chats require a
+  separate Docker host).
+
+No upstream files touched.
+
+## Phase 2g — Admin panel (2026-04-20)
+
+Master plan §10.5 admin panel finally ships. Read-only in P2g; the
+destructive actions (kill container, rotate secrets, pg_dump
+backup) land in P8 + P11.
+
+**New files (V3-owned):**
+
+- `packages/contracts/src/admin.ts` — `AdminServerInfo`,
+  `AdminActiveSession`, `AdminEventLogRow`, `AdminLogsResponse`,
+  `AdminContainerInfo`, `AdminSummaryResponse`.
+- `apps/server/src/admin/http.ts` — five `GET /api/v3/admin/*`
+  routes backed by the existing `SessionCredentialService`,
+  `DeviceRepository`, `UserRepository`, and orchestration event
+  store. Every route requires `mode === "server-node"` + an
+  authenticated + approved V3 device.
+- `apps/web/src/routes/admin.tsx` — four-tab SPA (Overview,
+  Sessions, Event log, Containers, Logs) with refresh buttons +
+  graceful 403 / 404 handling so non-server-node operators see a
+  friendly banner instead of a broken page.
+
+**Modified upstream files:**
+
+- `packages/contracts/src/index.ts` — re-exports `./admin.ts`.
+- `apps/server/src/server.ts` — imports + mergeAll for the five
+  admin route layers.
+- `apps/web/src/routeTree.gen.ts` — regenerated by the TanStack
+  Router plugin to include `/admin` (no hand-edits).

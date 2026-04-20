@@ -55,6 +55,9 @@ const makeConfig = (overrides: Partial<ServerConfigShape>): ServerConfigShape =>
     googleClientSecret: undefined,
     serverPublicUrl: undefined,
     cloudModeStaticDir: undefined,
+    githubClientId: undefined,
+    githubClientSecret: undefined,
+    githubOauthScopes: "read:user repo",
     ...overrides,
   }) satisfies ServerConfigShape;
 
