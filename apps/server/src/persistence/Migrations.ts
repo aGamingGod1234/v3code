@@ -43,6 +43,7 @@ import Migration0027 from "./Migrations/027_ProjectionThreadsMeshSync.ts";
 import Migration0028 from "./Migrations/028_ProjectionThreadMessageSourceDevice.ts";
 import Migration0029 from "./Migrations/029_ProjectionThreadsForkLineage.ts";
 import Migration0030 from "./Migrations/030_V3UserGitHubScopes.ts";
+import Migration0031 from "./Migrations/031_CloudContainers.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -85,6 +86,7 @@ export const migrationEntries = [
   [28, "ProjectionThreadMessageSourceDevice", Migration0028],
   [29, "ProjectionThreadsForkLineage", Migration0029],
   [30, "V3UserGitHubScopes", Migration0030],
+  [31, "CloudContainers", Migration0031],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

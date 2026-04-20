@@ -16,6 +16,7 @@
 import type {
   AdminActiveSession,
   AdminActiveSessionsResponse,
+  AdminContainerInfo,
   AdminContainersResponse,
   AdminEventLogResponse,
   AdminEventLogRow,
@@ -31,6 +32,8 @@ import {
   AdminSummaryResponse as AdminSummaryResponseSchema,
 } from "@v3tools/contracts";
 import { AuthSessionId } from "@v3tools/contracts";
+import { CloudEnvService } from "../cloud/Services/CloudEnvService.ts";
+import { DockerCloudRuntime } from "../cloud/Services/DockerCloudRuntime.ts";
 
 import { DateTime, Effect, Option, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -149,16 +152,18 @@ const resolveAdminCurrentUser = Effect.gen(function* () {
   return userContext.value;
 });
 
-const buildServerInfo: Effect.Effect<AdminServerInfo, never, ServerConfig> = Effect.gen(
-  function* () {
+const buildServerInfo: Effect.Effect<AdminServerInfo, never, ServerConfig | DockerCloudRuntime> =
+  Effect.gen(function* () {
     const config = yield* ServerConfig;
+    const runtime = yield* DockerCloudRuntime;
+    const dockerAvailable = config.cloudEnvEnabled ? yield* runtime.isAvailable : false;
     const nowMs = yield* DateTime.now.pipe(Effect.map((value) => DateTime.toEpochMillis(value)));
     const startedAt = DateTime.makeUnsafe(new Date(SERVER_START_MILLIS).toISOString());
     return {
       version: packageJson.version as AdminServerInfo["version"],
       mode: config.mode,
       postgresConnected: typeof config.postgresUrl === "string" && config.postgresUrl.length > 0,
-      dockerAvailable: false, // P8 flips this once ContainerManager lands.
+      dockerAvailable,
       googleConfigured:
         typeof config.googleClientId === "string" && config.googleClientId.length > 0,
       githubConfigured:
@@ -170,8 +175,7 @@ const buildServerInfo: Effect.Effect<AdminServerInfo, never, ServerConfig> = Eff
       uptimeSeconds: Math.floor((nowMs - SERVER_START_MILLIS) / 1000),
       startedAt: DateTime.toUtc(startedAt),
     } satisfies AdminServerInfo;
-  },
-);
+  });
 
 const collectEventLogStats = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -250,13 +254,19 @@ export const adminSummaryRouteLayer = HttpRouter.add(
           }),
       ),
     );
+    const cloud = yield* CloudEnvService;
+    const activeContainers = yield* cloud.listAllContainers.pipe(
+      Effect.orElseSucceed(() => [] as ReadonlyArray<{ status: string }>),
+    );
     const body: AdminSummaryResponse = {
       server,
       activeSessionCount: active.filter((session) => session.connected).length,
       chatCount: eventStats.rows.length,
       totalEventCount: eventStats.totalEventCount,
       totalEventBytes: eventStats.totalSizeBytes,
-      activeContainerCount: 0,
+      activeContainerCount: activeContainers.filter(
+        (c) => c.status !== "dead" && c.status !== "error",
+      ).length,
     };
     return HttpServerResponse.jsonUnsafe(Schema.encodeSync(AdminSummaryResponseSchema)(body), {
       status: 200,
@@ -450,12 +460,52 @@ export const adminContainersRouteLayer = HttpRouter.add(
   "/api/v3/admin/containers",
   Effect.gen(function* () {
     yield* ensureServerNodeAdminAccess;
-    // P8 Cloud env hasn't shipped — always reply with an empty list so
-    // the admin UI can render a "no containers yet" state without
-    // additional client branching.
+    const config = yield* ServerConfig;
+    const runtime = yield* DockerCloudRuntime;
+    const cloud = yield* CloudEnvService;
+
+    const dockerAvailable = config.cloudEnvEnabled ? yield* runtime.isAvailable : false;
+
+    const containers = yield* cloud.listAllContainers.pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Failed to list cloud containers.",
+            status: 500,
+            cause,
+          }),
+      ),
+    );
+
+    const nowMs = yield* DateTime.now.pipe(Effect.map((value) => DateTime.toEpochMillis(value)));
+
+    const toAdminInfo = (container: (typeof containers)[number]): AdminContainerInfo => {
+      const startedAtMs = new Date(container.startedAt).getTime();
+      const uptimeMs = Number.isFinite(startedAtMs) ? Math.max(0, nowMs - startedAtMs) : 0;
+      // Admin surface only has a coarse status enum; collapse the
+      // richer CloudContainerStatus onto it.
+      const status: AdminContainerInfo["status"] =
+        container.status === "dead" || container.status === "error"
+          ? "dead"
+          : container.status === "starting" || container.status === "cloning"
+            ? "starting"
+            : container.status === "stopping"
+              ? "stopping"
+              : "running";
+      return {
+        chatId: container.chatId as AdminContainerInfo["chatId"],
+        containerId: container.containerId as AdminContainerInfo["containerId"],
+        status,
+        cpuCount: container.cpuLimit,
+        memoryMb: container.memoryMb,
+        startedAt: DateTime.toUtc(DateTime.makeUnsafe(container.startedAt)),
+        uptimeSeconds: Math.floor(uptimeMs / 1000),
+      };
+    };
+
     const body: AdminContainersResponse = {
-      containers: [],
-      dockerAvailable: false,
+      containers: containers.map(toAdminInfo),
+      dockerAvailable,
     };
     return HttpServerResponse.jsonUnsafe(Schema.encodeSync(AdminContainersResponseSchema)(body), {
       status: 200,

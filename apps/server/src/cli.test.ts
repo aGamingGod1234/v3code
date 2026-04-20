@@ -85,6 +85,14 @@ const makeCliTestServerConfig = (baseDir: string) =>
       githubClientId: undefined,
       githubClientSecret: undefined,
       githubOauthScopes: "read:user repo",
+      cloudEnvEnabled: false,
+      cloudEnvDockerSocket: undefined,
+      cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+      cloudEnvMaxContainers: 10,
+      cloudEnvContainerCpuLimit: 2,
+      cloudEnvContainerMemoryMb: 4096,
+      cloudEnvContainerDiskGb: 20,
+      cloudEnvContainerMaxRuntimeHours: 720,
     } satisfies ServerConfigShape;
   });
 

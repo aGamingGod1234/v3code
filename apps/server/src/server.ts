@@ -88,6 +88,17 @@ import {
   adminSessionsRouteLayer,
   adminSummaryRouteLayer,
 } from "./admin/http.ts";
+import {
+  cloudBranchesRouteLayer,
+  cloudConfigRouteLayer,
+  cloudContainersRouteLayer,
+  cloudEndChatRouteLayer,
+  cloudProvisionRouteLayer,
+  cloudReposRouteLayer,
+} from "./cloud/http.ts";
+import { CloudContainerRepositoryLive } from "./cloud/Layers/CloudContainerRepository.ts";
+import { CloudEnvServiceLive } from "./cloud/Layers/CloudEnvService.ts";
+import { DockerCloudRuntimeLive } from "./cloud/Layers/DockerCloudRuntime.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
@@ -291,6 +302,24 @@ const MeshLayerLive = Layer.mergeAll(
   MeshPublisherLive.pipe(Layer.provide(ChatSubscriptionManagerLive)),
 ).pipe(Layer.provideMerge(OrchestrationLayerLive), Layer.provideMerge(WorkspacePathsLive));
 
+// V3 Phase 8 — Cloud env layer. The Live services all build cleanly
+// even when cloud_env.enabled = false; the service itself short-
+// circuits every operation with `not-enabled` in that case. Providing
+// the layer unconditionally keeps the DI graph stable across modes.
+const CloudLayerLive = Layer.mergeAll(
+  DockerCloudRuntimeLive,
+  CloudContainerRepositoryLive,
+  CloudEnvServiceLive.pipe(
+    Layer.provide(DockerCloudRuntimeLive),
+    Layer.provide(CloudContainerRepositoryLive),
+  ),
+).pipe(
+  Layer.provideMerge(PersistenceLayerLive),
+  Layer.provideMerge(V3IdentityLayerLive),
+  Layer.provideMerge(OrchestrationLayerLive),
+  Layer.provideMerge(ServerSecretStoreLive),
+);
+
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
   Layer.provideMerge(CheckpointingLayerLive),
@@ -303,6 +332,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(MeshLayerLive),
+  Layer.provideMerge(CloudLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
@@ -338,6 +368,16 @@ export const makeRoutesLayer = Layer.mergeAll(
   adminSessionsRouteLayer,
   adminSummaryRouteLayer,
   approveDeviceRouteLayer,
+  // V3 Phase 8 — Cloud env endpoints. Registered always; the service
+  // returns `not-enabled` → 404 when cloud_env is off so the UI can
+  // use HTTP status alone to decide whether to surface the "Cloud"
+  // host option in the new-chat dialog.
+  cloudBranchesRouteLayer,
+  cloudConfigRouteLayer,
+  cloudContainersRouteLayer,
+  cloudEndChatRouteLayer,
+  cloudProvisionRouteLayer,
+  cloudReposRouteLayer,
   githubAuthorizeRouteLayer,
   githubCallbackRouteLayer,
   githubConfigRouteLayer,

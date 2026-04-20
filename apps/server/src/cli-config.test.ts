@@ -96,6 +96,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
     }),
   );
@@ -167,6 +175,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
     }),
   );
@@ -188,6 +204,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -248,6 +272,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
     }),
   );
@@ -326,6 +358,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
       assert.equal(join(baseDir, "dev"), resolved.stateDir);
     }),
@@ -400,6 +440,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -462,6 +510,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
     }),
   );
@@ -535,6 +591,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
     }),
   );
@@ -603,6 +667,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
+        cloudEnvEnabled: false,
+        cloudEnvDockerSocket: undefined,
+        cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+        cloudEnvMaxContainers: 10,
+        cloudEnvContainerCpuLimit: 2,
+        cloudEnvContainerMemoryMb: 4096,
+        cloudEnvContainerDiskGb: 20,
+        cloudEnvContainerMaxRuntimeHours: 720,
       });
     }),
   );

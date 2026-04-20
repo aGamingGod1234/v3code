@@ -151,7 +151,7 @@ const toInternalAuthError =
       cause,
     });
 
-const resolveV3RequestContext = Effect.gen(function* () {
+export const resolveV3RequestContext = Effect.gen(function* () {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const serverAuth = yield* ServerAuth;
   const users = yield* UserContextResolver;

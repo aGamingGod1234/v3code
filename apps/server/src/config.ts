@@ -120,7 +120,33 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly githubClientId: string | undefined;
   readonly githubClientSecret: string | undefined;
   readonly githubOauthScopes: string;
+  // V3 Phase 8 — Cloud env (server-node Docker host). All fields are
+  // populated from `V3CODE_CLOUD_ENV_*` env vars or the `[cloud_env]`
+  // TOML section. `cloudEnvEnabled` is the operator switch; when false
+  // no Docker calls are made and the "Cloud" host option is disabled
+  // in the new-chat dialog regardless of dockerAvailable. The resource
+  // limits are per-container caps passed straight through to
+  // `docker run` (`--cpus`, `--memory`, `--storage-opt size`).
+  readonly cloudEnvEnabled: boolean;
+  readonly cloudEnvDockerSocket: string | undefined;
+  readonly cloudEnvBaseImage: string;
+  readonly cloudEnvMaxContainers: number;
+  readonly cloudEnvContainerCpuLimit: number;
+  readonly cloudEnvContainerMemoryMb: number;
+  readonly cloudEnvContainerDiskGb: number;
+  readonly cloudEnvContainerMaxRuntimeHours: number;
 }
+
+// V3 Phase 8 — defaults that match the master plan §10.4 example
+// config and the cloud-env-image Dockerfile we ship alongside.
+export const CLOUD_ENV_DEFAULTS = {
+  baseImage: "ghcr.io/v3-code/cloud-env:latest",
+  maxContainers: 10,
+  containerCpuLimit: 2,
+  containerMemoryMb: 4096,
+  containerDiskGb: 20,
+  containerMaxRuntimeHours: 720,
+} as const;
 
 export const deriveServerPaths = Effect.fn(function* (
   baseDir: ServerConfigShape["baseDir"],
@@ -229,6 +255,14 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           githubClientId: undefined,
           githubClientSecret: undefined,
           githubOauthScopes: "read:user repo",
+          cloudEnvEnabled: false,
+          cloudEnvDockerSocket: undefined,
+          cloudEnvBaseImage: CLOUD_ENV_DEFAULTS.baseImage,
+          cloudEnvMaxContainers: CLOUD_ENV_DEFAULTS.maxContainers,
+          cloudEnvContainerCpuLimit: CLOUD_ENV_DEFAULTS.containerCpuLimit,
+          cloudEnvContainerMemoryMb: CLOUD_ENV_DEFAULTS.containerMemoryMb,
+          cloudEnvContainerDiskGb: CLOUD_ENV_DEFAULTS.containerDiskGb,
+          cloudEnvContainerMaxRuntimeHours: CLOUD_ENV_DEFAULTS.containerMaxRuntimeHours,
         } satisfies ServerConfigShape;
       }),
     );

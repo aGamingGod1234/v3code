@@ -99,6 +99,11 @@ import {
   type PresenceBroadcasterShape,
 } from "./mesh/Services/PresenceBroadcaster.ts";
 import { PromptRouter, type PromptRouterShape } from "./mesh/Services/PromptRouter.ts";
+import { CloudEnvService, type CloudEnvServiceShape } from "./cloud/Services/CloudEnvService.ts";
+import {
+  DockerCloudRuntime,
+  type DockerCloudRuntimeShape,
+} from "./cloud/Services/DockerCloudRuntime.ts";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
 import {
   ProjectSetupScriptRunner,
@@ -409,6 +414,14 @@ const buildAppUnderTest = (options?: {
       githubClientId: undefined,
       githubClientSecret: undefined,
       githubOauthScopes: "read:user repo",
+      cloudEnvEnabled: false,
+      cloudEnvDockerSocket: undefined,
+      cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+      cloudEnvMaxContainers: 10,
+      cloudEnvContainerCpuLimit: 2,
+      cloudEnvContainerMemoryMb: 4096,
+      cloudEnvContainerDiskGb: 20,
+      cloudEnvContainerMaxRuntimeHours: 720,
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);
@@ -602,6 +615,54 @@ const buildAppUnderTest = (options?: {
               ),
             ),
         }),
+      ),
+      // V3 Phase 8 — admin + cloud routes now require these services.
+      // The server tests don't hit the cloud endpoints, so inert stubs
+      // are fine. Merged into a single Layer.provide so the
+      // HttpRouter.serve().pipe(...) chain stays under the 20-arg cap.
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(DockerCloudRuntime, {
+            isAvailable: Effect.succeed(false),
+            start: () =>
+              Effect.die(new Error("DockerCloudRuntime.start is not implemented in server tests.")),
+            stopAndRemove: () =>
+              Effect.die(
+                new Error("DockerCloudRuntime.stopAndRemove is not implemented in server tests."),
+              ),
+            runInContainer: () =>
+              Effect.die(
+                new Error("DockerCloudRuntime.runInContainer is not implemented in server tests."),
+              ),
+            listV3Containers: Effect.succeed([]),
+          } satisfies DockerCloudRuntimeShape),
+          Layer.succeed(CloudEnvService, {
+            provision: () =>
+              Effect.die(
+                new Error("CloudEnvService.provision is not implemented in server tests."),
+              ),
+            end: () =>
+              Effect.die(new Error("CloudEnvService.end is not implemented in server tests.")),
+            getContainerForChat: () => Effect.succeed(null),
+            listContainersForUser: () => Effect.succeed([]),
+            listAllContainers: Effect.succeed([]),
+            listRepos: () => Effect.succeed([]),
+            listBranches: () => Effect.succeed([]),
+            getPublicConfig: () =>
+              Effect.succeed({
+                enabled: false,
+                dockerAvailable: false,
+                githubConnected: false,
+                baseImage: "ghcr.io/v3-code/cloud-env:latest",
+                maxContainers: 10,
+                containerCpuLimit: 2,
+                containerMemoryMb: 4096,
+                containerDiskGb: 20,
+                containerMaxRuntimeHours: 720,
+              }),
+            syncWithDocker: Effect.void,
+          } satisfies CloudEnvServiceShape),
+        ),
       ),
     );
 

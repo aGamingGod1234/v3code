@@ -32,6 +32,7 @@ import {
 } from "effect/unstable/http";
 
 import {
+  CLOUD_ENV_DEFAULTS,
   DEFAULT_PORT,
   deriveServerPaths,
   ensureServerDirectories,
@@ -227,6 +228,42 @@ const EnvServerConfig = Config.all({
     Config.map(Option.getOrUndefined),
   ),
   githubOauthScopes: Config.string("V3CODE_GITHUB_OAUTH_SCOPES").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  // V3 Phase 8 — Cloud env. `V3CODE_CLOUD_ENV_ENABLED` is a boolean
+  // kill-switch; the resource limits track spec §10.4 field names
+  // (`container_cpu_limit`, `container_memory_mb`, etc.) so operators
+  // can set them via either env or the `[cloud_env]` TOML section.
+  cloudEnvEnabled: Config.boolean("V3CODE_CLOUD_ENV_ENABLED").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvDockerSocket: Config.string("V3CODE_CLOUD_ENV_DOCKER_SOCKET").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvBaseImage: Config.string("V3CODE_CLOUD_ENV_BASE_IMAGE").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvMaxContainers: Config.int("V3CODE_CLOUD_ENV_MAX_CONTAINERS").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerCpuLimit: Config.int("V3CODE_CLOUD_ENV_CONTAINER_CPU_LIMIT").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerMemoryMb: Config.int("V3CODE_CLOUD_ENV_CONTAINER_MEMORY_MB").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerDiskGb: Config.int("V3CODE_CLOUD_ENV_CONTAINER_DISK_GB").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerMaxRuntimeHours: Config.int("V3CODE_CLOUD_ENV_CONTAINER_MAX_RUNTIME_HOURS").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
@@ -457,6 +494,36 @@ export const resolveServerConfig = (
       githubClientId: env.githubClientId ?? tomlConfig?.auth?.github_client_id,
       githubClientSecret: env.githubClientSecret ?? tomlConfig?.auth?.github_client_secret,
       githubOauthScopes: env.githubOauthScopes ?? "read:user repo",
+      // V3 Phase 8 — resolved cloud_env settings. Env vars win over
+      // TOML; both fall back to `CLOUD_ENV_DEFAULTS` so the server
+      // never sees `undefined` for the resource limits. `enabled`
+      // defaults to false — operators must explicitly opt in so
+      // desktop / web deployments never accidentally reach for a
+      // Docker socket that isn't there.
+      cloudEnvEnabled: env.cloudEnvEnabled ?? tomlConfig?.cloud_env?.enabled ?? false,
+      cloudEnvDockerSocket: env.cloudEnvDockerSocket ?? tomlConfig?.cloud_env?.docker_socket,
+      cloudEnvBaseImage:
+        env.cloudEnvBaseImage ?? tomlConfig?.cloud_env?.base_image ?? CLOUD_ENV_DEFAULTS.baseImage,
+      cloudEnvMaxContainers:
+        env.cloudEnvMaxContainers ??
+        tomlConfig?.cloud_env?.max_containers ??
+        CLOUD_ENV_DEFAULTS.maxContainers,
+      cloudEnvContainerCpuLimit:
+        env.cloudEnvContainerCpuLimit ??
+        tomlConfig?.cloud_env?.container_cpu_limit ??
+        CLOUD_ENV_DEFAULTS.containerCpuLimit,
+      cloudEnvContainerMemoryMb:
+        env.cloudEnvContainerMemoryMb ??
+        tomlConfig?.cloud_env?.container_memory_mb ??
+        CLOUD_ENV_DEFAULTS.containerMemoryMb,
+      cloudEnvContainerDiskGb:
+        env.cloudEnvContainerDiskGb ??
+        tomlConfig?.cloud_env?.container_disk_gb ??
+        CLOUD_ENV_DEFAULTS.containerDiskGb,
+      cloudEnvContainerMaxRuntimeHours:
+        env.cloudEnvContainerMaxRuntimeHours ??
+        tomlConfig?.cloud_env?.container_max_runtime_hours ??
+        CLOUD_ENV_DEFAULTS.containerMaxRuntimeHours,
     };
 
     return config;
