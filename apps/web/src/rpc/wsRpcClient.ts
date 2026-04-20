@@ -116,6 +116,7 @@ export interface WsRpcClient {
   readonly mesh: {
     readonly publishEvent: RpcUnaryMethod<typeof MESH_WS_METHODS.publishEvent>;
     readonly sendPrompt: RpcUnaryMethod<typeof MESH_WS_METHODS.sendPrompt>;
+    readonly forkChat: RpcUnaryMethod<typeof MESH_WS_METHODS.forkChat>;
     readonly subscribeChat: RpcInputStreamMethod<typeof MESH_WS_METHODS.subscribeChat>;
     readonly subscribePresence: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePresence>;
     readonly subscribePrompts: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePrompts>;
@@ -245,6 +246,7 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[MESH_WS_METHODS.publishEvent](input)),
       sendPrompt: (input) =>
         transport.request((client) => client[MESH_WS_METHODS.sendPrompt](input)),
+      forkChat: (input) => transport.request((client) => client[MESH_WS_METHODS.forkChat](input)),
       subscribeChat: (input, listener, options) =>
         transport.subscribe(
           (client) => client[MESH_WS_METHODS.subscribeChat](input),

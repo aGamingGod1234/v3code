@@ -11,6 +11,27 @@ const configuredHttpUrl = process.env.VITE_HTTP_URL?.trim();
 const configuredWsUrl = process.env.VITE_WS_URL?.trim();
 const sourcemapEnv = process.env.V3CODE_WEB_SOURCEMAP?.trim().toLowerCase();
 
+// V3 Phase 7 — cloud-mode build flag. When set to `1` / `true`, the
+// resulting bundle is meant to be hosted by a V3 server node at `/app`
+// (or a CDN like Cloudflare Pages). `build:cloud` in
+// `apps/web/package.json` sets it; `apps/web/src/build-flags.ts` reads
+// the constant at runtime so the bundler can dead-code-eliminate
+// cloud-vs-electron branches.
+const cloudModeRaw = process.env.VITE_V3_CLOUD_MODE?.trim() ?? "";
+const isCloudMode =
+  cloudModeRaw === "1" ||
+  cloudModeRaw.toLowerCase() === "true" ||
+  cloudModeRaw.toLowerCase() === "yes";
+const normaliseBase = (value: string | undefined): string => {
+  if (!value) return "/app/";
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed === "/") return "/";
+  const withLeading = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
+};
+const cloudModeBase = normaliseBase(process.env.VITE_V3_CLOUD_MODE_BASE);
+const baseForBuild = isCloudMode ? cloudModeBase : "/";
+
 const buildSourcemap =
   sourcemapEnv === "0" || sourcemapEnv === "false"
     ? false
@@ -63,7 +84,10 @@ export default defineConfig({
     // In dev mode, tell the web app where the WebSocket server lives
     "import.meta.env.VITE_WS_URL": JSON.stringify(configuredWsUrl ?? ""),
     "import.meta.env.APP_VERSION": JSON.stringify(pkg.version),
+    "import.meta.env.VITE_V3_CLOUD_MODE": JSON.stringify(isCloudMode ? "1" : ""),
+    "import.meta.env.VITE_V3_CLOUD_MODE_BASE": JSON.stringify(cloudModeBase),
   },
+  base: baseForBuild,
   resolve: {
     tsconfigPaths: true,
   },

@@ -66,6 +66,10 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           interaction_mode,
           branch,
           worktree_path,
+          parent_chat_id,
+          parent_device_id,
+          forked_from_stream_version,
+          forked_at,
           latest_turn_id,
           latest_user_message_at,
           pending_approval_count,
@@ -84,6 +88,10 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           'default',
           NULL,
           NULL,
+          'thread-parent',
+          'device-parent',
+          7,
+          '2026-02-24T00:00:02.500Z',
           'turn-1',
           '2026-02-24T00:00:04.000Z',
           1,
@@ -274,6 +282,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           id: ThreadId.make("thread-1"),
           projectId: asProjectId("project-1"),
           title: "Thread 1",
+          hostDeviceId: null,
           modelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -298,6 +307,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           updatedAt: "2026-02-24T00:00:03.000Z",
           archivedAt: null,
           deletedAt: null,
+          forkLineage: {
+            parentChatId: ThreadId.make("thread-parent"),
+            parentDeviceId: "device-parent" as never,
+            forkedFromStreamVersion: 7,
+            forkedAt: "2026-02-24T00:00:02.500Z",
+          },
           messages: [
             {
               id: asMessageId("message-1"),
@@ -384,6 +399,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           id: ThreadId.make("thread-1"),
           projectId: asProjectId("project-1"),
           title: "Thread 1",
+          hostDeviceId: null,
           modelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -407,6 +423,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           createdAt: "2026-02-24T00:00:02.000Z",
           updatedAt: "2026-02-24T00:00:03.000Z",
           archivedAt: null,
+          forkLineage: {
+            parentChatId: ThreadId.make("thread-parent"),
+            parentDeviceId: "device-parent" as never,
+            forkedFromStreamVersion: 7,
+            forkedAt: "2026-02-24T00:00:02.500Z",
+          },
           session: {
             threadId: ThreadId.make("thread-1"),
             status: "running",

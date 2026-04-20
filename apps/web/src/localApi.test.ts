@@ -36,6 +36,7 @@ const gitStatusListeners = new Set<(event: GitStatusResult) => void>();
 
 const rpcClientMock = {
   dispose: vi.fn(),
+  reconnect: vi.fn(),
   terminal: {
     open: vi.fn(),
     write: vi.fn(),
@@ -82,6 +83,14 @@ const rpcClientMock = {
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),
     subscribeAuthAccess: vi.fn(),
+  },
+  mesh: {
+    publishEvent: vi.fn(),
+    sendPrompt: vi.fn(),
+    forkChat: vi.fn(),
+    subscribeChat: vi.fn(() => () => undefined),
+    subscribePresence: vi.fn(() => () => undefined),
+    subscribePrompts: vi.fn(() => () => undefined),
   },
   orchestration: {
     dispatchCommand: vi.fn(),

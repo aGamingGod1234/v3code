@@ -81,6 +81,13 @@ function createTestClient() {
     mesh: {
       publishEvent: vi.fn(async () => ({ sequence: 0 })),
       sendPrompt: vi.fn(async () => ({ sequence: 0 })),
+      forkChat: vi.fn(async () => ({
+        targetThreadId: "thread-2",
+        copiedEventCount: 1,
+        forkedFromStreamVersion: 1,
+        hostedOnDeviceId: null,
+        targetProjectId: "project-1",
+      })),
       subscribeChat: vi.fn(() => () => undefined),
       subscribePresence: vi.fn(() => () => undefined),
       subscribePrompts: (listener: (event: any) => void) => {

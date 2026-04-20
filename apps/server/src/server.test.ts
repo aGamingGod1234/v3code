@@ -74,6 +74,7 @@ import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import { OrchestrationEventStore } from "./persistence/Services/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import {
   ProviderRegistry,
@@ -123,6 +124,7 @@ import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { GitHubIdentityServiceLive } from "./identity/Layers/GitHubIdentityService.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
 import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
@@ -214,16 +216,6 @@ const makeDefaultOrchestrationThreadShell = (
   };
 };
 
-const workspaceAndProjectServicesLayer = Layer.mergeAll(
-  WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
-  WorkspaceFileSystemLive.pipe(
-    Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
-  ),
-  ProjectFaviconResolverLive,
-);
-
 const browserOtlpTracingLayer = Layer.mergeAll(
   FetchHttpClient.layer,
   OtlpSerialization.layerJson,
@@ -235,14 +227,19 @@ const authTestLayer = ServerAuthLive.pipe(
   Layer.provide(ServerSecretStoreLive),
 );
 
+// V3 Phase 7 — the browser Google sign-in routes yield `ServerSecretStore`
+// directly to derive the OAuth flow signing key. Re-expose the live layer
+// here (same pattern as `server.ts`'s `V3IdentityLayerLive`) so the test
+// router seam satisfies the route context without spinning up a real FS.
 const v3IdentityTestLayer = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
   DeviceSessionRepositoryLive,
   DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
+  GitHubIdentityServiceLive,
   UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
-).pipe(Layer.provide(SqlitePersistenceMemory));
+).pipe(Layer.provideMerge(SqlitePersistenceMemory), Layer.provideMerge(ServerSecretStoreLive));
 
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
@@ -406,6 +403,12 @@ const buildAppUnderTest = (options?: {
       googleClientId: undefined,
       authorizedEmails: [],
       postgresUrl: undefined,
+      googleClientSecret: undefined,
+      serverPublicUrl: undefined,
+      cloudModeStaticDir: undefined,
+      githubClientId: undefined,
+      githubClientSecret: undefined,
+      githubOauthScopes: "read:user repo",
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);
@@ -580,6 +583,24 @@ const buildAppUnderTest = (options?: {
           publishToSession: () => Effect.void,
           subscribeSession: () => Stream.empty,
           ...options?.layers?.promptRouter,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(OrchestrationEventStore)({
+          append: () =>
+            Effect.die(
+              new Error("OrchestrationEventStore.append is not implemented in server tests."),
+            ),
+          readFromSequence: () => Stream.empty,
+          readThreadStream: () => Stream.empty,
+          getLatestThreadStreamVersion: () => Effect.succeed(0),
+          readAll: () => Stream.empty,
+          forkThreadEvents: () =>
+            Effect.die(
+              new Error(
+                "OrchestrationEventStore.forkThreadEvents is not implemented in server tests.",
+              ),
+            ),
         }),
       ),
     );

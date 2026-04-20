@@ -79,6 +79,12 @@ const makeCliTestServerConfig = (baseDir: string) =>
       googleClientId: undefined,
       authorizedEmails: [],
       postgresUrl: undefined,
+      googleClientSecret: undefined,
+      serverPublicUrl: undefined,
+      cloudModeStaticDir: undefined,
+      githubClientId: undefined,
+      githubClientSecret: undefined,
+      githubOauthScopes: "read:user repo",
     } satisfies ServerConfigShape;
   });
 

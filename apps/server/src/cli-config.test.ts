@@ -90,6 +90,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
     }),
   );
@@ -155,6 +161,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
     }),
   );
@@ -170,6 +182,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -224,6 +242,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
     }),
   );
@@ -296,6 +320,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
       assert.equal(join(baseDir, "dev"), resolved.stateDir);
     }),
@@ -364,6 +394,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -420,6 +456,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
     }),
   );
@@ -487,6 +529,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
     }),
   );
@@ -549,6 +597,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         googleClientId: undefined,
         authorizedEmails: [],
         postgresUrl: undefined,
+        googleClientSecret: undefined,
+        serverPublicUrl: undefined,
+        cloudModeStaticDir: undefined,
+        githubClientId: undefined,
+        githubClientSecret: undefined,
+        githubOauthScopes: "read:user repo",
       });
     }),
   );

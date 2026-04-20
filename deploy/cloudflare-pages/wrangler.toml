@@ -1,0 +1,32 @@
+# V3 Phase 7 — Cloudflare Pages deploy target for the cloud-mode web bundle.
+#
+# Paired with `deploy/cloudflare-pages/README.md`. Run from the monorepo
+# root:
+#
+#   bun run build:web-cloud
+#   wrangler pages deploy apps/web/dist-cloud \
+#     --project-name v3-cloud-app \
+#     --config deploy/cloudflare-pages/wrangler.toml
+#
+# Adjust `account_id` / custom domains inside the Cloudflare dashboard
+# after the first deploy; keeping them out of this file means operators
+# can share the template across accounts without leaking identifiers.
+
+name = "v3-cloud-app"
+compatibility_date = "2026-04-18"
+pages_build_output_dir = "../../apps/web/dist-cloud"
+
+[build]
+command = "bun install && bun run build:web-cloud"
+
+[[pages_config.headers]]
+for = "/*"
+[pages_config.headers.values]
+X-Frame-Options = "DENY"
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[pages_config.headers]]
+for = "/assets/*"
+[pages_config.headers.values]
+Cache-Control = "public, max-age=31536000, immutable"

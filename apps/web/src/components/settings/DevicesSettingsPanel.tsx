@@ -2,6 +2,7 @@ import { CheckIcon, LoaderIcon, ShieldCheckIcon, Trash2Icon } from "lucide-react
 
 import { useAccountState } from "../../hooks/useAccountState";
 import { useApproveDevice, useRemoveDevice } from "../../hooks/useDevices";
+import { V3ConnectGitHubButton } from "../../v3/ui/ConnectGitHubButton";
 import { V3SignInButton } from "../../v3/ui/SignInButton";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -204,6 +205,18 @@ export function DevicesSettingsPanel() {
             </SettingsRow>
           );
         })}
+      </SettingsSection>
+
+      <SettingsSection title="Integrations">
+        <SettingsRow
+          title="GitHub"
+          description="Connect a GitHub account so V3 can browse your repos and hand tokens to Cloud env containers when P8 ships."
+          control={
+            <div className="flex w-full items-center justify-end sm:w-auto">
+              <V3ConnectGitHubButton />
+            </div>
+          }
+        />
       </SettingsSection>
     </SettingsPageContainer>
   );

@@ -14,6 +14,7 @@ import { Effect, Option, Schema, Stream } from "effect";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { OrchestrationEventStore } from "../persistence/Services/OrchestrationEventStore.ts";
 import {
   MeshEventIngestion,
   type MeshEventIngestionShape,
@@ -82,6 +83,7 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
     const presence = yield* PresenceBroadcaster;
     const promptRouter = yield* PromptRouter;
     const orchestrationEngine = yield* OrchestrationEngineService;
+    const eventStore = yield* OrchestrationEventStore;
     yield* MeshPublisher;
 
     const requireSignedInMeshUser = () =>
@@ -281,7 +283,7 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
                 : {}),
             };
 
-            const dispatchResult = yield* orchestrationEngine
+            yield* orchestrationEngine
               .dispatch(stampedCommand)
               .pipe(
                 Effect.mapError((cause) =>
@@ -301,14 +303,67 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
                 ),
               );
 
-            const targetShell = Option.isSome(targetShellOpt) ? targetShellOpt.value : null;
+            if (Option.isNone(targetShellOpt)) {
+              return yield* toMeshRpcError(
+                `Forked chat ${stampedCommand.targetThreadId} could not be loaded after creation.`,
+              );
+            }
+
+            const targetShell = targetShellOpt.value;
+            const targetHostDeviceId = targetShell.hostDeviceId ?? null;
+            const targetEvents = yield* Stream.runCollect(
+              eventStore.readThreadStream(
+                stampedCommand.targetThreadId,
+                0,
+                Number.MAX_SAFE_INTEGER,
+              ),
+            ).pipe(
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.mapError((cause) =>
+                toMeshRpcError("Failed to read the forked chat event stream.", cause),
+              ),
+            );
+            const trailingForkEvent = targetEvents.findLast(
+              (event) =>
+                event.type === "thread.forked" &&
+                event.payload.threadId === stampedCommand.targetThreadId,
+            );
+            const copiedEventCount = Math.max(0, targetEvents.length - 1);
+
+            if (
+              context.userId !== null &&
+              targetHostDeviceId !== null &&
+              targetHostDeviceId !== context.deviceId
+            ) {
+              const targetSessionId = yield* deviceRegistry
+                .getAnyOnlineSessionId(targetHostDeviceId)
+                .pipe(
+                  Effect.mapError((cause) =>
+                    toMeshRpcError("Failed to resolve the target device session.", cause),
+                  ),
+                );
+
+              if (Option.isSome(targetSessionId)) {
+                yield* promptRouter.publishToSession({
+                  sessionId: targetSessionId.value,
+                  item: {
+                    kind: "fork_ready",
+                    threadId: targetShell.id,
+                    title: targetShell.title,
+                  },
+                });
+              }
+            }
 
             return {
               targetThreadId: stampedCommand.targetThreadId,
-              copiedEventCount: 0,
-              forkedFromStreamVersion: dispatchResult.sequence,
-              hostedOnDeviceId: targetShell?.hostDeviceId ?? null,
-              targetProjectId: (targetShell?.projectId ?? command.targetProjectId) as ProjectId,
+              copiedEventCount,
+              forkedFromStreamVersion:
+                trailingForkEvent?.type === "thread.forked"
+                  ? trailingForkEvent.payload.forkedFromStreamVersion
+                  : copiedEventCount,
+              hostedOnDeviceId: targetHostDeviceId,
+              targetProjectId: targetShell.projectId as ProjectId,
             } as const;
           }).pipe(
             Effect.mapError((cause) =>

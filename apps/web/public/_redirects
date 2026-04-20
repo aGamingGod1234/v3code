@@ -1,0 +1,10 @@
+# V3 Phase 7 — SPA fallback for Cloudflare Pages and Netlify.
+#
+# When the cloud-mode bundle is hosted on a static CDN, every deep
+# link must resolve to `index.html` because TanStack Router is a pure
+# client-side router. Cloudflare Pages' default behaviour already does
+# this, but making the rule explicit protects against ingress
+# configurations that strip the default.
+
+/app/*  /app/index.html  200
+/*      /index.html      200

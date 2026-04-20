@@ -87,10 +87,17 @@ export const MeshPresenceStreamItem = Schema.Union([
 ]);
 export type MeshPresenceStreamItem = typeof MeshPresenceStreamItem.Type;
 
-export const MeshPromptStreamItem = Schema.Struct({
-  kind: Schema.Literal("send_prompt_forward"),
-  command: ClientThreadTurnStartCommand,
-});
+export const MeshPromptStreamItem = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("send_prompt_forward"),
+    command: ClientThreadTurnStartCommand,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("fork_ready"),
+    threadId: ThreadId,
+    title: TrimmedNonEmptyString,
+  }),
+]);
 export type MeshPromptStreamItem = typeof MeshPromptStreamItem.Type;
 
 export class MeshRpcError extends Schema.TaggedErrorClass<MeshRpcError>()("MeshRpcError", {

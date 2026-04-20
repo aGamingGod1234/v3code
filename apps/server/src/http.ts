@@ -220,6 +220,122 @@ export const projectFaviconRouteLayer = HttpRouter.add(
   }).pipe(Effect.catchTag("AuthError", respondToAuthError)),
 );
 
+// V3 Phase 7 — cloud-mode bundle prefix. The cloud bundle is produced by
+// `bun run build:web-cloud` (see scripts/build-web-cloud.ts) and
+// served here at `/app/*`. The same SPA fallback that the legacy bundle
+// uses — any path without an extension returns `index.html` — is
+// reproduced here so `/app/_chat/<id>/<thread>` deep links work when
+// a mobile browser reloads. When no cloud bundle is present the route
+// replies with a clear 503 so the operator knows to run the build
+// script.
+const CLOUD_MODE_PATH_PREFIX = "/app";
+
+const decodeCloudModeRelativePath = (pathname: string): string | null => {
+  const rawRelative = pathname.slice(CLOUD_MODE_PATH_PREFIX.length).replace(/^[/\\]+/, "");
+  if (rawRelative.includes("\0")) return null;
+  return rawRelative;
+};
+
+export const cloudModeStaticRouteLayer = HttpRouter.add(
+  "GET",
+  `${CLOUD_MODE_PATH_PREFIX}/*`,
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    if (Option.isNone(url)) {
+      return HttpServerResponse.text("Bad Request", { status: 400 });
+    }
+
+    const config = yield* ServerConfig;
+    const staticRoot = config.cloudModeStaticDir;
+    if (!staticRoot) {
+      return HttpServerResponse.text(
+        "Cloud-mode bundle is not configured on this server node. " +
+          "Run `bun run build:web-cloud` or set V3CODE_CLOUD_MODE_STATIC_DIR.",
+        { status: 503 },
+      );
+    }
+
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const resolvedRoot = path.resolve(staticRoot);
+    const rawRelative = decodeCloudModeRelativePath(url.value.pathname);
+    if (rawRelative === null) {
+      return HttpServerResponse.text("Invalid cloud asset path", { status: 400 });
+    }
+    const normalisedRelative = path.normalize(rawRelative).replace(/^[/\\]+/, "");
+    if (normalisedRelative.startsWith("..")) {
+      return HttpServerResponse.text("Invalid cloud asset path", { status: 400 });
+    }
+
+    const isWithinRoot = (candidate: string) =>
+      candidate === resolvedRoot ||
+      candidate.startsWith(
+        resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`,
+      );
+
+    let filePath =
+      normalisedRelative.length === 0
+        ? path.resolve(resolvedRoot, "index.html")
+        : path.resolve(resolvedRoot, normalisedRelative);
+    if (!isWithinRoot(filePath)) {
+      return HttpServerResponse.text("Invalid cloud asset path", { status: 400 });
+    }
+
+    const ext = path.extname(filePath);
+    if (!ext) {
+      const spaFallback = path.resolve(resolvedRoot, "index.html");
+      if (!isWithinRoot(spaFallback)) {
+        return HttpServerResponse.text("Invalid cloud asset path", { status: 400 });
+      }
+      filePath = spaFallback;
+    }
+
+    const fileInfo = yield* fileSystem
+      .stat(filePath)
+      .pipe(Effect.catch(() => Effect.succeed(null)));
+    if (!fileInfo || fileInfo.type !== "File") {
+      // SPA fallback: unknown route with no extension → index.html.
+      const indexPath = path.resolve(resolvedRoot, "index.html");
+      const indexData = yield* fileSystem
+        .readFile(indexPath)
+        .pipe(Effect.catch(() => Effect.succeed(null)));
+      if (!indexData) {
+        return HttpServerResponse.text("Not Found", { status: 404 });
+      }
+      return HttpServerResponse.uint8Array(indexData, {
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+      });
+    }
+
+    const data = yield* fileSystem
+      .readFile(filePath)
+      .pipe(Effect.catch(() => Effect.succeed(null)));
+    if (!data) {
+      return HttpServerResponse.text("Internal Server Error", { status: 500 });
+    }
+
+    const contentType = Mime.getType(filePath) ?? "application/octet-stream";
+    // Fingerprinted asset hashes are produced by vite; everything under
+    // `/app/assets/` is safe to cache aggressively. `index.html` must
+    // never be cached so a redeploy is immediately picked up by all
+    // connected clients.
+    const cacheControl = filePath.endsWith("index.html")
+      ? "no-cache, no-store, must-revalidate"
+      : normalisedRelative.startsWith("assets/")
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=3600";
+    return HttpServerResponse.uint8Array(data, {
+      status: 200,
+      contentType,
+      headers: {
+        "Cache-Control": cacheControl,
+      },
+    });
+  }),
+);
+
 export const staticAndDevRouteLayer = HttpRouter.add(
   "GET",
   "*",

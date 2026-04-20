@@ -170,3 +170,64 @@ export const V3RemoveDeviceResult = Schema.Struct({
   removed: Schema.Boolean,
 });
 export type V3RemoveDeviceResult = typeof V3RemoveDeviceResult.Type;
+
+// ---------------------------------------------------------------------------
+// GitHub identity (P1e)
+//
+// Phase 1e wires a user-scoped GitHub OAuth flow onto the server node so the
+// V3 server can store a per-user installation / user-access token at rest
+// (AES-256-GCM encrypted via tokenEncryption.ts). The flow mirrors P7's
+// browser Google sign-in but lives on top of an authenticated V3 session —
+// users must sign in with Google first, then "Connect GitHub" as a second
+// consent step.
+//
+// The flow is redirect-based:
+//   1. Browser hits  GET /api/auth/github/authorize    (requires V3 session)
+//   2. Server generates flow envelope + redirects to github.com
+//   3. GitHub → GET /api/auth/github/callback?code=…&state=…
+//   4. Server exchanges code for access_token, fetches /user, stores
+//      encrypted token on v3_users, redirects back to /app/.
+//
+// Desktop (Electron) shells use the same server-hosted endpoint; the
+// difference is purely which origin the user ends up on after the
+// redirect.
+// ---------------------------------------------------------------------------
+
+export const GitHubOAuthScope = TrimmedNonEmptyString.pipe(Schema.brand("GitHubOAuthScope"));
+export type GitHubOAuthScope = typeof GitHubOAuthScope.Type;
+
+export const GitHubUserSummary = Schema.Struct({
+  login: TrimmedNonEmptyString,
+  id: Schema.Int,
+  name: Schema.NullOr(Schema.String),
+  email: Schema.NullOr(Schema.String),
+  avatarUrl: Schema.NullOr(Schema.String),
+});
+export type GitHubUserSummary = typeof GitHubUserSummary.Type;
+
+export const GitHubClientPublicConfig = Schema.Struct({
+  available: Schema.Boolean,
+  // Exposed so the client can display "Connect <org>" labels if the operator
+  // uses a GitHub App; null when GitHub sign-in is not configured.
+  clientId: Schema.NullOr(TrimmedNonEmptyString),
+  // Space-separated string — render as comma list in the UI. Empty string
+  // when the operator has not configured GitHub.
+  scopes: Schema.String,
+});
+export type GitHubClientPublicConfig = typeof GitHubClientPublicConfig.Type;
+
+// The server returns this shape on `/api/auth/github/status` so the UI can
+// reflect whether the currently-signed-in V3 user has linked GitHub and
+// what account they linked.
+export const GitHubConnectionStatus = Schema.Struct({
+  connected: Schema.Boolean,
+  username: Schema.NullOr(TrimmedNonEmptyString),
+  scopes: Schema.Array(GitHubOAuthScope),
+  connectedAt: Schema.NullOr(Schema.DateTimeUtc),
+});
+export type GitHubConnectionStatus = typeof GitHubConnectionStatus.Type;
+
+export const GitHubDisconnectResult = Schema.Struct({
+  disconnected: Schema.Boolean,
+});
+export type GitHubDisconnectResult = typeof GitHubDisconnectResult.Type;

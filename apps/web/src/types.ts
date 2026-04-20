@@ -5,6 +5,7 @@ import type {
   OrchestrationProposedPlanId,
   RepositoryIdentity,
   OrchestrationSessionStatus,
+  OrchestrationThreadForkLineage,
   OrchestrationThreadActivity,
   ProjectScript as ContractProjectScript,
   ThreadId,
@@ -26,6 +27,7 @@ export const DEFAULT_THREAD_TERMINAL_HEIGHT = 280;
 export const DEFAULT_THREAD_TERMINAL_ID = "default";
 export const MAX_TERMINALS_PER_GROUP = 4;
 export type ProjectScript = ContractProjectScript;
+export type ThreadForkLineage = OrchestrationThreadForkLineage;
 
 export interface ThreadTerminalGroup {
   id: string;
@@ -113,6 +115,7 @@ export interface Thread {
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
+  forkLineage?: ThreadForkLineage | null;
   branch: string | null;
   worktreePath: string | null;
   turnDiffSummaries: TurnDiffSummary[];
@@ -133,6 +136,7 @@ export interface ThreadShell {
   createdAt: string;
   archivedAt: string | null;
   updatedAt?: string | undefined;
+  forkLineage?: ThreadForkLineage | null;
   branch: string | null;
   worktreePath: string | null;
 }

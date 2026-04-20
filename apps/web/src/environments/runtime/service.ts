@@ -34,6 +34,7 @@ import {
 import { ensureLocalApi } from "~/localApi";
 import { collectActiveTerminalThreadIds } from "~/lib/terminalStateCleanup";
 import { deriveOrchestrationBatchEffects } from "~/orchestrationEventEffects";
+import { toastManager } from "~/components/ui/toast";
 import { projectQueryKeys } from "~/lib/projectReactQuery";
 import { providerQueryKeys } from "~/lib/providerReactQuery";
 import { getPrimaryKnownEnvironment } from "../primary";
@@ -685,6 +686,25 @@ function applyPromptForward(
   environmentId: EnvironmentId,
   client: WsRpcClient,
 ) {
+  if (item.kind === "fork_ready") {
+    const targetPath = `/${encodeURIComponent(environmentId)}/${encodeURIComponent(item.threadId)}`;
+    toastManager.add({
+      type: "info",
+      title: "Fork ready on this device",
+      description: `${item.title} is waiting for a local folder before work continues.`,
+      actionProps: {
+        children: "Open chat",
+        onClick: () => {
+          window.location.assign(targetPath);
+        },
+      },
+      data: {
+        dismissAfterVisibleMs: 8_000,
+      },
+    });
+    return;
+  }
+
   void client.orchestration
     .dispatchCommand({
       ...item.command,
