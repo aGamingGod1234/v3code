@@ -42,6 +42,7 @@ import packageJson from "../../package.json" with { type: "json" };
 import { AuthError } from "../auth/Services/ServerAuth.ts";
 import { respondToAuthError } from "../auth/http.ts";
 import { SessionCredentialService } from "../auth/Services/SessionCredentialService.ts";
+import { ContainerManager } from "../cloud/Services/ContainerManager.ts";
 import { ServerConfig } from "../config.ts";
 import { DeviceRepository } from "../identity/Services/DeviceRepository.ts";
 import { DeviceSessionRepository } from "../identity/Services/DeviceSessionRepository.ts";
@@ -149,16 +150,18 @@ const resolveAdminCurrentUser = Effect.gen(function* () {
   return userContext.value;
 });
 
-const buildServerInfo: Effect.Effect<AdminServerInfo, never, ServerConfig> = Effect.gen(
-  function* () {
+const buildServerInfo: Effect.Effect<AdminServerInfo, never, ServerConfig | ContainerManager> =
+  Effect.gen(function* () {
     const config = yield* ServerConfig;
+    const containers = yield* ContainerManager;
     const nowMs = yield* DateTime.now.pipe(Effect.map((value) => DateTime.toEpochMillis(value)));
     const startedAt = DateTime.makeUnsafe(new Date(SERVER_START_MILLIS).toISOString());
+    const dockerAvailable = yield* containers.isAvailable();
     return {
       version: packageJson.version as AdminServerInfo["version"],
       mode: config.mode,
       postgresConnected: typeof config.postgresUrl === "string" && config.postgresUrl.length > 0,
-      dockerAvailable: false, // P8 flips this once ContainerManager lands.
+      dockerAvailable,
       googleConfigured:
         typeof config.googleClientId === "string" && config.googleClientId.length > 0,
       githubConfigured:
@@ -170,8 +173,7 @@ const buildServerInfo: Effect.Effect<AdminServerInfo, never, ServerConfig> = Eff
       uptimeSeconds: Math.floor((nowMs - SERVER_START_MILLIS) / 1000),
       startedAt: DateTime.toUtc(startedAt),
     } satisfies AdminServerInfo;
-  },
-);
+  });
 
 const collectEventLogStats = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -250,13 +252,17 @@ export const adminSummaryRouteLayer = HttpRouter.add(
           }),
       ),
     );
+    const containers = yield* ContainerManager;
+    const activeContainers = yield* containers
+      .listContainers()
+      .pipe(Effect.catch(() => Effect.succeed([] as ReadonlyArray<never>)));
     const body: AdminSummaryResponse = {
       server,
       activeSessionCount: active.filter((session) => session.connected).length,
       chatCount: eventStats.rows.length,
       totalEventCount: eventStats.totalEventCount,
       totalEventBytes: eventStats.totalSizeBytes,
-      activeContainerCount: 0,
+      activeContainerCount: activeContainers.length,
     };
     return HttpServerResponse.jsonUnsafe(Schema.encodeSync(AdminSummaryResponseSchema)(body), {
       status: 200,
@@ -450,12 +456,21 @@ export const adminContainersRouteLayer = HttpRouter.add(
   "/api/v3/admin/containers",
   Effect.gen(function* () {
     yield* ensureServerNodeAdminAccess;
-    // P8 Cloud env hasn't shipped — always reply with an empty list so
-    // the admin UI can render a "no containers yet" state without
-    // additional client branching.
+    const containers = yield* ContainerManager;
+    const dockerAvailable = yield* containers.isAvailable();
+    const rows = yield* containers.listContainers().pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Failed to list cloud containers.",
+            status: 500,
+            cause,
+          }),
+      ),
+    );
     const body: AdminContainersResponse = {
-      containers: [],
-      dockerAvailable: false,
+      containers: rows,
+      dockerAvailable,
     };
     return HttpServerResponse.jsonUnsafe(Schema.encodeSync(AdminContainersResponseSchema)(body), {
       status: 200,

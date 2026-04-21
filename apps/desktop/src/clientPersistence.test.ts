@@ -59,6 +59,8 @@ const clientSettings: ClientSettings = {
   sidebarProjectSortOrder: "manual",
   sidebarThreadSortOrder: "created_at",
   timestampFormat: "24-hour",
+  v3ConfigureServerBannerDismissedPermanently: false,
+  v3ServerNodeUrlOverride: "",
 };
 
 const savedRegistryRecord: PersistedSavedEnvironmentRecord = {

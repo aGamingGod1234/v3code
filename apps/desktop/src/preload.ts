@@ -22,6 +22,9 @@ const SET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL = "desktop:set-saved-environment-re
 const GET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:get-saved-environment-secret";
 const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secret";
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
+const GET_V3_GOOGLE_TOKENS_CHANNEL = "desktop:get-v3-google-tokens";
+const SET_V3_GOOGLE_TOKENS_CHANNEL = "desktop:set-v3-google-tokens";
+const CLEAR_V3_GOOGLE_TOKENS_CHANNEL = "desktop:clear-v3-google-tokens";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 // V3 Phase 1d — main-process Google sign-in.
@@ -63,6 +66,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(SET_SAVED_ENVIRONMENT_SECRET_CHANNEL, environmentId, secret),
   removeSavedEnvironmentSecret: (environmentId) =>
     ipcRenderer.invoke(REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL, environmentId),
+  getV3GoogleTokens: () => ipcRenderer.invoke(GET_V3_GOOGLE_TOKENS_CHANNEL),
+  setV3GoogleTokens: (tokens) => ipcRenderer.invoke(SET_V3_GOOGLE_TOKENS_CHANNEL, tokens),
+  clearV3GoogleTokens: () => ipcRenderer.invoke(CLEAR_V3_GOOGLE_TOKENS_CHANNEL),
   getServerExposureState: () => ipcRenderer.invoke(GET_SERVER_EXPOSURE_STATE_CHANNEL),
   setServerExposureMode: (mode) => ipcRenderer.invoke(SET_SERVER_EXPOSURE_MODE_CHANNEL, mode),
   pickFolder: (options) => ipcRenderer.invoke(PICK_FOLDER_CHANNEL, options),

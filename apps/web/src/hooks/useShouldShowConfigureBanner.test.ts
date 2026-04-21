@@ -80,4 +80,24 @@ describe("shouldShowConfigureServerBanner", () => {
       }),
     ).toBe(false);
   });
+
+  it("stays hidden after a permanent dismissal", () => {
+    expect(
+      shouldShowConfigureServerBanner({
+        isSignedIn: true,
+        driveSnapshot: {
+          serverUrl: null,
+          devices: [
+            { device_id: "a", name: "A", added_at: "2026-04-19T00:00:00.000Z" },
+            { device_id: "b", name: "B", added_at: "2026-04-19T00:00:00.000Z" },
+          ],
+          blobExists: true,
+          capturedAt: "2026-04-19T00:00:00.000Z",
+          error: null,
+        },
+        dismissedAt: null,
+        dismissedPermanently: true,
+      }),
+    ).toBe(false);
+  });
 });

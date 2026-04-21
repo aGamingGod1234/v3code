@@ -20,27 +20,34 @@ import { useEffect } from "react";
 import { IS_CLOUD_MODE } from "../../build-flags";
 import { resolveDeviceId } from "../auth/deviceId";
 import { captureDriveAppDataSnapshot } from "../auth/driveAppData";
-import { consumeBrowserDriveAccessToken, consumeBrowserSignInCookies } from "../auth/googleSignIn";
+import {
+  writePersistedGoogleTokens,
+  consumeBrowserGoogleTokenHandoff,
+} from "../auth/googleTokenStore";
+import { recordV3SignedIn } from "../auth/signInState";
 
 export function V3CloudSignInBootstrap(): null {
   useEffect(() => {
     if (!IS_CLOUD_MODE) return;
-    const snapshot = consumeBrowserSignInCookies();
-    if (!snapshot) return;
-    const accessToken = consumeBrowserDriveAccessToken();
-    if (accessToken === null) return;
-    // Fire-and-forget Drive capture. Failures are swallowed inside
-    // captureDriveAppDataSnapshot so a network hiccup doesn't block
-    // the first paint of a freshly-signed-in user.
-    captureDriveAppDataSnapshot({
-      accessToken,
-      thisDevice: {
-        device_id: snapshot.deviceId || resolveDeviceId(),
-        name: snapshot.displayName ?? snapshot.email,
-        added_at: new Date().toISOString(),
-      },
-    }).catch(() => {
-      /* swallowed */
+    void consumeBrowserGoogleTokenHandoff().then((handoff) => {
+      if (!handoff) return;
+      recordV3SignedIn({
+        email: handoff.snapshot.email,
+        displayName: handoff.snapshot.displayName,
+        avatarUrl: handoff.snapshot.avatarUrl,
+        pendingApproval: handoff.snapshot.pendingApproval,
+      });
+      void writePersistedGoogleTokens(handoff.tokens);
+      // Fire-and-forget Drive capture. Failures are swallowed inside
+      // captureDriveAppDataSnapshot so a network hiccup doesn't block
+      // the first paint of a freshly-signed-in user.
+      void captureDriveAppDataSnapshot({
+        thisDevice: {
+          device_id: handoff.snapshot.deviceId || resolveDeviceId(),
+          name: handoff.snapshot.displayName ?? handoff.snapshot.email,
+          added_at: new Date().toISOString(),
+        },
+      });
     });
   }, []);
   return null;

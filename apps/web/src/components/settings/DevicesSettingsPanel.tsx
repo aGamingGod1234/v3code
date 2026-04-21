@@ -2,7 +2,6 @@ import { CheckIcon, LoaderIcon, ShieldCheckIcon, Trash2Icon } from "lucide-react
 
 import { useAccountState } from "../../hooks/useAccountState";
 import { useApproveDevice, useRemoveDevice } from "../../hooks/useDevices";
-import { V3ConnectGitHubButton } from "../../v3/ui/ConnectGitHubButton";
 import { V3SignInButton } from "../../v3/ui/SignInButton";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -103,6 +102,7 @@ export function DevicesSettingsPanel() {
 
         {sortedDevices.map((device) => {
           const isCurrent = device.id === account.currentDeviceId;
+          const isCloudShell = device.kind === "cloud";
           const approvePending = approveDevice.isPending && approveDevice.variables === device.id;
           const removePending = removeDevice.isPending && removeDevice.variables === device.id;
 
@@ -112,6 +112,11 @@ export function DevicesSettingsPanel() {
               title={
                 <span className="inline-flex items-center gap-2">
                   <span>{device.name}</span>
+                  {isCloudShell ? (
+                    <Badge size="sm" variant="outline">
+                      Cloud shell
+                    </Badge>
+                  ) : null}
                   <DeviceStatusBadge
                     approved={device.approved}
                     isCurrent={isCurrent}
@@ -125,7 +130,7 @@ export function DevicesSettingsPanel() {
               }`}
               control={
                 <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-                  {!device.approved ? (
+                  {!isCloudShell && !device.approved ? (
                     <Button
                       size="xs"
                       disabled={approvePending || !account.currentDevice?.approved}
@@ -159,41 +164,48 @@ export function DevicesSettingsPanel() {
                     </Button>
                   ) : null}
 
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={isCurrent || removePending || !account.currentDevice?.approved}
-                    onClick={() => {
-                      removeDevice.mutate(device.id, {
-                        onSuccess: (removed) => {
-                          toastManager.add({
-                            type: removed ? "success" : "warning",
-                            title: removed ? "Device removed" : "Device was not removed",
-                            description: removed
-                              ? `${device.name} will no longer reconnect automatically.`
-                              : `${device.name} could not be removed.`,
-                          });
-                        },
-                        onError: (error) => {
-                          toastManager.add({
-                            type: "error",
-                            title: "Remove failed",
-                            description: error.message,
-                          });
-                        },
-                      });
-                    }}
-                  >
-                    {removePending ? (
-                      <LoaderIcon className="size-3.5 animate-spin" />
-                    ) : (
-                      <Trash2Icon className="size-3.5" />
-                    )}
-                    Remove
-                  </Button>
+                  {!isCloudShell ? (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={isCurrent || removePending || !account.currentDevice?.approved}
+                      onClick={() => {
+                        removeDevice.mutate(device.id, {
+                          onSuccess: (removed) => {
+                            toastManager.add({
+                              type: removed ? "success" : "warning",
+                              title: removed ? "Device removed" : "Device was not removed",
+                              description: removed
+                                ? `${device.name} will no longer reconnect automatically.`
+                                : `${device.name} could not be removed.`,
+                            });
+                          },
+                          onError: (error) => {
+                            toastManager.add({
+                              type: "error",
+                              title: "Remove failed",
+                              description: error.message,
+                            });
+                          },
+                        });
+                      }}
+                    >
+                      {removePending ? (
+                        <LoaderIcon className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2Icon className="size-3.5" />
+                      )}
+                      Remove
+                    </Button>
+                  ) : null}
                 </div>
               }
             >
+              {isCloudShell ? (
+                <div className="mt-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  This represents the server-node cloud role and is not directly selectable.
+                </div>
+              ) : null}
               {!account.currentDevice?.approved && isCurrent ? (
                 <div className="mt-3 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/8 px-3 py-2 text-xs text-muted-foreground">
                   <ShieldCheckIcon className="mt-0.5 size-3.5 shrink-0 text-warning-foreground" />
@@ -205,18 +217,6 @@ export function DevicesSettingsPanel() {
             </SettingsRow>
           );
         })}
-      </SettingsSection>
-
-      <SettingsSection title="Integrations">
-        <SettingsRow
-          title="GitHub"
-          description="Connect a GitHub account so V3 can browse your repos and hand tokens to Cloud env containers when P8 ships."
-          control={
-            <div className="flex w-full items-center justify-end sm:w-auto">
-              <V3ConnectGitHubButton />
-            </div>
-          }
-        />
       </SettingsSection>
     </SettingsPageContainer>
   );

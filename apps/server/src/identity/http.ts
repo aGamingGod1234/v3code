@@ -1,5 +1,6 @@
 import {
   AuthSessionId,
+  CLOUD_DEVICE_NAME,
   DeviceCapability,
   DeviceId,
   DeviceInfo,
@@ -11,6 +12,11 @@ import {
   GoogleBootstrapInput,
   GoogleBootstrapResult,
   GoogleClientPublicConfig,
+  GoogleTokenBundle,
+  GoogleTokenHandoffConsumeResult,
+  GoogleTokenHandoffSnapshot,
+  GoogleTokenRefreshInput,
+  makeCloudDeviceId,
   V3ApproveDeviceInput,
   V3ApproveDeviceResult,
   V3DeviceListResult,
@@ -21,9 +27,10 @@ import {
   type GitHubOAuthScope,
   type VerifiedGoogleIdentity,
 } from "@v3tools/contracts";
+import { withGoogleTokenExpiry } from "@v3tools/shared/googleTokens";
 import * as Crypto from "node:crypto";
 
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { deriveAuthClientMetadata } from "../auth/utils.ts";
@@ -38,6 +45,7 @@ import {
   flowExpiresAt,
   generateNonce,
   generatePkcePair,
+  GOOGLE_TOKEN_URL,
   GoogleTokenExchangeError,
   OAUTH_FLOW_COOKIE_NAME,
   OAuthFlowVerificationError,
@@ -59,15 +67,16 @@ import {
   verifyGitHubFlowEnvelope,
   type GitHubFlowEnvelope,
 } from "./browserGitHubOAuth.ts";
-import { encrypt as encryptToken } from "../identity/tokenEncryption.ts";
+import { decrypt as decryptToken, encrypt as encryptToken } from "../identity/tokenEncryption.ts";
 import { DeviceApprovalService } from "./Services/DeviceApprovalService.ts";
 import { DeviceRepository } from "./Services/DeviceRepository.ts";
 import { DeviceSessionRepository } from "./Services/DeviceSessionRepository.ts";
 import { GoogleIdentityError, GitHubIdentityError } from "./Errors.ts";
 import { GitHubIdentityService } from "./Services/GitHubIdentityService.ts";
 import { GoogleIdentityService } from "./Services/GoogleIdentityService.ts";
+import { GoogleTokenHandoffStore } from "./Services/GoogleTokenHandoffStore.ts";
 import { UserContextResolver } from "./Services/UserContextResolver.ts";
-import { UserRepository } from "./Services/UserRepository.ts";
+import { UserRepository, type UserRepositoryShape } from "./Services/UserRepository.ts";
 
 const OAUTH_FLOW_SECRET_NAME = "v3-google-oauth-flow-key";
 const OAUTH_FLOW_SECRET_BYTES = 32;
@@ -77,6 +86,7 @@ const MAX_APP_VERSION_LENGTH = 32;
 const GITHUB_FLOW_SECRET_NAME = "v3-github-oauth-flow-key";
 const GITHUB_TOKEN_ENCRYPTION_KEY_NAME = "v3-token-enc-key";
 const GITHUB_TOKEN_ENCRYPTION_KEY_BYTES = 32;
+const GOOGLE_TOKEN_HANDOFF_COOKIE_NAME = "v3_google_token_handoff";
 
 // --- helpers ---------------------------------------------------------------
 
@@ -95,6 +105,30 @@ const isEmailAuthorized = (verified: VerifiedGoogleIdentity, allowlist: Readonly
   const normalized = verified.email.trim().toLowerCase();
   return allowlist.includes(normalized);
 };
+
+const enforceSingleServerNodeUser = (input: {
+  readonly mode: string;
+  readonly verified: VerifiedGoogleIdentity;
+  readonly users: UserRepositoryShape;
+}) =>
+  Effect.gen(function* () {
+    if (input.mode !== "server-node") {
+      return;
+    }
+
+    const existingUsers = yield* input.users
+      .listAll()
+      .pipe(Effect.mapError(toInternalAuthError("Failed to verify the configured V3 owner.")));
+    const conflictingUser = existingUsers.find(
+      (user) => user.googleSub !== input.verified.googleSub,
+    );
+    if (conflictingUser) {
+      return yield* new AuthError({
+        message: `This server node is already bound to ${conflictingUser.email}.`,
+        status: 403,
+      });
+    }
+  });
 
 const toUserInfo = (user: {
   readonly id: UserId;
@@ -150,6 +184,38 @@ const toInternalAuthError =
       status: 500,
       cause,
     });
+
+const parseGitHubScopes = (value: string): ReadonlyArray<GitHubOAuthScope> =>
+  value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => entry as GitHubOAuthScope);
+
+const packGitHubEncryptedToken = (accessToken: string, key: Uint8Array) => {
+  const encrypted = encryptToken(accessToken, key);
+  const packedCiphertext = new Uint8Array(encrypted.ciphertext.length + encrypted.authTag.length);
+  packedCiphertext.set(encrypted.ciphertext, 0);
+  packedCiphertext.set(encrypted.authTag, encrypted.ciphertext.length);
+  return {
+    ciphertext: packedCiphertext,
+    iv: encrypted.iv,
+  };
+};
+
+const unpackGitHubEncryptedToken = (input: {
+  readonly ciphertext: Uint8Array;
+  readonly iv: Uint8Array;
+}): { readonly ciphertext: Uint8Array; readonly iv: Uint8Array; readonly authTag: Uint8Array } => {
+  if (input.ciphertext.length <= 16) {
+    throw new Error("Stored GitHub token is corrupted.");
+  }
+  return {
+    ciphertext: input.ciphertext.slice(0, input.ciphertext.length - 16),
+    iv: input.iv,
+    authTag: input.ciphertext.slice(input.ciphertext.length - 16),
+  };
+};
 
 const resolveV3RequestContext = Effect.gen(function* () {
   const request = yield* HttpServerRequest.HttpServerRequest;
@@ -283,6 +349,7 @@ export const googleBootstrapRouteLayer = HttpRouter.add(
         status: 403,
       });
     }
+    yield* enforceSingleServerNodeUser({ mode: config.mode, verified, users });
 
     const now = yield* DateTime.now;
 
@@ -429,10 +496,151 @@ export const googleConfigRouteLayer = HttpRouter.add(
   }),
 );
 
+export const googleTokenConsumeRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/auth/google/tokens/consume",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const handoffStore = yield* GoogleTokenHandoffStore;
+    const handoffId = request.cookies[GOOGLE_TOKEN_HANDOFF_COOKIE_NAME];
+    const now = yield* DateTime.now;
+    const consumed =
+      typeof handoffId === "string" && handoffId.length > 0
+        ? yield* handoffStore.consume({ id: handoffId, now })
+        : Option.none();
+
+    const response = Option.match(consumed, {
+      onNone: () => HttpServerResponse.empty({ status: 204 }),
+      onSome: (result) =>
+        HttpServerResponse.jsonUnsafe(Schema.encodeSync(GoogleTokenHandoffConsumeResult)(result), {
+          status: 200,
+        }),
+    });
+
+    return yield* HttpServerResponse.setCookie(GOOGLE_TOKEN_HANDOFF_COOKIE_NAME, "", {
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      maxAge: 0,
+    })(response).pipe(Effect.mapError(() => cookieWriteError));
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+export const googleTokenRefreshRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/auth/google/tokens/refresh",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig;
+    if (!config.googleClientId || !config.googleClientSecret) {
+      return HttpServerResponse.text("Google sign-in is not fully configured on this server.", {
+        status: 500,
+      });
+    }
+    const googleClientId = config.googleClientId;
+    const googleClientSecret = config.googleClientSecret;
+
+    yield* resolveV3RequestContext;
+    const payload = yield* HttpServerRequest.schemaBodyJson(GoogleTokenRefreshInput).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Invalid Google token refresh payload.",
+            status: 400,
+            cause,
+          }),
+      ),
+    );
+
+    const refreshed = yield* Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(GOOGLE_TOKEN_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+          },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            client_id: googleClientId,
+            client_secret: googleClientSecret,
+            refresh_token: payload.refreshToken,
+          }).toString(),
+        });
+
+        const text = await response.text();
+        if (!response.ok) {
+          throw new AuthError({
+            message: `Google token refresh failed with ${response.status}.`,
+            status: response.status === 400 || response.status === 401 ? 401 : 500,
+            cause: text,
+          });
+        }
+
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = JSON.parse(text) as Record<string, unknown>;
+        } catch (cause) {
+          throw new AuthError({
+            message: "Google token refresh returned invalid JSON.",
+            status: 500,
+            cause,
+          });
+        }
+
+        const accessToken =
+          typeof parsed.access_token === "string" && parsed.access_token.length > 0
+            ? parsed.access_token
+            : null;
+        const idToken =
+          typeof parsed.id_token === "string" && parsed.id_token.length > 0
+            ? parsed.id_token
+            : (payload.idToken ?? null);
+
+        if (!accessToken || !idToken) {
+          throw new AuthError({
+            message: "Google token refresh response was missing required tokens.",
+            status: 401,
+            cause: parsed,
+          });
+        }
+
+        return Schema.decodeUnknownSync(GoogleTokenBundle)(
+          withGoogleTokenExpiry(
+            {
+              accessToken,
+              idToken,
+              refreshToken:
+                typeof parsed.refresh_token === "string" && parsed.refresh_token.length > 0
+                  ? parsed.refresh_token
+                  : payload.refreshToken,
+              scope: typeof parsed.scope === "string" ? parsed.scope : null,
+              tokenType: typeof parsed.token_type === "string" ? parsed.token_type : null,
+            },
+            typeof parsed.expires_in === "number" ? parsed.expires_in : 3600,
+          ),
+        );
+      },
+      catch: (cause) =>
+        cause instanceof AuthError
+          ? cause
+          : new AuthError({
+              message: "Google token refresh failed.",
+              status: 500,
+              cause,
+            }),
+    });
+
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(GoogleTokenBundle)(refreshed), {
+      status: 200,
+    });
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
 export const listDevicesRouteLayer = HttpRouter.add(
   "GET",
   "/api/v3/devices",
   Effect.gen(function* () {
+    const config = yield* ServerConfig;
     const devices = yield* DeviceRepository;
     const { currentDevice, userId } = yield* resolveV3RequestContext;
     const records = yield* devices
@@ -440,22 +648,41 @@ export const listDevicesRouteLayer = HttpRouter.add(
       .pipe(Effect.mapError(toInternalAuthError("Failed to list V3 devices.")));
     const onlineDeviceIds = yield* resolveOnlineDeviceIds(currentDevice.id);
 
+    const deviceInfos = records.map((record) =>
+      toDeviceInfo({
+        id: record.id,
+        userId: record.userId,
+        name: record.name,
+        platform: record.platform,
+        kind: record.kind,
+        capabilities: record.capabilities,
+        approved: record.approved,
+        firstSeenAt: record.firstSeenAt,
+        lastSeenAt: record.lastSeenAt,
+        online: onlineDeviceIds.has(record.id),
+      }),
+    );
+
+    if (config.mode === "server-node") {
+      deviceInfos.push(
+        toDeviceInfo({
+          id: makeCloudDeviceId(),
+          userId,
+          name: CLOUD_DEVICE_NAME as DeviceInfo["name"],
+          platform: "web",
+          kind: "cloud",
+          capabilities: ["view_only"],
+          approved: true,
+          firstSeenAt: currentDevice.firstSeenAt,
+          lastSeenAt: currentDevice.lastSeenAt,
+          online: true,
+        }),
+      );
+    }
+
     const body: V3DeviceListResult = {
       currentDeviceId: currentDevice.id,
-      devices: records.map((record) =>
-        toDeviceInfo({
-          id: record.id,
-          userId: record.userId,
-          name: record.name,
-          platform: record.platform,
-          kind: record.kind,
-          capabilities: record.capabilities,
-          approved: record.approved,
-          firstSeenAt: record.firstSeenAt,
-          lastSeenAt: record.lastSeenAt,
-          online: onlineDeviceIds.has(record.id),
-        }),
-      ),
+      devices: deviceInfos,
     };
     return HttpServerResponse.jsonUnsafe(Schema.encodeSync(V3DeviceListResult)(body), {
       status: 200,
@@ -814,6 +1041,7 @@ export const googleCallbackRouteLayer = HttpRouter.add(
     const verified = yield* google
       .verifyIdToken(tokens.id_token)
       .pipe(Effect.mapError(googleErrorToAuthError));
+    const users = yield* UserRepository;
 
     if (!isEmailAuthorized(verified, config.authorizedEmails)) {
       return yield* new AuthError({
@@ -821,6 +1049,7 @@ export const googleCallbackRouteLayer = HttpRouter.add(
         status: 403,
       });
     }
+    yield* enforceSingleServerNodeUser({ mode: config.mode, verified, users });
 
     const now = yield* DateTime.now;
     const userId = UserId.make(
@@ -829,7 +1058,6 @@ export const googleCallbackRouteLayer = HttpRouter.add(
         .digest("hex")
         .slice(0, 32),
     );
-    const users = yield* UserRepository;
     const userRecord = yield* users
       .upsertFromGoogle({
         id: userId,
@@ -928,17 +1156,29 @@ export const googleCallbackRouteLayer = HttpRouter.add(
     // `device_id` in a non-sensitive cookie so the renderer can
     // display the signed-in chip on first paint without a second
     // round-trip.
-    const payloadCookie = Buffer.from(
-      JSON.stringify({
+    const handoffStore = yield* GoogleTokenHandoffStore;
+    const handoffId = yield* handoffStore.issue({
+      snapshot: Schema.decodeUnknownSync(GoogleTokenHandoffSnapshot)({
         email: verified.email,
         displayName: userRecord.displayName,
         avatarUrl: userRecord.avatarUrl,
         pendingApproval: approvalResult.needsApproval,
         deviceId: deviceIdForReg,
-        setAt: new Date(DateTime.toEpochMillis(now)).toISOString(),
       }),
-      "utf8",
-    ).toString("base64");
+      tokens: Schema.decodeUnknownSync(GoogleTokenBundle)(
+        withGoogleTokenExpiry(
+          {
+            accessToken: tokens.access_token,
+            idToken: tokens.id_token,
+            refreshToken: tokens.refresh_token ?? null,
+            scope: tokens.scope ?? null,
+            tokenType: tokens.token_type ?? null,
+          },
+          tokens.expires_in ?? 3600,
+        ),
+      ),
+      now,
+    });
 
     const baseResponse = HttpServerResponse.empty({ status: 302 }).pipe(
       HttpServerResponse.setHeader("Location", envelope.returnTo || "/app/"),
@@ -949,25 +1189,35 @@ export const googleCallbackRouteLayer = HttpRouter.add(
       path: "/",
       sameSite: "lax",
     })(baseResponse).pipe(Effect.mapError(() => cookieWriteError));
-    const withSnapshot = yield* HttpServerResponse.setCookie("v3_signin_snapshot", payloadCookie, {
+    const withHandoff = yield* HttpServerResponse.setCookie(
+      GOOGLE_TOKEN_HANDOFF_COOKIE_NAME,
+      handoffId,
+      {
+        httpOnly: true,
+        path: "/",
+        sameSite: "lax",
+        maxAge: 120,
+      },
+    )(withSession).pipe(Effect.mapError(() => cookieWriteError));
+    const withoutLegacySnapshot = yield* HttpServerResponse.setCookie("v3_signin_snapshot", "", {
       path: "/",
       sameSite: "lax",
-      maxAge: 60,
-    })(withSession).pipe(Effect.mapError(() => cookieWriteError));
-    const withDriveToken = yield* HttpServerResponse.setCookie(
+      maxAge: 0,
+    })(withHandoff).pipe(Effect.mapError(() => cookieWriteError));
+    const withoutLegacyDriveToken = yield* HttpServerResponse.setCookie(
       "v3_drive_access_token",
-      tokens.access_token,
+      "",
       {
         path: "/",
         sameSite: "lax",
-        maxAge: Math.min(tokens.expires_in ?? 3600, 3600),
+        maxAge: 0,
       },
-    )(withSnapshot).pipe(Effect.mapError(() => cookieWriteError));
+    )(withoutLegacySnapshot).pipe(Effect.mapError(() => cookieWriteError));
     return yield* HttpServerResponse.setCookie(OAUTH_FLOW_COOKIE_NAME, "", {
       path: "/api/auth/google",
       sameSite: "lax",
       maxAge: 0,
-    })(withDriveToken).pipe(Effect.mapError(() => cookieWriteError));
+    })(withoutLegacyDriveToken).pipe(Effect.mapError(() => cookieWriteError));
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );
 
@@ -1034,29 +1284,93 @@ export const githubStatusRouteLayer = HttpRouter.add(
   "/api/auth/github/status",
   Effect.gen(function* () {
     const users = yield* UserRepository;
+    const secretStore = yield* ServerSecretStore;
+    const githubIdentity = yield* GitHubIdentityService;
     const { userId } = yield* resolveV3RequestContext;
     const tokenOpt = yield* users
       .getGitHubToken({ id: userId })
       .pipe(Effect.mapError(toInternalAuthError("Failed to load GitHub connection state.")));
 
-    const body: GitHubConnectionStatus = Option.match(tokenOpt, {
-      onNone: () => ({
-        connected: false,
-        username: null,
-        scopes: [],
-        connectedAt: null,
-      }),
-      onSome: (record) => ({
-        connected: true,
-        username: record.githubUsername,
-        scopes: record.githubScopes
-          .split(",")
-          .map((entry) => entry.trim())
-          .filter((entry) => entry.length > 0)
-          .map((entry) => entry as GitHubOAuthScope),
-        connectedAt: record.connectedAt,
-      }),
+    if (Option.isNone(tokenOpt)) {
+      return HttpServerResponse.jsonUnsafe(
+        Schema.encodeSync(GitHubConnectionStatus)({
+          connected: false,
+          username: null,
+          scopes: [],
+          connectedAt: null,
+          needsReconnect: false,
+          reconnectReason: null,
+        } satisfies GitHubConnectionStatus),
+        {
+          status: 200,
+        },
+      );
+    }
+
+    const record = tokenOpt.value;
+    const scopes = parseGitHubScopes(record.githubScopes);
+    const baseStatus: GitHubConnectionStatus = {
+      connected: true,
+      username: record.githubUsername,
+      scopes,
+      connectedAt: record.connectedAt,
+      needsReconnect: false,
+      reconnectReason: null,
+    };
+    const reconnectStatus = (reason: string): GitHubConnectionStatus => ({
+      ...baseStatus,
+      needsReconnect: true,
+      reconnectReason: reason,
     });
+
+    const encKey = yield* secretStore
+      .getOrCreateRandom(GITHUB_TOKEN_ENCRYPTION_KEY_NAME, GITHUB_TOKEN_ENCRYPTION_KEY_BYTES)
+      .pipe(Effect.mapError(toInternalAuthError("Failed to load the GitHub token key.")));
+
+    const decryptedTokenExit = yield* Effect.exit(
+      Effect.try({
+        try: () =>
+          decryptToken(
+            unpackGitHubEncryptedToken({
+              ciphertext: record.githubAccessTokenEnc,
+              iv: record.githubTokenEncIv,
+            }),
+            encKey,
+          ),
+        catch: (cause) =>
+          new AuthError({
+            message: "Stored GitHub token could not be decrypted.",
+            status: 500,
+            cause,
+          }),
+      }),
+    );
+
+    if (Exit.isFailure(decryptedTokenExit)) {
+      return HttpServerResponse.jsonUnsafe(
+        Schema.encodeSync(GitHubConnectionStatus)(
+          reconnectStatus("Stored GitHub token is invalid. Reconnect GitHub."),
+        ),
+        {
+          status: 200,
+        },
+      );
+    }
+
+    const validationExit = yield* Effect.exit(
+      githubIdentity.fetchUser({ accessToken: decryptedTokenExit.value }),
+    );
+    const body: GitHubConnectionStatus = Exit.isSuccess(validationExit)
+      ? baseStatus
+      : (() => {
+          const failure = validationExit.cause.reasons.find(Cause.isFailReason);
+          const error = failure?.error;
+          if (error?.reason === "profile-fetch") {
+            return reconnectStatus(error.message);
+          }
+          return baseStatus;
+        })();
+
     return HttpServerResponse.jsonUnsafe(Schema.encodeSync(GitHubConnectionStatus)(body), {
       status: 200,
     });
@@ -1225,12 +1539,7 @@ export const githubCallbackRouteLayer = HttpRouter.add(
             }),
         ),
       );
-    const encrypted = encryptToken(token.accessToken, encKey);
-    // Pack the auth tag onto the ciphertext so we can restore the
-    // (ciphertext + iv + tag) triple with only two BLOB columns.
-    const packedCiphertext = new Uint8Array(encrypted.ciphertext.length + encrypted.authTag.length);
-    packedCiphertext.set(encrypted.ciphertext, 0);
-    packedCiphertext.set(encrypted.authTag, encrypted.ciphertext.length);
+    const encrypted = packGitHubEncryptedToken(token.accessToken, encKey);
 
     const users = yield* UserRepository;
     const now = yield* DateTime.now;
@@ -1238,7 +1547,7 @@ export const githubCallbackRouteLayer = HttpRouter.add(
       .setGitHubToken({
         userId: envelope.userId as UserId,
         githubUsername: profile.login,
-        githubAccessTokenEnc: packedCiphertext,
+        githubAccessTokenEnc: encrypted.ciphertext,
         githubTokenEncIv: encrypted.iv,
         githubScopes: token.scopes.join(","),
         now,

@@ -53,6 +53,7 @@ import {
   MeshChatStreamItem,
   MeshForkChatInput,
   MeshForkChatResult,
+  MeshDeviceApprovalStreamItem,
   MeshPublishEventInput,
   MeshPresenceStreamItem,
   MeshPromptStreamItem,
@@ -406,6 +407,16 @@ export const WsMeshSubscribePromptsRpc = Rpc.make(MESH_WS_METHODS.subscribePromp
   stream: true,
 });
 
+export const WsMeshSubscribeDeviceApprovalsRpc = Rpc.make(
+  MESH_WS_METHODS.subscribeDeviceApprovals,
+  {
+    payload: Schema.Struct({}),
+    success: MeshDeviceApprovalStreamItem,
+    error: MeshRpcError,
+    stream: true,
+  },
+);
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -444,6 +455,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsMeshForkChatRpc,
   WsMeshSubscribePresenceRpc,
   WsMeshSubscribePromptsRpc,
+  WsMeshSubscribeDeviceApprovalsRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,

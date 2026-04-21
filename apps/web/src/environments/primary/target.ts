@@ -1,6 +1,9 @@
 import type { DesktopEnvironmentBootstrap } from "@v3tools/contracts";
 import type { KnownEnvironment } from "@v3tools/client-runtime";
 
+import { readBrowserClientSettings } from "../../clientPersistenceStorage";
+import { getV3DriveAppDataSnapshot } from "../../v3/auth/driveAppData";
+
 export interface PrimaryEnvironmentTarget {
   readonly source: KnownEnvironment["source"];
   readonly target: KnownEnvironment["target"];
@@ -23,6 +26,12 @@ function swapBaseUrlProtocol(
   const url = new URL(normalizeBaseUrl(rawValue));
   url.protocol = nextProtocol;
   return url.toString();
+}
+
+function toWebSocketBaseUrl(rawValue: string): string {
+  const normalized = normalizeBaseUrl(rawValue);
+  const protocol = new URL(normalized).protocol === "https:" ? "wss:" : "ws:";
+  return swapBaseUrlProtocol(normalized, protocol);
 }
 
 function normalizeHostname(hostname: string): string {
@@ -90,6 +99,36 @@ function resolveConfiguredPrimaryTarget(): PrimaryEnvironmentTarget | null {
   };
 }
 
+function resolveManualOverridePrimaryTarget(): PrimaryEnvironmentTarget | null {
+  const override = readBrowserClientSettings()?.v3ServerNodeUrlOverride?.trim();
+  if (!override) {
+    return null;
+  }
+
+  return {
+    source: "manual",
+    target: {
+      httpBaseUrl: normalizeBaseUrl(override),
+      wsBaseUrl: toWebSocketBaseUrl(override),
+    },
+  };
+}
+
+function resolveDriveDiscoveredPrimaryTarget(): PrimaryEnvironmentTarget | null {
+  const serverUrl = getV3DriveAppDataSnapshot()?.serverUrl?.trim();
+  if (!serverUrl) {
+    return null;
+  }
+
+  return {
+    source: "drive-discovered",
+    target: {
+      httpBaseUrl: normalizeBaseUrl(serverUrl),
+      wsBaseUrl: toWebSocketBaseUrl(serverUrl),
+    },
+  };
+}
+
 function resolveWindowOriginPrimaryTarget(): PrimaryEnvironmentTarget {
   const httpBaseUrl = normalizeBaseUrl(window.location.origin);
   const url = new URL(httpBaseUrl);
@@ -151,6 +190,8 @@ export function resolvePrimaryEnvironmentHttpUrl(
 
 export function readPrimaryEnvironmentTarget(): PrimaryEnvironmentTarget | null {
   return (
+    resolveManualOverridePrimaryTarget() ??
+    resolveDriveDiscoveredPrimaryTarget() ??
     resolveDesktopPrimaryTarget() ??
     resolveConfiguredPrimaryTarget() ??
     resolveWindowOriginPrimaryTarget()

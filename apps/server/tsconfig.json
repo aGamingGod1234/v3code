@@ -14,7 +14,9 @@
           "instanceOfSchema": "warning",
           "deterministicKeys": "warning",
           "preferSchemaOverJson": "off",
-          "globalErrorInEffectFailure": "off"
+          "globalErrorInEffectFailure": "off",
+          "globalErrorInEffectCatch": "off",
+          "catchUnfailableEffect": "off"
         }
       }
     ]

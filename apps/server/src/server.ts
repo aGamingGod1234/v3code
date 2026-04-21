@@ -78,6 +78,8 @@ import {
   googleBootstrapRouteLayer,
   googleCallbackRouteLayer,
   googleConfigRouteLayer,
+  googleTokenConsumeRouteLayer,
+  googleTokenRefreshRouteLayer,
   listDevicesRouteLayer,
   removeDeviceRouteLayer,
 } from "./identity/http.ts";
@@ -92,9 +94,20 @@ import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalServi
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
 import { GitHubIdentityServiceLive } from "./identity/Layers/GitHubIdentityService.ts";
+import { GoogleTokenHandoffStoreLive } from "./identity/Layers/GoogleTokenHandoffStore.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
 import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
+import { ContainerManagerLive } from "./cloud/Layers/ContainerManager.ts";
+import {
+  cloudChatStatusRouteLayer,
+  cloudCreateChatRouteLayer,
+  cloudEndChatRouteLayer,
+  cloudGitHubBranchesRouteLayer,
+  cloudGitHubReposRouteLayer,
+} from "./cloud/http.ts";
+import { cloudPreviewProxyRouteLayer } from "./cloud/previewProxy.ts";
+import { CloudLifecycleLive } from "./cloud/Layers/CloudLifecycle.ts";
 import { ChatSubscriptionManagerLive } from "./mesh/Layers/ChatSubscriptionManager.ts";
 import { DeviceRegistryLive } from "./mesh/Layers/DeviceRegistry.ts";
 import { MeshPublisherLive } from "./mesh/Layers/MeshPublisher.ts";
@@ -187,12 +200,16 @@ const ProviderLayerLive = Layer.unwrap(
     const canonicalEventLogger = yield* makeEventNdjsonLogger(providerEventLogPath, {
       stream: "canonical",
     });
+    // V3 Phase 8 — Codex and Claude adapters consult ContainerManager
+    // inside startSession to swap in the per-thread docker-exec wrapper
+    // whenever the thread has a cloud workspace. Provided here so the
+    // provider layer is self-contained.
     const codexAdapterLayer = makeCodexAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
+    ).pipe(Layer.provide(ContainerManagerLive));
     const claudeAdapterLayer = makeClaudeAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
+    ).pipe(Layer.provide(ContainerManagerLive));
     const openCodeAdapterLayer = makeOpenCodeAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
@@ -267,8 +284,8 @@ const V3IdentityLayerLive = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
   DeviceSessionRepositoryLive,
-  DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
   GoogleIdentityServiceLive,
+  GoogleTokenHandoffStoreLive,
   // V3 Phase 1e — GitHub identity for "Connect GitHub" in settings and
   // the P8 Cloud env container token minting. The Live layer falls back
   // to a `not-configured` stub when either env var is missing, so it's
@@ -291,6 +308,16 @@ const MeshLayerLive = Layer.mergeAll(
   MeshPublisherLive.pipe(Layer.provide(ChatSubscriptionManagerLive)),
 ).pipe(Layer.provideMerge(OrchestrationLayerLive), Layer.provideMerge(WorkspacePathsLive));
 
+const DeviceApprovalLayerLive = DeviceApprovalServiceLive.pipe(
+  Layer.provideMerge(V3IdentityLayerLive),
+  Layer.provideMerge(MeshLayerLive),
+);
+
+// V3 Phase 8 — Cloud environment container manager. Depends on ServerConfig
+// only, so it can be provided directly. CloudLifecycleLive owns the
+// scheduled prune loop that reaps containers past `cloudEnvContainerMaxRuntimeHours`.
+const CloudLayerLive = CloudLifecycleLive.pipe(Layer.provideMerge(ContainerManagerLive));
+
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
   Layer.provideMerge(CheckpointingLayerLive),
@@ -308,6 +335,8 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
   Layer.provideMerge(V3IdentityLayerLive),
+  Layer.provideMerge(DeviceApprovalLayerLive),
+  Layer.provideMerge(CloudLayerLive),
 
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
@@ -347,8 +376,19 @@ export const makeRoutesLayer = Layer.mergeAll(
   googleBootstrapRouteLayer,
   googleCallbackRouteLayer,
   googleConfigRouteLayer,
+  googleTokenConsumeRouteLayer,
+  googleTokenRefreshRouteLayer,
   listDevicesRouteLayer,
   removeDeviceRouteLayer,
+  // V3 Phase 8 — Cloud environment routes. Always registered; each route
+  // guards on `mode === "server-node" && cloudEnvEnabled` or replies 503 so
+  // desktop / web never surface cloud options.
+  cloudGitHubReposRouteLayer,
+  cloudGitHubBranchesRouteLayer,
+  cloudCreateChatRouteLayer,
+  cloudChatStatusRouteLayer,
+  cloudEndChatRouteLayer,
+  cloudPreviewProxyRouteLayer,
   attachmentsRouteLayer,
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,
@@ -407,6 +447,8 @@ export const makeServerLayer = Layer.unwrap(
 
     return serverApplicationLayer.pipe(
       Layer.provideMerge(RuntimeServicesLive),
+      Layer.provideMerge(PersistenceLayerLive),
+      Layer.provideMerge(RepositoryIdentityResolverLive),
       Layer.provideMerge(HttpServerLive),
       Layer.provide(ObservabilityLive),
       Layer.provideMerge(FetchHttpClient.layer),

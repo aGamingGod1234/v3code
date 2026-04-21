@@ -328,9 +328,17 @@ const createDesktopBridgeStub = (overrides?: {
       .fn()
       .mockResolvedValue({ accepted: false, completed: false, state: idleUpdateState }),
     onUpdateState: () => () => {},
-    openV3GoogleSignIn: vi
-      .fn()
-      .mockResolvedValue({ idToken: "mock-id-token", accessToken: "mock-access-token" }),
+    getV3GoogleTokens: vi.fn().mockResolvedValue(null),
+    setV3GoogleTokens: vi.fn().mockResolvedValue(undefined),
+    clearV3GoogleTokens: vi.fn().mockResolvedValue(undefined),
+    openV3GoogleSignIn: vi.fn().mockResolvedValue({
+      accessToken: "mock-access-token",
+      idToken: "mock-id-token",
+      refreshToken: "mock-refresh-token",
+      expiresAt: "2036-04-07T01:00:00.000Z",
+      scope: "openid email profile",
+      tokenType: "Bearer",
+    }),
     v3Wizard: {
       probeDocker: vi.fn().mockResolvedValue({ status: "ok", version: "27.0.0", message: null }),
       probePort: vi.fn(async (port: number) => ({ port, available: true, message: null })),

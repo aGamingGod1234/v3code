@@ -30,6 +30,7 @@ import {
 } from "../v3/setup/state";
 import { buildServerNodeConfigToml } from "../v3/setup/tomlBuilder";
 import { resolveDeviceId } from "../v3/auth/deviceId";
+import { writePendingDrivePublish } from "../v3/auth/drivePublishState";
 
 export const Route = createFileRoute("/setup")({
   component: V3SetupWizardPage,
@@ -627,19 +628,12 @@ function DoneScreen({ state }: { readonly state: ReturnType<typeof reduceV3Setup
 // the wizard later.
 // ---------------------------------------------------------------------------
 
-export const V3_PENDING_DRIVE_PUBLISH_KEY = "v3.pending-drive-publish";
-
 async function publishDriveSnapshot(state: ReturnType<typeof reduceV3SetupWizard>): Promise<void> {
-  const desired = {
+  writePendingDrivePublish({
     server_url: state.exposure.publicUrl || null,
     server_version_installed: "0.1.0",
     setup_at: new Date().toISOString(),
     device_id: resolveDeviceId(),
     device_name: "V3 server node",
-  };
-  try {
-    window.localStorage.setItem(V3_PENDING_DRIVE_PUBLISH_KEY, JSON.stringify(desired));
-  } catch {
-    // Quota / disabled storage: ignore. A later wizard run re-queues.
-  }
+  });
 }

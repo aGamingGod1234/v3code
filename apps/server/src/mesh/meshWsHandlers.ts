@@ -19,6 +19,7 @@ import {
   MeshEventIngestion,
   type MeshEventIngestionShape,
 } from "../orchestration/Services/MeshEventIngestion.ts";
+import { DeviceApprovalService } from "../identity/Services/DeviceApprovalService.ts";
 import { DeviceRepository } from "../identity/Services/DeviceRepository.ts";
 import { ChatSubscriptionManager } from "./Services/ChatSubscriptionManager.ts";
 import { DeviceRegistry } from "./Services/DeviceRegistry.ts";
@@ -79,6 +80,7 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
     const chatSubscriptions = yield* ChatSubscriptionManager;
     const meshEventIngestion: MeshEventIngestionShape = yield* MeshEventIngestion;
     const devices = yield* DeviceRepository;
+    const approvals = yield* DeviceApprovalService;
     const deviceRegistry = yield* DeviceRegistry;
     const presence = yield* PresenceBroadcaster;
     const promptRouter = yield* PromptRouter;
@@ -426,6 +428,20 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
         observeRpcStreamEffect(
           MESH_WS_METHODS.subscribePrompts,
           Effect.succeed(promptRouter.subscribeSession(context.sessionId)),
+          { "rpc.aggregate": "mesh" },
+        ),
+      [MESH_WS_METHODS.subscribeDeviceApprovals]: (_input: {}) =>
+        observeRpcStreamEffect(
+          MESH_WS_METHODS.subscribeDeviceApprovals,
+          Effect.gen(function* () {
+            const userId = yield* requireSignedInMeshUser();
+            return approvals.streamChanges.pipe(
+              Stream.filter((event) => event.userId === userId),
+              Stream.mapError((cause) =>
+                toMeshRpcError("Failed to stream device approval events.", cause),
+              ),
+            );
+          }),
           { "rpc.aggregate": "mesh" },
         ),
     };

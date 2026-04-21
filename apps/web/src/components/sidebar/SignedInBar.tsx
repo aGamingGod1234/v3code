@@ -2,6 +2,7 @@ import { HardDriveDownloadIcon, LogOutIcon, ServerIcon } from "lucide-react";
 
 import { useAccountState } from "../../hooks/useAccountState";
 import { endV3GoogleSignInLocally } from "../../v3/auth/googleSignIn";
+import { V3ConnectGitHubButton } from "../../v3/ui/ConnectGitHubButton";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
@@ -52,6 +53,10 @@ export function SignedInBar({ account }: SignedInBarProps) {
             {account.currentDevice.name}
           </Badge>
         ) : null}
+      </div>
+
+      <div className="mt-3">
+        <V3ConnectGitHubButton className="w-full justify-center" />
       </div>
     </div>
   );

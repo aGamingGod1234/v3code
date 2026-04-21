@@ -26,6 +26,7 @@ import type {
   DesktopServerExposureMode,
   DesktopServerExposureState,
   DesktopUpdateChannel,
+  GoogleTokenBundle,
   PersistedSavedEnvironmentRecord,
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
@@ -45,13 +46,16 @@ import {
   writeDesktopSettings,
 } from "./desktopSettings.ts";
 import {
+  clearV3GoogleTokens,
   readClientSettings,
   readSavedEnvironmentRegistry,
   readSavedEnvironmentSecret,
+  readV3GoogleTokens,
   removeSavedEnvironmentSecret,
   writeClientSettings,
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
+  writeV3GoogleTokens,
 } from "./clientPersistence.ts";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness.ts";
 import { showDesktopConfirmDialog } from "./confirmDialog.ts";
@@ -101,6 +105,9 @@ const SET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL = "desktop:set-saved-environment-re
 const GET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:get-saved-environment-secret";
 const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secret";
 const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
+const GET_V3_GOOGLE_TOKENS_CHANNEL = "desktop:get-v3-google-tokens";
+const SET_V3_GOOGLE_TOKENS_CHANNEL = "desktop:set-v3-google-tokens";
+const CLEAR_V3_GOOGLE_TOKENS_CHANNEL = "desktop:clear-v3-google-tokens";
 const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 // V3 Phase 1d — Google sign-in via the system browser. The matching
@@ -145,6 +152,7 @@ const BASE_DIR = process.env.V3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
 const CLIENT_SETTINGS_PATH = Path.join(STATE_DIR, "client-settings.json");
+const V3_GOOGLE_TOKENS_PATH = Path.join(STATE_DIR, "v3-google-tokens.json");
 const SAVED_ENVIRONMENT_REGISTRY_PATH = Path.join(STATE_DIR, "saved-environments.json");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
@@ -1685,6 +1693,32 @@ function registerIpcHandlers(): void {
       });
     },
   );
+
+  ipcMain.removeHandler(GET_V3_GOOGLE_TOKENS_CHANNEL);
+  ipcMain.handle(GET_V3_GOOGLE_TOKENS_CHANNEL, async () =>
+    readV3GoogleTokens({
+      tokensPath: V3_GOOGLE_TOKENS_PATH,
+      secretStorage: safeStorage,
+    }),
+  );
+
+  ipcMain.removeHandler(SET_V3_GOOGLE_TOKENS_CHANNEL);
+  ipcMain.handle(SET_V3_GOOGLE_TOKENS_CHANNEL, async (_event, rawTokens: unknown) => {
+    if (typeof rawTokens !== "object" || rawTokens === null) {
+      throw new Error("Invalid V3 Google tokens payload.");
+    }
+
+    writeV3GoogleTokens({
+      tokensPath: V3_GOOGLE_TOKENS_PATH,
+      tokens: rawTokens as GoogleTokenBundle,
+      secretStorage: safeStorage,
+    });
+  });
+
+  ipcMain.removeHandler(CLEAR_V3_GOOGLE_TOKENS_CHANNEL);
+  ipcMain.handle(CLEAR_V3_GOOGLE_TOKENS_CHANNEL, async () => {
+    clearV3GoogleTokens(V3_GOOGLE_TOKENS_PATH);
+  });
 
   ipcMain.removeHandler(GET_SERVER_EXPOSURE_STATE_CHANNEL);
   ipcMain.handle(GET_SERVER_EXPOSURE_STATE_CHANNEL, async () => getDesktopServerExposureState());

@@ -27,7 +27,7 @@ const webDir = NodePath.resolve(scriptDir, "..", "apps", "web");
 
 const extra = process.argv.slice(2);
 
-const env = {
+const env: NodeJS.ProcessEnv = {
   ...process.env,
   VITE_V3_CLOUD_MODE: "1",
 };

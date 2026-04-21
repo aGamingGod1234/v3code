@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 
-import { getV3DriveAppDataSnapshot } from "../v3/auth/driveAppData";
+import { useV3DriveAppDataSnapshot } from "./useV3DriveAppDataSnapshot";
 import { useV3SignInSnapshot } from "../v3/auth/signInState";
 import { useDevices } from "./useDevices";
 import { useServerMode } from "./useServerMode";
 
 export function useAccountState() {
   const signInSnapshot = useV3SignInSnapshot();
+  const driveSnapshot = useV3DriveAppDataSnapshot();
   const { currentDevice, currentDeviceId, devices, error, isPending, refetch } = useDevices();
   const serverMode = useServerMode();
 
@@ -17,7 +18,7 @@ export function useAccountState() {
       devices,
       displayName:
         signInSnapshot.email === null ? null : (signInSnapshot.displayName ?? signInSnapshot.email),
-      driveSnapshot: getV3DriveAppDataSnapshot(),
+      driveSnapshot,
       email: signInSnapshot.email,
       error,
       isDeviceStatePending: isPending,
@@ -30,6 +31,7 @@ export function useAccountState() {
       currentDevice,
       currentDeviceId,
       devices,
+      driveSnapshot,
       error,
       isPending,
       refetch,

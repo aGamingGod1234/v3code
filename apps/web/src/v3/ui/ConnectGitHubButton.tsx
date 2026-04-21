@@ -9,7 +9,7 @@
 //     the server-hosted redirect flow.
 
 import { useCallback, useEffect, useState } from "react";
-import { GithubIcon, LogOutIcon } from "lucide-react";
+import { AlertTriangleIcon, GithubIcon, LogOutIcon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { toastManager } from "../../components/ui/toast";
@@ -116,6 +116,46 @@ export function V3ConnectGitHubButton({ className }: ConnectGitHubButtonProps) {
   }
 
   if (status?.connected) {
+    if (status.needsReconnect) {
+      return (
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2 rounded-xl border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-foreground",
+            className,
+          )}
+        >
+          <AlertTriangleIcon className="size-3.5 text-warning-foreground" />
+          <GithubIcon className="size-3.5" />
+          <span className="font-medium">Reconnect {status.username ?? "GitHub"}</span>
+          {status.reconnectReason ? (
+            <span className="text-muted-foreground">{status.reconnectReason}</span>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={handleConnect}
+            disabled={busy}
+            className="gap-1"
+          >
+            <RefreshCwIcon className="size-3.5" />
+            Reconnect
+          </Button>
+          <button
+            type="button"
+            aria-label="Disconnect GitHub"
+            onClick={() => {
+              void handleDisconnect();
+            }}
+            disabled={busy}
+            className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+          >
+            <LogOutIcon className="size-3.5" />
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div
         className={cn(

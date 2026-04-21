@@ -106,6 +106,17 @@ export const recordV3SignedIn = (snapshot: SignedInSnapshot): void => {
   refreshCache();
 };
 
+export const updateV3SignedIn = (patch: Partial<SignedInSnapshot>): void => {
+  const current = readSnapshot();
+  if (current.email === null) {
+    return;
+  }
+  recordV3SignedIn({
+    ...current,
+    ...patch,
+  });
+};
+
 export const clearV3SignedIn = (): void => {
   safeRemove(SIGNED_IN_KEY);
   refreshCache();

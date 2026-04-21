@@ -100,6 +100,7 @@ function createRpcClientStub(): WsRpcClient {
         targetProjectId: ProjectId.make("project-1"),
       })),
       subscribeChat: vi.fn(() => () => undefined),
+      subscribeDeviceApprovals: vi.fn(() => () => undefined),
       subscribePresence: vi.fn(() => () => undefined),
       subscribePrompts: vi.fn(() => () => undefined),
     },

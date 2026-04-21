@@ -120,6 +120,9 @@ export interface WsRpcClient {
     readonly subscribeChat: RpcInputStreamMethod<typeof MESH_WS_METHODS.subscribeChat>;
     readonly subscribePresence: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePresence>;
     readonly subscribePrompts: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePrompts>;
+    readonly subscribeDeviceApprovals: RpcStreamMethod<
+      typeof MESH_WS_METHODS.subscribeDeviceApprovals
+    >;
   };
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
@@ -262,6 +265,12 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       subscribePrompts: (listener, options) =>
         transport.subscribe(
           (client) => client[MESH_WS_METHODS.subscribePrompts]({}),
+          listener,
+          options,
+        ),
+      subscribeDeviceApprovals: (listener, options) =>
+        transport.subscribe(
+          (client) => client[MESH_WS_METHODS.subscribeDeviceApprovals]({}),
           listener,
           options,
         ),

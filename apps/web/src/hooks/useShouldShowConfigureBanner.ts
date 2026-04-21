@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getV3DriveAppDataSnapshot, type V3DriveAppDataSnapshot } from "../v3/auth/driveAppData";
+import { type V3DriveAppDataSnapshot } from "../v3/auth/driveAppData";
+import { useSettings, useUpdateSettings } from "./useSettings";
+import { useV3DriveAppDataSnapshot } from "./useV3DriveAppDataSnapshot";
 import { useV3SignInSnapshot } from "../v3/auth/signInState";
 
 const CONFIGURE_SERVER_DISMISSED_AT_KEY = "v3.configure-server.dismissed-at";
@@ -31,9 +33,13 @@ export function shouldShowConfigureServerBanner(input: {
   readonly isSignedIn: boolean;
   readonly driveSnapshot: V3DriveAppDataSnapshot | null;
   readonly dismissedAt: number | null;
+  readonly dismissedPermanently?: boolean;
   readonly now?: number;
 }): boolean {
   if (!input.isSignedIn || input.driveSnapshot === null) {
+    return false;
+  }
+  if (input.dismissedPermanently) {
     return false;
   }
   if (input.driveSnapshot.serverUrl) {
@@ -53,28 +59,12 @@ export function shouldShowConfigureServerBanner(input: {
 
 export function useShouldShowConfigureBanner() {
   const signInSnapshot = useV3SignInSnapshot();
-  const [dismissedAt, setDismissedAt] = useState<number | null>(() => safeReadDismissedAt());
-  const [driveSnapshot, setDriveSnapshot] = useState<V3DriveAppDataSnapshot | null>(() =>
-    getV3DriveAppDataSnapshot(),
+  const driveSnapshot = useV3DriveAppDataSnapshot();
+  const dismissedPermanently = useSettings(
+    (settings) => settings.v3ConfigureServerBannerDismissedPermanently,
   );
-
-  useEffect(() => {
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === CONFIGURE_SERVER_DISMISSED_AT_KEY) {
-        setDismissedAt(safeReadDismissedAt());
-      }
-      if (event.key === "v3.drive-app-data-snapshot") {
-        setDriveSnapshot(getV3DriveAppDataSnapshot());
-      }
-    };
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  useEffect(() => {
-    setDriveSnapshot(getV3DriveAppDataSnapshot());
-  }, [signInSnapshot.email]);
+  const { updateSettings } = useUpdateSettings();
+  const [dismissedAt, setDismissedAt] = useState<number | null>(() => safeReadDismissedAt());
 
   const visible = useMemo(
     () =>
@@ -82,16 +72,32 @@ export function useShouldShowConfigureBanner() {
         isSignedIn: signInSnapshot.email !== null,
         driveSnapshot,
         dismissedAt,
+        dismissedPermanently,
       }),
-    [dismissedAt, driveSnapshot, signInSnapshot.email],
+    [dismissedAt, dismissedPermanently, driveSnapshot, signInSnapshot.email],
   );
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === CONFIGURE_SERVER_DISMISSED_AT_KEY) {
+        setDismissedAt(safeReadDismissedAt());
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   return {
     dismissedAt,
-    dismiss: (now: number = Date.now()) => {
+    dismissForNow: (now: number = Date.now()) => {
       safeWriteDismissedAt(now);
       setDismissedAt(now);
     },
+    dismissPermanently: () => {
+      updateSettings({ v3ConfigureServerBannerDismissedPermanently: true });
+    },
+    dismissedPermanently,
     driveSnapshot,
     visible,
   };

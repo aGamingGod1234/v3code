@@ -194,9 +194,16 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     showContextMenu: async () => null,
     openExternal: async () => true,
     onMenuAction: () => () => undefined,
+    getV3GoogleTokens: async () => null,
+    setV3GoogleTokens: async () => undefined,
+    clearV3GoogleTokens: async () => undefined,
     openV3GoogleSignIn: async () => ({
-      idToken: "mock-id-token",
       accessToken: "mock-access-token",
+      idToken: "mock-id-token",
+      refreshToken: "mock-refresh-token",
+      expiresAt: "2036-04-07T01:00:00.000Z",
+      scope: "openid email profile",
+      tokenType: "Bearer",
     }),
     v3Wizard: {
       probeDocker: async () => ({ status: "ok", version: "27.0.0", message: null }),
@@ -569,6 +576,8 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual" as const,
       sidebarThreadSortOrder: "created_at" as const,
       timestampFormat: "24-hour" as const,
+      v3ConfigureServerBannerDismissedPermanently: false,
+      v3ServerNodeUrlOverride: "",
     };
     const getClientSettings = vi.fn().mockResolvedValue({
       ...clientSettings,
@@ -626,6 +635,8 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual" as const,
       sidebarThreadSortOrder: "created_at" as const,
       timestampFormat: "24-hour" as const,
+      v3ConfigureServerBannerDismissedPermanently: false,
+      v3ServerNodeUrlOverride: "",
     };
 
     await api.persistence.setClientSettings(clientSettings);

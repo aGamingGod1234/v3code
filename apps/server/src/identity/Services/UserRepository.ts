@@ -70,6 +70,7 @@ export interface UserRepositoryShape {
   readonly upsertFromGoogle: (
     input: UpsertFromGoogleInput,
   ) => Effect.Effect<UserRecord, UserRepositoryError>;
+  readonly listAll: () => Effect.Effect<ReadonlyArray<UserRecord>, UserRepositoryError>;
   readonly getByGoogleSub: (
     input: GetUserByGoogleSubInput,
   ) => Effect.Effect<Option.Option<UserRecord>, UserRepositoryError>;

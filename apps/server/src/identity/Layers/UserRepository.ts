@@ -107,6 +107,24 @@ const makeUserRepository = Effect.gen(function* () {
       `,
   });
 
+  const selectAll = SqlSchema.findAll({
+    Request: Schema.Struct({}),
+    Result: UserDbRow,
+    execute: () => sql`
+      SELECT
+        id AS "id",
+        google_sub AS "googleSub",
+        email AS "email",
+        display_name AS "displayName",
+        avatar_url AS "avatarUrl",
+        github_username AS "githubUsername",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM v3_users
+      ORDER BY created_at ASC
+    `,
+  });
+
   const selectById = SqlSchema.findOneOption({
     Request: GetUserByIdInput,
     Result: UserDbRow,
@@ -149,6 +167,12 @@ const makeUserRepository = Effect.gen(function* () {
         mapErr("UserRepository.getByGoogleSub:query", "UserRepository.getByGoogleSub:decode"),
       ),
       Effect.map((opt) => Option.map(opt, toUserRecord)),
+    );
+
+  const listAll: UserRepositoryShape["listAll"] = () =>
+    selectAll({}).pipe(
+      Effect.mapError(mapErr("UserRepository.listAll:query", "UserRepository.listAll:decode")),
+      Effect.map((rows) => rows.map(toUserRecord)),
     );
 
   const getById: UserRepositoryShape["getById"] = (input) =>
@@ -270,6 +294,7 @@ const makeUserRepository = Effect.gen(function* () {
 
   return {
     upsertFromGoogle,
+    listAll,
     getByGoogleSub,
     getById,
     setGitHubToken,

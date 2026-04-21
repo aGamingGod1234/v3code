@@ -21,10 +21,28 @@ import {
   type CodexAppServerStartSessionInput,
   type CodexAppServerSendTurnInput,
 } from "../../codexAppServerManager.ts";
+import { ContainerManager } from "../../cloud/Services/ContainerManager.ts";
+import { CloudError } from "../../cloud/errors.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import { CodexAdapter } from "../Services/CodexAdapter.ts";
+
+const noopContainerManagerLayer = Layer.succeed(ContainerManager, {
+  dockerAvailable: () => Effect.succeed(false),
+  isAvailable: () => Effect.succeed(false),
+  getWorkspaceMetadata: () => Effect.succeed(Option.none()),
+  createWorkspace: () => Effect.fail(new CloudError({ message: "Cloud env disabled in tests." })),
+  prepareProviderLaunch: (input) =>
+    Effect.succeed({
+      binaryPath: input.binaryPath,
+      ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+    }),
+  resolvePreviewTarget: () => Effect.succeed(Option.none()),
+  stopThreadEnvironment: () => Effect.void,
+  listContainers: () => Effect.succeed([]),
+  pruneExpired: () => Effect.void,
+} satisfies typeof ContainerManager.Service);
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import { makeCodexAdapterLive } from "./CodexAdapter.ts";
 
@@ -151,6 +169,7 @@ const providerSessionDirectoryTestLayer = Layer.succeed(ProviderSessionDirectory
 const validationManager = new FakeCodexManager();
 const validationLayer = it.layer(
   makeCodexAdapterLive({ manager: validationManager }).pipe(
+    Layer.provide(noopContainerManagerLayer),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
@@ -218,6 +237,7 @@ sessionErrorManager.sendTurnImpl.mockImplementation(async () => {
 });
 const sessionErrorLayer = it.layer(
   makeCodexAdapterLive({ manager: sessionErrorManager }).pipe(
+    Layer.provide(noopContainerManagerLayer),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),
@@ -280,6 +300,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
 const lifecycleManager = new FakeCodexManager();
 const lifecycleLayer = it.layer(
   makeCodexAdapterLive({ manager: lifecycleManager }).pipe(
+    Layer.provide(noopContainerManagerLayer),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(providerSessionDirectoryTestLayer),

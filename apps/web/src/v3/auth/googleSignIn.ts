@@ -32,6 +32,7 @@ import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
 import { isElectron } from "../../env";
 import { resolveDeviceId } from "./deviceId";
 import { captureDriveAppDataSnapshot, type V3DriveAppDataSnapshot } from "./driveAppData";
+import { clearPersistedGoogleTokens, writePersistedGoogleTokens } from "./googleTokenStore";
 import { recordV3SignedIn, clearV3SignedIn, type V3SignInSnapshot } from "./signInState";
 
 const APP_VERSION_FALLBACK = "0.0.1-dev";
@@ -194,6 +195,9 @@ export const startV3GoogleSignIn = async (): Promise<V3SignInResult> => {
   }
 
   const decoded = Schema.decodeUnknownSync(GoogleBootstrapResult)(await bootstrapResponse.json());
+  await writePersistedGoogleTokens(handoff).catch((cause) => {
+    console.warn("[v3] Failed to persist Google tokens", cause);
+  });
   recordV3SignedIn({
     email: decoded.user.email,
     displayName: decoded.user.displayName,
@@ -209,7 +213,6 @@ export const startV3GoogleSignIn = async (): Promise<V3SignInResult> => {
   // the recordV3SignedIn call first means the top-right chip updates
   // immediately while Drive work continues.
   const driveSnapshot = await captureDriveAppDataSnapshot({
-    accessToken: handoff.accessToken,
     thisDevice: {
       device_id: deviceId,
       name: deviceName,
@@ -240,6 +243,7 @@ export const endV3GoogleSignInLocally = (): void => {
   // Local-only sign-out for P1d: clears the visible chrome but does not
   // revoke the server-side session. P3 will add a real /api/auth/session
   // delete that wipes the cookie too.
+  void clearPersistedGoogleTokens();
   clearV3SignedIn();
 };
 
@@ -247,38 +251,12 @@ export const endV3GoogleSignInLocally = (): void => {
 // V3 Phase 7 — browser Google sign-in.
 // ---------------------------------------------------------------------------
 
-const COOKIE_SIGNIN_SNAPSHOT = "v3_signin_snapshot";
-const COOKIE_DRIVE_ACCESS_TOKEN = "v3_drive_access_token";
-
-const readCookieValue = (name: string): string | null => {
-  if (typeof document === "undefined") return null;
-  const entries = document.cookie.split(";");
-  for (const entry of entries) {
-    const trimmed = entry.trim();
-    if (trimmed.startsWith(`${name}=`)) {
-      const value = trimmed.slice(name.length + 1);
-      try {
-        return decodeURIComponent(value);
-      } catch {
-        return value;
-      }
-    }
-  }
-  return null;
-};
-
-const clearCookieValue = (name: string): void => {
-  if (typeof document === "undefined") return;
-  document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
-};
-
 /**
  * Kick off the cloud-mode Google sign-in redirect. The browser navigates
  * off to `/api/auth/google/authorize`, which in turn 302s to Google's
  * consent screen and eventually lands on `/api/auth/google/callback`.
- * Callback-side cookies (`v3_signin_snapshot`, `v3_drive_access_token`)
- * let the renderer greet the user without a second round-trip — see
- * `consumeBrowserSignInCookies` below.
+ * The callback stores an opaque one-time handoff cookie that the renderer
+ * consumes through `/api/auth/google/tokens/consume`.
  */
 export const startV3GoogleSignInBrowser = async (): Promise<void> => {
   const config = await fetchGoogleClientConfig().catch((cause) => {
@@ -314,73 +292,4 @@ export const startV3GoogleSignInBrowser = async (): Promise<void> => {
   if (typeof window !== "undefined") {
     window.location.href = target;
   }
-};
-
-export interface BrowserSignInSnapshot {
-  readonly email: string;
-  readonly displayName: string | null;
-  readonly avatarUrl: string | null;
-  readonly pendingApproval: boolean;
-  readonly deviceId: string;
-}
-
-/**
- * Read-once helper: pull the `v3_signin_snapshot` cookie that the
- * server's `/api/auth/google/callback` drops on its way back to the
- * client, persist it into localStorage via `recordV3SignedIn`, and
- * clear the cookies so a second tab refresh is a no-op.
- *
- * Returns `null` when no snapshot cookie is present, i.e. the current
- * load is not a post-callback redirect. Safe to call on every mount.
- */
-export const consumeBrowserSignInCookies = (): BrowserSignInSnapshot | null => {
-  const raw = readCookieValue(COOKIE_SIGNIN_SNAPSHOT);
-  if (!raw) return null;
-  let decoded: unknown;
-  try {
-    const base64 = raw.includes("%") ? decodeURIComponent(raw) : raw;
-    decoded = JSON.parse(atob(base64));
-  } catch {
-    clearCookieValue(COOKIE_SIGNIN_SNAPSHOT);
-    return null;
-  }
-  if (typeof decoded !== "object" || decoded === null) {
-    clearCookieValue(COOKIE_SIGNIN_SNAPSHOT);
-    return null;
-  }
-  const snapshot = decoded as Partial<BrowserSignInSnapshot>;
-  if (typeof snapshot.email !== "string" || snapshot.email.length === 0) {
-    clearCookieValue(COOKIE_SIGNIN_SNAPSHOT);
-    return null;
-  }
-  const normalised: BrowserSignInSnapshot = {
-    email: snapshot.email,
-    displayName: typeof snapshot.displayName === "string" ? snapshot.displayName : null,
-    avatarUrl: typeof snapshot.avatarUrl === "string" ? snapshot.avatarUrl : null,
-    pendingApproval: snapshot.pendingApproval === true,
-    deviceId: typeof snapshot.deviceId === "string" ? snapshot.deviceId : resolveDeviceId(),
-  };
-  recordV3SignedIn({
-    email: normalised.email,
-    displayName: normalised.displayName,
-    avatarUrl: normalised.avatarUrl,
-    pendingApproval: normalised.pendingApproval,
-  });
-  clearCookieValue(COOKIE_SIGNIN_SNAPSHOT);
-  return normalised;
-};
-
-/**
- * Read-and-consume the one-time Drive access token cookie that the
- * cloud-mode callback leaves behind. Used by the renderer to perform
- * the P2c Drive App Data capture with the browser user's consent. The
- * cookie is marked `Max-Age` ~ token lifetime on the server, but we
- * eagerly clear it after first use because the browser can't rotate
- * it.
- */
-export const consumeBrowserDriveAccessToken = (): string | null => {
-  const raw = readCookieValue(COOKIE_DRIVE_ACCESS_TOKEN);
-  if (!raw) return null;
-  clearCookieValue(COOKIE_DRIVE_ACCESS_TOKEN);
-  return raw;
 };

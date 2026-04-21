@@ -54,6 +54,7 @@ import type {
 } from "./orchestration.ts";
 import type { EnvironmentId } from "./baseSchemas.ts";
 import { EditorId } from "./editor.ts";
+import type { GoogleTokenBundle } from "./identity.ts";
 import type { MeshForkChatResult } from "./mesh/chat.ts";
 import { ServerSettings, type ClientSettings, type ServerSettingsPatch } from "./settings.ts";
 
@@ -212,6 +213,9 @@ export interface DesktopBridge {
   getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
   setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
   removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+  getV3GoogleTokens: () => Promise<GoogleTokenBundle | null>;
+  setV3GoogleTokens: (tokens: GoogleTokenBundle) => Promise<void>;
+  clearV3GoogleTokens: () => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
@@ -238,9 +242,7 @@ export interface DesktopBridge {
   // read/write the `v3_config.json` discovery blob in the user's per-app
   // Drive folder. Rejects on cancellation, timeout, network failure, or
   // a misconfigured client.
-  openV3GoogleSignIn: (input: {
-    clientId: string;
-  }) => Promise<{ idToken: string; accessToken: string }>;
+  openV3GoogleSignIn: (input: { clientId: string }) => Promise<GoogleTokenBundle>;
   // V3 (Phase 2d): server-node setup wizard IPC. Grouped under a single
   // object so the renderer can pass the whole namespace around as a
   // dependency without the `DesktopBridge` surface exploding flat-list-

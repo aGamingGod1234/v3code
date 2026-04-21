@@ -21,6 +21,11 @@ export type UserId = typeof UserId.Type;
 export const DeviceId = TrimmedNonEmptyString.pipe(Schema.brand("DeviceId"));
 export type DeviceId = typeof DeviceId.Type;
 
+export const CLOUD_DEVICE_ID = "cloud";
+export const CLOUD_DEVICE_NAME = "Cloud";
+
+export const makeCloudDeviceId = (): DeviceId => DeviceId.make(CLOUD_DEVICE_ID);
+
 // ---------------------------------------------------------------------------
 // Platform / kind / capability enums (spec §15)
 // ---------------------------------------------------------------------------
@@ -124,6 +129,37 @@ export const GoogleBootstrapResult = Schema.Struct({
 });
 export type GoogleBootstrapResult = typeof GoogleBootstrapResult.Type;
 
+export const GoogleTokenBundle = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  idToken: TrimmedNonEmptyString,
+  refreshToken: Schema.NullOr(TrimmedNonEmptyString),
+  expiresAt: TrimmedNonEmptyString,
+  scope: Schema.NullOr(Schema.String),
+  tokenType: Schema.NullOr(Schema.String),
+});
+export type GoogleTokenBundle = typeof GoogleTokenBundle.Type;
+
+export const GoogleTokenRefreshInput = Schema.Struct({
+  refreshToken: TrimmedNonEmptyString,
+  idToken: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type GoogleTokenRefreshInput = typeof GoogleTokenRefreshInput.Type;
+
+export const GoogleTokenHandoffSnapshot = Schema.Struct({
+  email: TrimmedNonEmptyString,
+  displayName: Schema.NullOr(Schema.String),
+  avatarUrl: Schema.NullOr(Schema.String),
+  pendingApproval: Schema.Boolean,
+  deviceId: DeviceId,
+});
+export type GoogleTokenHandoffSnapshot = typeof GoogleTokenHandoffSnapshot.Type;
+
+export const GoogleTokenHandoffConsumeResult = Schema.Struct({
+  snapshot: GoogleTokenHandoffSnapshot,
+  tokens: GoogleTokenBundle,
+});
+export type GoogleTokenHandoffConsumeResult = typeof GoogleTokenHandoffConsumeResult.Type;
+
 // ---------------------------------------------------------------------------
 // Public client config for Google sign-in (P1d wire shape)
 // ---------------------------------------------------------------------------
@@ -170,6 +206,26 @@ export const V3RemoveDeviceResult = Schema.Struct({
   removed: Schema.Boolean,
 });
 export type V3RemoveDeviceResult = typeof V3RemoveDeviceResult.Type;
+
+export const DeviceApprovalStreamEvent = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("device-registered"),
+    userId: UserId,
+    device: DeviceInfo,
+    needsApproval: Schema.Boolean,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("device-approved"),
+    userId: UserId,
+    device: DeviceInfo,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("device-removed"),
+    userId: UserId,
+    deviceId: DeviceId,
+  }),
+]);
+export type DeviceApprovalStreamEvent = typeof DeviceApprovalStreamEvent.Type;
 
 // ---------------------------------------------------------------------------
 // GitHub identity (P1e)
@@ -224,6 +280,8 @@ export const GitHubConnectionStatus = Schema.Struct({
   username: Schema.NullOr(TrimmedNonEmptyString),
   scopes: Schema.Array(GitHubOAuthScope),
   connectedAt: Schema.NullOr(Schema.DateTimeUtc),
+  needsReconnect: Schema.Boolean,
+  reconnectReason: Schema.NullOr(Schema.String),
 });
 export type GitHubConnectionStatus = typeof GitHubConnectionStatus.Type;
 

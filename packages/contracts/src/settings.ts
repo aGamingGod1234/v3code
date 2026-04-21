@@ -53,6 +53,10 @@ export const ClientSettingsSchema = Schema.Struct({
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
   ),
+  v3ConfigureServerBannerDismissedPermanently: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  v3ServerNodeUrlOverride: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 

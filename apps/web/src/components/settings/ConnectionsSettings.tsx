@@ -9,8 +9,11 @@ import {
 import { DateTime } from "effect";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { useAccountState } from "../../hooks/useAccountState";
+import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
+import { V3ConnectGitHubButton } from "../../v3/ui/ConnectGitHubButton";
 import {
   SettingsPageContainer,
   SettingsRow,
@@ -753,6 +756,9 @@ function SavedBackendListRow({
 
 export function ConnectionsSettings() {
   const desktopBridge = window.desktopBridge;
+  const account = useAccountState();
+  const v3ServerNodeUrlOverride = useSettings((settings) => settings.v3ServerNodeUrlOverride);
+  const { updateSettings } = useUpdateSettings();
   const [currentSessionRole, setCurrentSessionRole] = useState<"owner" | "client" | null>(
     desktopBridge ? "owner" : null,
   );
@@ -806,10 +812,15 @@ export function ConnectionsSettings() {
   const [pendingDesktopServerExposureMode, setPendingDesktopServerExposureMode] = useState<
     DesktopServerExposureState["mode"] | null
   >(null);
+  const [v3ServerNodeUrlOverrideDraft, setV3ServerNodeUrlOverrideDraft] =
+    useState(v3ServerNodeUrlOverride);
   const canManageLocalBackend = currentSessionRole === "owner";
   const isLocalBackendNetworkAccessible = desktopBridge
     ? desktopServerExposureState?.mode === "network-accessible"
     : currentAuthPolicy === "remote-reachable";
+  const driveDiscoveredServerUrl = account.driveSnapshot?.serverUrl?.trim() ?? "";
+  const effectiveV3ServerNodeUrl =
+    v3ServerNodeUrlOverride.trim() || driveDiscoveredServerUrl || null;
 
   const handleDesktopServerExposureChange = useCallback(
     async (checked: boolean) => {
@@ -985,6 +996,30 @@ export function ConnectionsSettings() {
     }
   }, []);
 
+  const handleSaveV3ServerNodeOverride = useCallback(() => {
+    const nextValue = v3ServerNodeUrlOverrideDraft.trim();
+    updateSettings({ v3ServerNodeUrlOverride: nextValue });
+    toastManager.add({
+      type: "success",
+      title: nextValue.length > 0 ? "Server-node override saved" : "Server-node override cleared",
+      description:
+        nextValue.length > 0
+          ? `Primary connections will target ${nextValue}.`
+          : "Primary connections will fall back to Drive discovery and local bootstrap again.",
+    });
+  }, [updateSettings, v3ServerNodeUrlOverrideDraft]);
+
+  const handleResetV3ServerNodeOverride = useCallback(() => {
+    setV3ServerNodeUrlOverrideDraft("");
+    updateSettings({ v3ServerNodeUrlOverride: "" });
+    toastManager.add({
+      type: "success",
+      title: "Server-node override cleared",
+      description:
+        "Primary connections will fall back to Drive discovery and local bootstrap again.",
+    });
+  }, [updateSettings]);
+
   useEffect(() => {
     if (desktopBridge) {
       setCurrentSessionRole("owner");
@@ -1008,6 +1043,10 @@ export function ConnectionsSettings() {
       cancelled = true;
     };
   }, [desktopBridge]);
+
+  useEffect(() => {
+    setV3ServerNodeUrlOverrideDraft(v3ServerNodeUrlOverride);
+  }, [v3ServerNodeUrlOverride]);
 
   useEffect(() => {
     if (!canManageLocalBackend) return;
@@ -1266,6 +1305,75 @@ export function ConnectionsSettings() {
           />
         </SettingsSection>
       )}
+
+      <SettingsSection title="V3 connections">
+        <SettingsRow
+          title="GitHub"
+          description={
+            account.isSignedIn
+              ? "Connect a GitHub account so V3 can browse repos and validate the stored token before Cloud env handoff lands."
+              : "Sign in with Google before connecting GitHub for this server node."
+          }
+          status={
+            account.isSignedIn ? null : (
+              <span className="text-xs text-muted-foreground">Google sign-in required</span>
+            )
+          }
+          control={
+            account.isSignedIn ? (
+              <div className="flex w-full items-center justify-end sm:w-auto">
+                <V3ConnectGitHubButton />
+              </div>
+            ) : null
+          }
+        />
+        <SettingsRow
+          title="Server node URL override"
+          description="Manual override wins over Drive discovery, desktop bootstrap, and env defaults when choosing the primary server target."
+          status={
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {driveDiscoveredServerUrl ? (
+                <div>Drive-discovered server: {driveDiscoveredServerUrl}</div>
+              ) : (
+                <div>No Drive-published server URL yet.</div>
+              )}
+              <div>
+                Effective target: {effectiveV3ServerNodeUrl ?? "Automatic fallback resolution"}
+              </div>
+            </div>
+          }
+          control={
+            <div className="flex w-full flex-col gap-2 sm:w-[28rem]">
+              <Input
+                value={v3ServerNodeUrlOverrideDraft}
+                onChange={(event) => setV3ServerNodeUrlOverrideDraft(event.target.value)}
+                placeholder="https://server-node.example.com"
+                spellCheck={false}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={
+                    v3ServerNodeUrlOverride.trim().length === 0 &&
+                    v3ServerNodeUrlOverrideDraft.trim().length === 0
+                  }
+                  onClick={handleResetV3ServerNodeOverride}
+                >
+                  Reset
+                </Button>
+                <Button
+                  size="xs"
+                  disabled={v3ServerNodeUrlOverrideDraft.trim() === v3ServerNodeUrlOverride.trim()}
+                  onClick={handleSaveV3ServerNodeOverride}
+                >
+                  Save override
+                </Button>
+              </div>
+            </div>
+          }
+        />
+      </SettingsSection>
 
       <SettingsSection
         title="Remote environments"

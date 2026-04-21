@@ -120,6 +120,14 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly githubClientId: string | undefined;
   readonly githubClientSecret: string | undefined;
   readonly githubOauthScopes: string;
+  readonly cloudEnvEnabled: boolean;
+  readonly cloudEnvDockerSocket: string | undefined;
+  readonly cloudEnvBaseImage: string;
+  readonly cloudEnvMaxContainers: number;
+  readonly cloudEnvContainerCpuLimit: number;
+  readonly cloudEnvContainerMemoryMb: number;
+  readonly cloudEnvContainerDiskGb: number;
+  readonly cloudEnvContainerMaxRuntimeHours: number;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -229,6 +237,14 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           githubClientId: undefined,
           githubClientSecret: undefined,
           githubOauthScopes: "read:user repo",
+          cloudEnvEnabled: false,
+          cloudEnvDockerSocket: undefined,
+          cloudEnvBaseImage: "ghcr.io/pingdotgg/t3-cloud-env:latest",
+          cloudEnvMaxContainers: 10,
+          cloudEnvContainerCpuLimit: 2,
+          cloudEnvContainerMemoryMb: 4096,
+          cloudEnvContainerDiskGb: 20,
+          cloudEnvContainerMaxRuntimeHours: 12,
         } satisfies ServerConfigShape;
       }),
     );

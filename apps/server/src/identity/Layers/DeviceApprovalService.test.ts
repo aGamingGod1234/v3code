@@ -1,21 +1,38 @@
-import { DeviceId, GoogleSub, TrimmedNonEmptyString, UserId } from "@v3tools/contracts";
+import {
+  AuthSessionId,
+  DeviceId,
+  GoogleSub,
+  TrimmedNonEmptyString,
+  UserId,
+} from "@v3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import { DeviceRegistryLive } from "../../mesh/Layers/DeviceRegistry.ts";
+import { PresenceBroadcasterLive } from "../../mesh/Layers/PresenceBroadcaster.ts";
+import { DeviceRegistry } from "../../mesh/Services/DeviceRegistry.ts";
 import { DeviceApprovalService } from "../Services/DeviceApprovalService.ts";
 import { DeviceRepositoryLive } from "./DeviceRepository.ts";
 import { DeviceApprovalServiceLive } from "./DeviceApprovalService.ts";
 import { UserRepository } from "../Services/UserRepository.ts";
 import { UserRepositoryLive } from "./UserRepository.ts";
 
-const approvalLayer = Layer.mergeAll(
+const baseLayer = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
-  DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
+  PresenceBroadcasterLive,
+).pipe(Layer.provideMerge(SqlitePersistenceMemory));
+
+const deviceRegistryLayer = DeviceRegistryLive.pipe(Layer.provide(baseLayer));
+
+const approvalLayer = Layer.mergeAll(
+  baseLayer,
+  deviceRegistryLayer,
+  DeviceApprovalServiceLive.pipe(Layer.provide(deviceRegistryLayer), Layer.provide(baseLayer)),
 );
 
-const layer = it.layer(approvalLayer.pipe(Layer.provideMerge(SqlitePersistenceMemory)));
+const layer = it.layer(approvalLayer);
 
 const now = DateTime.makeUnsafe(Date.UTC(2026, 3, 18, 12, 0, 0));
 const later = DateTime.makeUnsafe(Date.UTC(2026, 3, 18, 13, 0, 0));
@@ -44,7 +61,7 @@ const registerInput = (deviceId: string, userId: string) => ({
 });
 
 layer("DeviceApprovalServiceLive", (it) => {
-  it.effect("auto-approves the first device ever registered for a user", () =>
+  it.effect("auto-approves a new device when no other approved device is online", () =>
     Effect.gen(function* () {
       yield* seedUser("u1", "sub-1");
       const approvals = yield* DeviceApprovalService;
@@ -55,11 +72,17 @@ layer("DeviceApprovalServiceLive", (it) => {
     }),
   );
 
-  it.effect("leaves a second device unapproved and needing approval", () =>
+  it.effect("leaves a second device unapproved when another approved device is online", () =>
     Effect.gen(function* () {
       yield* seedUser("u1", "sub-1");
       const approvals = yield* DeviceApprovalService;
+      const registry = yield* DeviceRegistry;
       yield* approvals.registerOrResume(registerInput("d1", "u1"));
+      yield* registry.register({
+        deviceId: DeviceId.make("d1"),
+        sessionId: AuthSessionId.make("session-1"),
+        connectedAt: now.toString(),
+      });
       const result = yield* approvals.registerOrResume(registerInput("d2", "u1"));
       assert.equal(result.device.approved, false);
       assert.equal(result.needsApproval, true);

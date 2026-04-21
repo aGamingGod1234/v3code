@@ -24,6 +24,8 @@
 // renderer is expected to disable its sign-in button while a flow is
 // outstanding, but we defend in depth here.
 
+import type { GoogleTokenBundle } from "@v3tools/contracts";
+import { withGoogleTokenExpiry } from "@v3tools/shared/googleTokens";
 import * as Crypto from "node:crypto";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -31,10 +33,7 @@ const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const REDIRECT_URI = "v3://auth/google/callback";
 const FLOW_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes — generous for users who switch tabs.
 
-interface TokenExchangeResult {
-  readonly idToken: string;
-  readonly accessToken: string;
-}
+type TokenExchangeResult = GoogleTokenBundle;
 
 interface PendingFlow {
   readonly state: string;
@@ -123,6 +122,10 @@ export const createV3GoogleAuthFlow = (deps: V3GoogleAuthFlowDeps): V3GoogleAuth
     const json = (await response.json()) as {
       id_token?: unknown;
       access_token?: unknown;
+      refresh_token?: unknown;
+      expires_in?: unknown;
+      scope?: unknown;
+      token_type?: unknown;
     };
     if (typeof json.id_token !== "string" || json.id_token.length === 0) {
       throw new Error("Google token response did not include an id_token.");
@@ -130,7 +133,16 @@ export const createV3GoogleAuthFlow = (deps: V3GoogleAuthFlowDeps): V3GoogleAuth
     if (typeof json.access_token !== "string" || json.access_token.length === 0) {
       throw new Error("Google token response did not include an access_token.");
     }
-    return { idToken: json.id_token, accessToken: json.access_token };
+    return withGoogleTokenExpiry(
+      {
+        idToken: json.id_token,
+        accessToken: json.access_token,
+        refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : null,
+        scope: typeof json.scope === "string" ? json.scope : null,
+        tokenType: typeof json.token_type === "string" ? json.token_type : null,
+      },
+      typeof json.expires_in === "number" ? json.expires_in : 3600,
+    );
   };
 
   const start: V3GoogleAuthFlow["start"] = async ({ clientId }) => {
@@ -223,7 +235,6 @@ export const getSharedV3GoogleAuthFlow = (): V3GoogleAuthFlow => {
   if (sharedFlow === null) {
     // Late require keeps `electron` out of vitest's module graph for unit
     // tests that exercise the pure factory.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { shell } = require("electron") as typeof import("electron");
     sharedFlow = createV3GoogleAuthFlow({
       openExternal: (url) => shell.openExternal(url),
