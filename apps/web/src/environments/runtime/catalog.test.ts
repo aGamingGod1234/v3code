@@ -94,10 +94,12 @@ describe("environment runtime catalog stores", () => {
     expect(errorSpy).toHaveBeenCalledWith("[SAVED_ENVIRONMENTS] persist failed", expect.any(Error));
   });
 
+  const notInitialized = () => {
+    throw new Error("Registry read resolver was not initialized.");
+  };
+
   it("does not let stale hydration overwrite records added while hydration is in flight", async () => {
-    let resolveRegistryRead: () => void = () => {
-      throw new Error("Registry read resolver was not initialized.");
-    };
+    let resolveRegistryRead: () => void = notInitialized;
 
     vi.stubGlobal("window", {
       nativeApi: {

@@ -1,4 +1,4 @@
-import { Effect, Layer, PubSub, Queue, Ref, Scope, Stream } from "effect";
+import { Effect, Layer, PubSub, Queue, Ref, Stream } from "effect";
 
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import {

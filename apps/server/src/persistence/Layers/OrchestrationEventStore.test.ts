@@ -200,10 +200,10 @@ layer("OrchestrationEventStore", (it) => {
       ).pipe(Effect.map((chunk) => Array.from(chunk)));
       assert.equal(forkedStream.length, 2);
       assert.equal(forkedStream[0]?.type, "thread.message-sent");
-      assert.equal((forkedStream[0]?.payload as { threadId: string }).threadId, targetThreadId);
+      assert.equal((forkedStream[0]?.payload as { threadId: string } | undefined)?.threadId, targetThreadId);
       assert.equal(forkedStream[1]?.type, "thread.forked");
       assert.equal(
-        (forkedStream[1]?.payload as { sourceThreadId: string }).sourceThreadId,
+        (forkedStream[1]?.payload as { sourceThreadId: string } | undefined)?.sourceThreadId,
         sourceThreadId,
       );
 

@@ -376,12 +376,10 @@ const makeCloudEnvService = Effect.gen(function* () {
     Effect.gen(function* () {
       const tokenOpt = yield* resolveGitHubToken(tokenDeps, actor.userId);
       if (Option.isNone(tokenOpt)) {
-        return yield* Effect.fail(
-          new CloudEnvError({
+        return yield* new CloudEnvError({
             reason: "github-not-linked",
             message: "Connect GitHub in Settings before starting a Cloud chat.",
-          }),
-        );
+        });
       }
       return yield* listReposFromGitHub(tokenOpt.value);
     });
@@ -390,20 +388,16 @@ const makeCloudEnvService = Effect.gen(function* () {
     Effect.gen(function* () {
       const tokenOpt = yield* resolveGitHubToken(tokenDeps, actor.userId);
       if (Option.isNone(tokenOpt)) {
-        return yield* Effect.fail(
-          new CloudEnvError({
+        return yield* new CloudEnvError({
             reason: "github-not-linked",
             message: "Connect GitHub in Settings before browsing branches.",
-          }),
-        );
+        });
       }
       if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoFullName)) {
-        return yield* Effect.fail(
-          new CloudEnvError({
+        return yield* new CloudEnvError({
             reason: "repo-access",
             message: `Invalid repo slug: ${repoFullName}`,
-          }),
-        );
+        });
       }
       return yield* listBranchesFromGitHub(tokenOpt.value, repoFullName);
     });
@@ -488,22 +482,18 @@ const makeCloudEnvService = Effect.gen(function* () {
       const active = yield* listAllContainers;
       const activeAlive = active.filter((c) => c.status !== "dead" && c.status !== "error");
       if (activeAlive.length >= config.cloudEnvMaxContainers) {
-        return yield* Effect.fail(
-          new CloudEnvError({
+        return yield* new CloudEnvError({
             reason: "limit-reached",
             message: `Cloud env is at the configured cap of ${config.cloudEnvMaxContainers} active containers.`,
-          }),
-        );
+        });
       }
 
       const tokenOpt = yield* resolveGitHubToken(tokenDeps, actor.userId);
       if (Option.isNone(tokenOpt)) {
-        return yield* Effect.fail(
-          new CloudEnvError({
+        return yield* new CloudEnvError({
             reason: "github-not-linked",
             message: "Connect GitHub in Settings before starting a Cloud chat.",
-          }),
-        );
+        });
       }
       const token = tokenOpt.value;
 

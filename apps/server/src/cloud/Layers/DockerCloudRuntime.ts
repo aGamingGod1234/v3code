@@ -186,28 +186,22 @@ const makeDockerCloudRuntime = Effect.gen(function* () {
       if (result.exitCode !== 0) {
         const lower = result.stderr.toLowerCase();
         if (lower.includes("cannot connect to the docker daemon")) {
-          return yield* Effect.fail(
-            new CloudEnvError({
+          return yield* new CloudEnvError({
               reason: "docker-unavailable",
               message: "Docker daemon is not reachable from the server node.",
-            }),
-          );
+            });
         }
-        return yield* Effect.fail(
-          new CloudEnvError({
+        return yield* new CloudEnvError({
             reason: "container-failure",
             message: `docker run failed (exit ${result.exitCode}): ${result.stderr.trim() || result.stdout.trim()}`,
-          }),
-        );
+        });
       }
       const containerId = result.stdout.trim();
       if (containerId.length === 0) {
-        return yield* Effect.fail(
-          new CloudEnvError({
+        return yield* new CloudEnvError({
             reason: "container-failure",
             message: "docker run returned no container id.",
-          }),
-        );
+        });
       }
       return { containerId } as DockerStartResult;
     });

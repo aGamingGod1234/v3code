@@ -223,7 +223,6 @@ export const getSharedV3GoogleAuthFlow = (): V3GoogleAuthFlow => {
   if (sharedFlow === null) {
     // Late require keeps `electron` out of vitest's module graph for unit
     // tests that exercise the pure factory.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { shell } = require("electron") as typeof import("electron");
     sharedFlow = createV3GoogleAuthFlow({
       openExternal: (url) => shell.openExternal(url),

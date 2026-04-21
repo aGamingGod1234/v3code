@@ -94,12 +94,14 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
     setSubmitting(true);
     try {
       const trimmedTitle = title.trim();
-      const result = await forkThread(threadRef, {
-        ...(trimmedTitle.length > 0 ? { title: trimmedTitle } : {}),
-        ...(targetDeviceValue !== UNASSIGNED_DEVICE_VALUE
-          ? { targetDeviceId: targetDeviceValue }
-          : {}),
-      });
+      const result = await forkThread(
+        threadRef,
+        Object.assign(
+          {},
+          trimmedTitle.length > 0 ? { title: trimmedTitle } : null,
+          targetDeviceValue !== UNASSIGNED_DEVICE_VALUE ? { targetDeviceId: targetDeviceValue } : null,
+        ),
+      );
       if (result) {
         setOpen(false);
       }

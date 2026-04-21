@@ -41,6 +41,10 @@ const recordBody = (init: RequestInit | undefined): string | null => {
   return String(init.body);
 };
 
+const implThrow: typeof fetch = async () => {
+  throw new TypeError("connection refused");
+};
+
 const makeFetchMock = (responders: ReadonlyArray<(call: RecordedCall) => Response>): FetchMock => {
   const calls: RecordedCall[] = [];
   let index = 0;
@@ -162,14 +166,12 @@ describe("createV3DriveAppDataClient.read", () => {
   });
 
   it("raises network when fetch throws", async () => {
-    const impl: typeof fetch = async () => {
-      throw new TypeError("connection refused");
-    };
-    const client = createV3DriveAppDataClient({ fetch: impl });
+    const client = createV3DriveAppDataClient({ fetch: implThrow });
     await expect(client.read("token")).rejects.toBeInstanceOf(V3DriveClientError);
     await expect(client.read("token")).rejects.toMatchObject({ reason: "network" });
   });
 });
+
 
 describe("createV3DriveAppDataClient.write", () => {
   it("POSTs multipart to create the file when none exists", async () => {

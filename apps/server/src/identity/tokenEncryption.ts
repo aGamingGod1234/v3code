@@ -24,9 +24,7 @@ export interface EncryptedBlob {
 
 export class TokenEncryptionError extends Error {
   override readonly name = "TokenEncryptionError";
-  constructor(message: string) {
-    super(message);
-  }
+
 }
 
 const assertKey = (key: Uint8Array) => {

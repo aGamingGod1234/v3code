@@ -132,14 +132,15 @@ describe("listAuthenticatedUserRepos", () => {
   });
 
   it("raises GitHubApiError(network) when fetch throws", async () => {
-    const fetchImpl: typeof fetch = async () => {
-      throw new Error("offline");
-    };
-    await expect(listAuthenticatedUserRepos({ token: "x", fetchImpl })).rejects.toMatchObject({
+    await expect(listAuthenticatedUserRepos({ token: "x", fetchImpl: fetchImplThrows })).rejects.toMatchObject({
       kind: "network",
     });
   });
 });
+
+const fetchImplThrows: typeof fetch = async () => {
+  throw new Error("offline");
+};
 
 describe("listRepoBranches", () => {
   it("returns normalised branch rows", async () => {
