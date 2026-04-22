@@ -103,6 +103,11 @@ function createRpcClientStub(): WsRpcClient {
       subscribeDeviceApprovals: vi.fn(() => () => undefined),
       subscribePresence: vi.fn(() => () => undefined),
       subscribePrompts: vi.fn(() => () => undefined),
+      registerPushToken: vi.fn(async () => ({
+        registered_at: "2026-04-22T00:00:00.000Z",
+        rotated: false,
+      })),
+      unregisterPushToken: vi.fn(async () => ({ acknowledged: true })),
     },
     orchestration: {
       dispatchCommand: vi.fn(async () => ({ sequence: 7 })),

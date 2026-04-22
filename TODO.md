@@ -28,6 +28,10 @@ Pointers for upcoming V3 work. Anything load-bearing lives in
   `max_devices_per_user` is the next easy slice.
 - "Open on another device" action in the offline-host toast. The toast
   text exists; wiring the action to the fork dialog is the TODO.
+- Google token refresh works on `driveAppData`'s opportunistic path,
+  but the sign-in layer does not proactively refresh the ID token
+  before expiry — long-lived tabs get kicked back to the sign-in
+  dialog instead of refreshing silently.
 
 ## Smaller things
 
