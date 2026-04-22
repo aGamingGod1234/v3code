@@ -59,6 +59,24 @@ const emptySnapshot = (capturedAt: string): V3DriveAppDataSnapshot => ({
   error: null,
 });
 
+const snapshotWithError = (
+  capturedAt: string,
+  error: V3DriveClientErrorReason,
+): V3DriveAppDataSnapshot => {
+  const previous = readSnapshot();
+  if (!previous) {
+    return {
+      ...emptySnapshot(capturedAt),
+      error,
+    };
+  }
+  return {
+    ...previous,
+    capturedAt,
+    error,
+  };
+};
+
 const writeSnapshot = (snapshot: V3DriveAppDataSnapshot): void => {
   try {
     window.localStorage.setItem(DRIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
@@ -180,10 +198,7 @@ export const captureDriveAppDataSnapshot = async (
   const capturedAt = now().toISOString();
   const accessToken = input.accessToken ?? (await getFreshGoogleAccessToken());
   if (!accessToken) {
-    const snapshot: V3DriveAppDataSnapshot = {
-      ...emptySnapshot(capturedAt),
-      error: "unauthorized",
-    };
+    const snapshot = snapshotWithError(capturedAt, "unauthorized");
     writeSnapshot(snapshot);
     return snapshot;
   }
@@ -197,10 +212,7 @@ export const captureDriveAppDataSnapshot = async (
   } catch (cause) {
     if (cause instanceof V3DriveClientError) {
       logger.warn(`[v3] Drive App Data read failed: ${cause.reason}`);
-      const snapshot: V3DriveAppDataSnapshot = {
-        ...emptySnapshot(capturedAt),
-        error: cause.reason,
-      };
+      const snapshot = snapshotWithError(capturedAt, cause.reason);
       writeSnapshot(snapshot);
       return snapshot;
     }

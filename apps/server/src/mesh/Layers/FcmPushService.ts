@@ -53,6 +53,9 @@ interface CachedAccessToken {
   readonly projectId: string;
 }
 
+const encodeJwtPart = (value: unknown): string =>
+  Buffer.from(JSON.stringify(value)).toString("base64url");
+
 // Minimal JWT signer — avoids pulling `jose` into the push code path.
 // The FCM service account key is RSA-SHA256. We build the JWT manually
 // and sign with Node's built-in crypto, identical to `jose`'s output
@@ -67,8 +70,7 @@ const buildJwtAssertion = (config: FcmServiceAccountConfig, now: number): string
     exp: Math.floor(now / 1000) + 60 * 59,
     iat: Math.floor(now / 1000),
   };
-  const encode = (obj: unknown) => Buffer.from(JSON.stringify(obj)).toString("base64url");
-  const signingInput = `${encode(header)}.${encode(payload)}`;
+  const signingInput = `${encodeJwtPart(header)}.${encodeJwtPart(payload)}`;
   const signer = Crypto.createSign("RSA-SHA256");
   signer.update(signingInput);
   signer.end();

@@ -64,6 +64,10 @@ const makeFetchMock = (responders: ReadonlyArray<(call: RecordedCall) => Respons
   return { impl, calls };
 };
 
+const throwingFetch: typeof fetch = async () => {
+  throw new TypeError("connection refused");
+};
+
 const validConfig: V3DriveConfig = {
   v3_config: {
     server_url: "https://v3.agaminggod.com",
@@ -162,10 +166,7 @@ describe("createV3DriveAppDataClient.read", () => {
   });
 
   it("raises network when fetch throws", async () => {
-    const impl: typeof fetch = async () => {
-      throw new TypeError("connection refused");
-    };
-    const client = createV3DriveAppDataClient({ fetch: impl });
+    const client = createV3DriveAppDataClient({ fetch: throwingFetch });
     await expect(client.read("token")).rejects.toBeInstanceOf(V3DriveClientError);
     await expect(client.read("token")).rejects.toMatchObject({ reason: "network" });
   });

@@ -52,10 +52,15 @@ describe("V3GoogleAuthFlow", () => {
     const state = extractStateFrom(opened);
     const consumed = flow.handleDeepLink(`v3://auth/google/callback?code=fake-code&state=${state}`);
     expect(consumed).toBe(true);
-    await expect(startPromise).resolves.toEqual({
+    const result = await startPromise;
+    expect(result).toMatchObject({
       idToken: "stubbed-id-token",
       accessToken: "stubbed-access-token",
+      refreshToken: null,
+      scope: null,
+      tokenType: null,
     });
+    expect(Date.parse(result.expiresAt)).toBeGreaterThan(Date.now());
     const authUrl = new URL(opened[0]!.url);
     const scope = authUrl.searchParams.get("scope") ?? "";
     expect(scope).toContain("openid");

@@ -199,11 +199,15 @@ layer("OrchestrationEventStore", (it) => {
         eventStore.readThreadStream(targetThreadId, 0, 100),
       ).pipe(Effect.map((chunk) => Array.from(chunk)));
       assert.equal(forkedStream.length, 2);
-      assert.equal(forkedStream[0]?.type, "thread.message-sent");
-      assert.equal((forkedStream[0]?.payload as { threadId: string }).threadId, targetThreadId);
-      assert.equal(forkedStream[1]?.type, "thread.forked");
+      const [copiedMessageEvent, forkedEvent] = forkedStream;
+      assert.equal(copiedMessageEvent?.type, "thread.message-sent");
       assert.equal(
-        (forkedStream[1]?.payload as { sourceThreadId: string }).sourceThreadId,
+        (copiedMessageEvent as { payload: { threadId: string } }).payload.threadId,
+        targetThreadId,
+      );
+      assert.equal(forkedEvent?.type, "thread.forked");
+      assert.equal(
+        (forkedEvent as { payload: { sourceThreadId: string } }).payload.sourceThreadId,
         sourceThreadId,
       );
 
