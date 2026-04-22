@@ -139,6 +139,7 @@ import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
 import { ForkAcceptDialog } from "./chat/ForkAcceptDialog";
+import { requestOpenForkChatDialog } from "./chat/forkChatOpener";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
@@ -2445,11 +2446,24 @@ export default function ChatView(props: ChatViewProps) {
       // Spec §9.1: when the remote host is offline we surface a toast on
       // the send attempt so the user notices the pending input isn't
       // being delivered (the input itself stays disabled via
-      // `remoteHostInputDisabledReason`).
+      // `remoteHostInputDisabledReason`). The action opens the
+      // ForkChatButton's dialog so they can pick a different online
+      // device to take over the chat.
+      const forkableRef = activeThread
+        ? scopeThreadRef(activeThread.environmentId, activeThread.id)
+        : null;
       toastManager.add({
         type: "error",
         title: "Can't send",
         description: remoteHostInputDisabledReason,
+        ...(forkableRef
+          ? {
+              actionProps: {
+                children: "Open on another device",
+                onClick: () => requestOpenForkChatDialog(forkableRef),
+              },
+            }
+          : {}),
       });
       return;
     }

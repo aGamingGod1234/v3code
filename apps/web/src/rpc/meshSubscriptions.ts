@@ -8,6 +8,7 @@ import { useServerMode } from "../hooks/useServerMode";
 import { updateV3SignedIn, useV3SignInSnapshot } from "../v3/auth/signInState";
 import { getPrimaryEnvironmentConnection } from "../environments/runtime";
 import { toastManager } from "../components/ui/toast";
+import { startGoogleTokenRefreshScheduler } from "../v3/auth/googleTokenRefreshScheduler";
 import { attachFcmTokenBridge } from "../v3/mobile/fcmTokenBridge";
 import type { MobilePushRegistration } from "../v3/mobile/mobilePlatform";
 import { setMeshDeviceSnapshot } from "./meshState";
@@ -139,6 +140,22 @@ export function useMeshSubscriptions(): void {
 
     return () => {
       handle?.dispose();
+    };
+  }, [signInSnapshot.email]);
+
+  // Spec §3.1: proactively refresh the Google ID token before expiry
+  // so long-lived tabs don't drop to the sign-in dialog an hour in.
+  // The scheduler is cheap to start/stop per session transition — one
+  // setTimeout at a time, no polling — so gating it on `signInSnapshot.email`
+  // is strictly correct.
+  useEffect(() => {
+    if (signInSnapshot.email === null) {
+      return;
+    }
+
+    const scheduler = startGoogleTokenRefreshScheduler();
+    return () => {
+      scheduler.stop();
     };
   }, [signInSnapshot.email]);
 }

@@ -68,7 +68,10 @@ import {
   type GitHubFlowEnvelope,
 } from "./browserGitHubOAuth.ts";
 import { decrypt as decryptToken, encrypt as encryptToken } from "../identity/tokenEncryption.ts";
-import { DeviceApprovalService } from "./Services/DeviceApprovalService.ts";
+import {
+  DeviceApprovalService,
+  DeviceLimitReachedError,
+} from "./Services/DeviceApprovalService.ts";
 import { DeviceRepository } from "./Services/DeviceRepository.ts";
 import { DeviceSessionRepository } from "./Services/DeviceSessionRepository.ts";
 import { GoogleIdentityError, GitHubIdentityError } from "./Errors.ts";
@@ -380,7 +383,10 @@ export const googleBootstrapRouteLayer = HttpRouter.add(
         ),
       );
 
-    // 4. Register + approval decision
+    // 4. Register + approval decision. `maxDevices` comes from
+    // spec §10.4 `[limits].max_devices_per_user`; the approval service
+    // rejects with `DeviceLimitReachedError` when a new insert would
+    // push the user past the cap.
     const approvalResult = yield* approvals
       .registerOrResume({
         userId,
@@ -389,17 +395,24 @@ export const googleBootstrapRouteLayer = HttpRouter.add(
         platform: payload.platform,
         kind: payload.kind,
         capabilities: payload.capabilities,
+        maxDevices: config.maxDevicesPerUser,
         now,
       })
       .pipe(
-        Effect.mapError(
-          (cause) =>
-            new AuthError({
-              message: "Failed to register device.",
-              status: 500,
+        Effect.mapError((cause) => {
+          if (Schema.is(DeviceLimitReachedError)(cause)) {
+            return new AuthError({
+              message: `You have already registered ${cause.currentCount} devices (cap: ${cause.limit}). Remove an existing device from Settings → Devices before adding another.`,
+              status: 409,
               cause,
-            }),
-        ),
+            });
+          }
+          return new AuthError({
+            message: "Failed to register device.",
+            status: 500,
+            cause,
+          });
+        }),
       );
 
     // 5. Issue session credential
@@ -1091,17 +1104,24 @@ export const googleCallbackRouteLayer = HttpRouter.add(
         platform: platformForReg,
         kind: kindForReg,
         capabilities: capabilitiesForReg,
+        maxDevices: config.maxDevicesPerUser,
         now,
       })
       .pipe(
-        Effect.mapError(
-          (cause) =>
-            new AuthError({
-              message: "Failed to register device.",
-              status: 500,
+        Effect.mapError((cause) => {
+          if (Schema.is(DeviceLimitReachedError)(cause)) {
+            return new AuthError({
+              message: `You have already registered ${cause.currentCount} devices (cap: ${cause.limit}). Remove an existing device from Settings → Devices before adding another.`,
+              status: 409,
               cause,
-            }),
-        ),
+            });
+          }
+          return new AuthError({
+            message: "Failed to register device.",
+            status: 500,
+            cause,
+          });
+        }),
       );
 
     const sessions = yield* SessionCredentialService;

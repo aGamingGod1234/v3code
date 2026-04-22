@@ -17,6 +17,7 @@ import { DateTime, Effect, Option, Schema, Stream } from "effect";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 
+import { ServerConfig } from "../config.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { OrchestrationEventStore } from "../persistence/Services/OrchestrationEventStore.ts";
 import {
@@ -92,7 +93,38 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
     const promptRouter = yield* PromptRouter;
     const orchestrationEngine = yield* OrchestrationEngineService;
     const eventStore = yield* OrchestrationEventStore;
+    const serverConfig = yield* ServerConfig;
     yield* MeshPublisher;
+
+    // Spec §10.4 [limits].max_chats_per_user enforcement. Rejects a
+    // `thread.create` command when the user already holds at least
+    // `max_chats_per_user` non-archived threads. We read the latest
+    // read-model snapshot rather than plumbing a dedicated counter
+    // because the cap is a rare guardrail, not a hot path; every other
+    // command (turn starts, tool calls, etc.) bypasses the check.
+    const enforceChatCap = (
+      command: Parameters<MeshEventIngestionShape["publishCommand"]>[0]["command"],
+    ) =>
+      command.type === "thread.create"
+        ? projectionSnapshotQuery.getSnapshot().pipe(
+            Effect.mapError((cause) =>
+              toMeshRpcError("Failed to evaluate chat cap before publishing.", cause),
+            ),
+            Effect.flatMap((snapshot) => {
+              const activeThreadCount = snapshot.threads.filter(
+                (thread) => thread.archivedAt === null,
+              ).length;
+              if (activeThreadCount >= serverConfig.maxChatsPerUser) {
+                return Effect.fail(
+                  toMeshRpcError(
+                    `Chat limit reached: ${activeThreadCount} active chats (cap: ${serverConfig.maxChatsPerUser}). Archive old chats from the sidebar before starting a new one.`,
+                  ),
+                );
+              }
+              return Effect.void;
+            }),
+          )
+        : Effect.void;
 
     const requireSignedInMeshUser = () =>
       context.userId !== null
@@ -185,14 +217,20 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
       }) =>
         observeRpcEffect(
           MESH_WS_METHODS.publishEvent,
-          meshEventIngestion
-            .publishCommand({
-              command: input.command,
-              deviceId: context.deviceId,
-            })
-            .pipe(
-              Effect.mapError((cause) => toMeshRpcError("Failed to publish mesh command.", cause)),
+          enforceChatCap(input.command).pipe(
+            Effect.flatMap(() =>
+              meshEventIngestion
+                .publishCommand({
+                  command: input.command,
+                  deviceId: context.deviceId,
+                })
+                .pipe(
+                  Effect.mapError((cause) =>
+                    toMeshRpcError("Failed to publish mesh command.", cause),
+                  ),
+                ),
             ),
+          ),
           { "rpc.aggregate": "mesh" },
         ),
       [MESH_WS_METHODS.sendPrompt]: (input: { command: ClientThreadTurnStartCommand }) =>
