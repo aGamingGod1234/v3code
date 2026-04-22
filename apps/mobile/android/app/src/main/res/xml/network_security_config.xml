@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">agaminggod.com</domain>
+        <domain includeSubdomains="true">v3code.com</domain>
+    </domain-config>
+    <!-- Development builds may talk to plain-HTTP loopback / LAN hosts -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

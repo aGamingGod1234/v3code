@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">V3 Code</string>
+    <string name="title_activity_main">V3 Code</string>
+    <string name="package_name">com.agaminggod.v3code</string>
+    <string name="custom_url_scheme">v3</string>
+    <string name="streaming_notification_title">V3 Code is streaming</string>
+    <string name="streaming_notification_body">Tap to return to your live chat.</string>
+</resources>

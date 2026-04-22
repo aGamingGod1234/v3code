@@ -1,0 +1,37 @@
+{
+  "name": "@v3tools/mobile",
+  "version": "0.0.20",
+  "private": true,
+  "description": "V3 Code Android app — Capacitor 6 wrap of the cloud-mode web bundle.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-webview-bundle.mjs",
+    "sync": "bun run build && bunx cap sync android",
+    "open:android": "bunx cap open android",
+    "run:android": "bunx cap run android",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@capacitor-firebase/messaging": "^6.3.1",
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/keyboard": "^6.0.3",
+    "@capacitor/network": "^6.0.3",
+    "@capacitor/preferences": "^6.0.3",
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0",
+    "@types/node": "catalog:",
+    "@v3tools/contracts": "workspace:*",
+    "@v3tools/web": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": "^22.16 || ^23.11 || >=24.10"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "types": ["node"],
+    "lib": ["ESNext", "DOM"],
+    "outDir": "dist"
+  },
+  "include": ["src", "capacitor.config.ts", "scripts/**/*.mjs"]
+}

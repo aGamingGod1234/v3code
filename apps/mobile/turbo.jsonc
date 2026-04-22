@@ -1,0 +1,20 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["@v3tools/web#build"],
+      "outputs": ["dist/**", "webview-bundle/**", "android/app/src/main/assets/public/**"],
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "outputs": [],
+      "cache": false,
+    },
+    "sync": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "outputs": ["android/app/src/main/assets/public/**"],
+    },
+  },
+}

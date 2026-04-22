@@ -1,0 +1,7 @@
+webview-bundle/
+dist/
+.capacitor/
+android/app/build/
+android/build/
+node_modules/
+*.log

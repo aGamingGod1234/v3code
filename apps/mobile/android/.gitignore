@@ -1,0 +1,16 @@
+# Capacitor sync-generated files (overwritten on each `bunx cap sync android`)
+.gradle/
+build/
+*/build/
+.idea/
+local.properties
+captures/
+*.iml
+
+# Signing material — operator uploads via secrets, never committed
+google-services.json
+v3-release.keystore
+keystore.properties
+
+# Staged web bundle — regenerated from `apps/web/dist-cloud`
+app/src/main/assets/public/

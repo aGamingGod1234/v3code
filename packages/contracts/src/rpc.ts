@@ -62,6 +62,12 @@ import {
   MeshSubscribeChatInput,
 } from "./mesh/chat.ts";
 import {
+  MESH_PUSH_WS_METHODS,
+  MeshPushRpcSchemas,
+  MeshRegisterPushTokenInput,
+  MeshUnregisterPushTokenInput,
+} from "./mesh/push.ts";
+import {
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -417,6 +423,18 @@ export const WsMeshSubscribeDeviceApprovalsRpc = Rpc.make(
   },
 );
 
+export const WsMeshRegisterPushTokenRpc = Rpc.make(MESH_PUSH_WS_METHODS.registerPushToken, {
+  payload: MeshRegisterPushTokenInput,
+  success: MeshPushRpcSchemas.registerPushToken.output,
+  error: MeshRpcError,
+});
+
+export const WsMeshUnregisterPushTokenRpc = Rpc.make(MESH_PUSH_WS_METHODS.unregisterPushToken, {
+  payload: MeshUnregisterPushTokenInput,
+  success: MeshPushRpcSchemas.unregisterPushToken.output,
+  error: MeshRpcError,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -456,6 +474,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsMeshSubscribePresenceRpc,
   WsMeshSubscribePromptsRpc,
   WsMeshSubscribeDeviceApprovalsRpc,
+  WsMeshRegisterPushTokenRpc,
+  WsMeshUnregisterPushTokenRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,

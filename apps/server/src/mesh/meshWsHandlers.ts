@@ -3,13 +3,17 @@ import {
   type ChatForkCommand,
   type ClientThreadTurnStartCommand,
   DeviceId,
+  MESH_PUSH_WS_METHODS,
   MESH_WS_METHODS,
   MeshRpcError,
   type PresenceUpdatePayload,
+  type PushRegistrationPayload,
+  type PushUnregistrationPayload,
   type ProjectId,
   type UserId,
 } from "@v3tools/contracts";
-import { Effect, Option, Schema, Stream } from "effect";
+import * as Crypto from "node:crypto";
+import { DateTime, Effect, Option, Schema, Stream } from "effect";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 
@@ -20,6 +24,7 @@ import {
   type MeshEventIngestionShape,
 } from "../orchestration/Services/MeshEventIngestion.ts";
 import { DeviceApprovalService } from "../identity/Services/DeviceApprovalService.ts";
+import { DevicePushTokenRepository } from "../identity/Services/DevicePushTokenRepository.ts";
 import { DeviceRepository } from "../identity/Services/DeviceRepository.ts";
 import { ChatSubscriptionManager } from "./Services/ChatSubscriptionManager.ts";
 import { DeviceRegistry } from "./Services/DeviceRegistry.ts";
@@ -80,6 +85,7 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
     const chatSubscriptions = yield* ChatSubscriptionManager;
     const meshEventIngestion: MeshEventIngestionShape = yield* MeshEventIngestion;
     const devices = yield* DeviceRepository;
+    const pushTokens = yield* DevicePushTokenRepository;
     const approvals = yield* DeviceApprovalService;
     const deviceRegistry = yield* DeviceRegistry;
     const presence = yield* PresenceBroadcaster;
@@ -442,6 +448,96 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
               ),
             );
           }),
+          { "rpc.aggregate": "mesh" },
+        ),
+      // V3 Phase 9 — mobile push token registration.
+      //
+      // Called by Capacitor clients once FCM has handed them a device
+      // token. Idempotent: same token for the same device just bumps
+      // `last_seen_at`. A new token rotates the old one to soft-delete
+      // so the push service doesn't try to deliver to stale addresses.
+      [MESH_PUSH_WS_METHODS.registerPushToken]: (input: PushRegistrationPayload) =>
+        observeRpcEffect(
+          MESH_PUSH_WS_METHODS.registerPushToken,
+          Effect.gen(function* () {
+            const userId = yield* requireSignedInMeshUser();
+            if (context.deviceId === null) {
+              return yield* toMeshRpcError(
+                "Push token registration requires a registered device context.",
+              );
+            }
+            if (input.device_id !== context.deviceId) {
+              return yield* toMeshRpcError(
+                "Push tokens must be registered from the owning device's session.",
+              );
+            }
+            const now = yield* DateTime.now;
+            const issuedAt = (() => {
+              try {
+                return DateTime.makeUnsafe(input.issued_at);
+              } catch {
+                return now;
+              }
+            })();
+            const result = yield* pushTokens
+              .upsert({
+                id: Crypto.randomUUID(),
+                deviceId: input.device_id,
+                userId,
+                platform: input.platform,
+                provider: input.provider,
+                token: input.token,
+                appVersion: input.app_version,
+                issuedAt,
+                now,
+              })
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError("Failed to persist mobile push token.", cause),
+                ),
+              );
+            return {
+              registered_at: DateTime.formatIso(result.record.lastSeenAt),
+              rotated: result.rotated,
+            };
+          }).pipe(
+            Effect.mapError((cause) =>
+              Schema.is(MeshRpcError)(cause)
+                ? cause
+                : toMeshRpcError("Failed to register push token.", cause),
+            ),
+          ),
+          { "rpc.aggregate": "mesh" },
+        ),
+      [MESH_PUSH_WS_METHODS.unregisterPushToken]: (input: PushUnregistrationPayload) =>
+        observeRpcEffect(
+          MESH_PUSH_WS_METHODS.unregisterPushToken,
+          Effect.gen(function* () {
+            if (context.deviceId === null || context.deviceId !== input.device_id) {
+              return yield* toMeshRpcError(
+                "Push tokens must be unregistered from the owning device's session.",
+              );
+            }
+            const now = yield* DateTime.now;
+            const removed = yield* pushTokens
+              .remove({
+                deviceId: input.device_id,
+                token: input.token,
+                now,
+              })
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError("Failed to unregister push token.", cause),
+                ),
+              );
+            return { acknowledged: removed };
+          }).pipe(
+            Effect.mapError((cause) =>
+              Schema.is(MeshRpcError)(cause)
+                ? cause
+                : toMeshRpcError("Failed to unregister push token.", cause),
+            ),
+          ),
           { "rpc.aggregate": "mesh" },
         ),
     };
