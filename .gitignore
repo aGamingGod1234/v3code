@@ -1,5 +1,6 @@
 node_modules
 .bun
+.claude
 .turbo
 .DS_Store
 *.log
