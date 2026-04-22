@@ -104,6 +104,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
     }),
   );
@@ -183,6 +186,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
     }),
   );
@@ -212,6 +218,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -280,6 +289,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
     }),
   );
@@ -366,6 +378,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
       assert.equal(join(baseDir, "dev"), resolved.stateDir);
     }),
@@ -448,6 +463,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
       const derivedPaths = yield* deriveServerPaths(baseDir, new URL("http://127.0.0.1:4173"));
 
@@ -518,6 +536,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
     }),
   );
@@ -599,6 +620,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
     }),
   );
@@ -675,6 +699,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cloudEnvContainerMemoryMb: 4096,
         cloudEnvContainerDiskGb: 20,
         cloudEnvContainerMaxRuntimeHours: 720,
+        maxDevicesPerUser: 20,
+        maxChatsPerUser: 10_000,
+        maxEventLogSizeMb: 100_000,
       });
     }),
   );

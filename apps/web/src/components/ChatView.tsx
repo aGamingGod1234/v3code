@@ -143,6 +143,7 @@ import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
+import { RemoteHostBanner } from "./chat/RemoteHostBanner";
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
@@ -2440,7 +2441,18 @@ export default function ChatView(props: ChatViewProps) {
     e?.preventDefault();
     const api = readEnvironmentApi(environmentId);
     if (!api || !activeThread || isSendBusy || isConnecting || sendInFlightRef.current) return;
-    if (remoteHostInputDisabledReason) return;
+    if (remoteHostInputDisabledReason) {
+      // Spec §9.1: when the remote host is offline we surface a toast on
+      // the send attempt so the user notices the pending input isn't
+      // being delivered (the input itself stays disabled via
+      // `remoteHostInputDisabledReason`).
+      toastManager.add({
+        type: "error",
+        title: "Can't send",
+        description: remoteHostInputDisabledReason,
+      });
+      return;
+    }
     if (activePendingProgress) {
       onAdvanceActivePendingUserInput();
       return;
@@ -3332,6 +3344,12 @@ export default function ChatView(props: ChatViewProps) {
       <ThreadErrorBanner
         error={activeThread.error}
         onDismiss={() => setThreadError(activeThread.id, null)}
+      />
+      {/* Spec §8.2: remote-host awareness strip. */}
+      <RemoteHostBanner
+        currentDeviceId={currentDeviceId}
+        hostDeviceId={activeThread.hostDeviceId}
+        devices={meshDeviceSnapshot.devices}
       />
       <ForkAcceptDialog
         threadRef={{

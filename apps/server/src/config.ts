@@ -128,6 +128,13 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly cloudEnvContainerMemoryMb: number;
   readonly cloudEnvContainerDiskGb: number;
   readonly cloudEnvContainerMaxRuntimeHours: number;
+  // V3 server-node `[limits]` block (spec §10.4). Populated from
+  // `config.toml` or the matching env vars (`V3CODE_MAX_DEVICES_PER_USER`,
+  // etc). Defaults mirror the spec examples so operators who ship an
+  // empty `[limits]` section still get sane caps.
+  readonly maxDevicesPerUser: number;
+  readonly maxChatsPerUser: number;
+  readonly maxEventLogSizeMb: number;
 }
 
 export const deriveServerPaths = Effect.fn(function* (
@@ -245,6 +252,9 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           cloudEnvContainerMemoryMb: 4096,
           cloudEnvContainerDiskGb: 20,
           cloudEnvContainerMaxRuntimeHours: 720,
+          maxDevicesPerUser: 20,
+          maxChatsPerUser: 10_000,
+          maxEventLogSizeMb: 100_000,
         } satisfies ServerConfigShape;
       }),
     );

@@ -261,6 +261,21 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  // V3 spec §10.4 `[limits]`. Operators can raise or lower these caps
+  // per deployment; defaults match the spec example values so an empty
+  // `[limits]` section still converges on something sane.
+  maxDevicesPerUser: Config.int("V3CODE_MAX_DEVICES_PER_USER").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  maxChatsPerUser: Config.int("V3CODE_MAX_CHATS_PER_USER").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  maxEventLogSizeMb: Config.int("V3CODE_MAX_EVENT_LOG_SIZE_MB").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
 });
 
 interface CliServerFlags {
@@ -523,6 +538,10 @@ export const resolveServerConfig = (
         env.cloudEnvContainerMaxRuntimeHours ??
         tomlConfig?.cloud_env?.container_max_runtime_hours ??
         720,
+      maxDevicesPerUser: env.maxDevicesPerUser ?? tomlConfig?.limits?.max_devices_per_user ?? 20,
+      maxChatsPerUser: env.maxChatsPerUser ?? tomlConfig?.limits?.max_chats_per_user ?? 10_000,
+      maxEventLogSizeMb:
+        env.maxEventLogSizeMb ?? tomlConfig?.limits?.max_event_log_size_mb ?? 100_000,
     };
 
     return config;

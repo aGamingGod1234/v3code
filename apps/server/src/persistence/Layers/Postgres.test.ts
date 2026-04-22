@@ -66,6 +66,9 @@ const makeConfig = (overrides: Partial<ServerConfigShape>): ServerConfigShape =>
     cloudEnvContainerMemoryMb: 4096,
     cloudEnvContainerDiskGb: 20,
     cloudEnvContainerMaxRuntimeHours: 720,
+    maxDevicesPerUser: 20,
+    maxChatsPerUser: 10_000,
+    maxEventLogSizeMb: 100_000,
     ...overrides,
   }) satisfies ServerConfigShape;
 
