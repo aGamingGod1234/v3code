@@ -1,6 +1,7 @@
 node_modules
 .bun
 .claude
+.deploy-secrets
 .turbo
 .DS_Store
 *.log
