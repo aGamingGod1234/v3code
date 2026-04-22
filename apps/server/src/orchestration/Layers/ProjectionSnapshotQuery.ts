@@ -557,10 +557,15 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     Request: Schema.Void,
     Result: ProjectionCountsRowSchema,
     execute: () =>
+      // Postgres returns COUNT(*) as bigint which the `pg` driver
+      // surfaces as a JS string; SQLite returns a plain JS number.
+      // `CAST(... AS INTEGER)` produces a JS-safe number on both
+      // engines so the Schema.Number decoder at
+      // `ProjectionCountsRowSchema` doesn't explode on Postgres.
       sql`
         SELECT
-          (SELECT COUNT(*) FROM projection_projects) AS "projectCount",
-          (SELECT COUNT(*) FROM projection_threads) AS "threadCount"
+          (SELECT CAST(COUNT(*) AS INTEGER) FROM projection_projects) AS "projectCount",
+          (SELECT CAST(COUNT(*) AS INTEGER) FROM projection_threads) AS "threadCount"
       `,
   });
 
