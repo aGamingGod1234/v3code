@@ -48,12 +48,12 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     githubOauthScopes: "read:user repo",
     cloudEnvEnabled: false,
     cloudEnvDockerSocket: undefined,
-    cloudEnvBaseImage: "ghcr.io/pingdotgg/t3-cloud-env:latest",
+    cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
     cloudEnvMaxContainers: 10,
     cloudEnvContainerCpuLimit: 2,
     cloudEnvContainerMemoryMb: 4096,
     cloudEnvContainerDiskGb: 20,
-    cloudEnvContainerMaxRuntimeHours: 12,
+    cloudEnvContainerMaxRuntimeHours: 720,
   } satisfies ServerConfigShape;
 });
 

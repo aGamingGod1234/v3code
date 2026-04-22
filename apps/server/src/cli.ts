@@ -510,7 +510,7 @@ export const resolveServerConfig = (
       cloudEnvBaseImage:
         env.cloudEnvBaseImage ??
         tomlConfig?.cloud_env?.base_image ??
-        "ghcr.io/pingdotgg/t3-cloud-env:latest",
+        "ghcr.io/v3-code/cloud-env:latest",
       cloudEnvMaxContainers:
         env.cloudEnvMaxContainers ?? tomlConfig?.cloud_env?.max_containers ?? 10,
       cloudEnvContainerCpuLimit:
@@ -522,7 +522,7 @@ export const resolveServerConfig = (
       cloudEnvContainerMaxRuntimeHours:
         env.cloudEnvContainerMaxRuntimeHours ??
         tomlConfig?.cloud_env?.container_max_runtime_hours ??
-        12,
+        720,
     };
 
     return config;
