@@ -2526,3 +2526,81 @@ can fire without a third-party push proxy.
   is shared with upstream; re-apply V3 merges at the end of the
   identity / mesh sub-trees.
 - **Last rebase verified**: 2026-04-22
+
+## Phase 10 — Subagent UI + preview pane (2026-04-22)
+
+Ships the master-plan §10.6 / §10.7 deliverables:
+
+- Inline `SubagentCard` in the chat timeline with Devin-style live
+  status + Cline-style per-subagent stats.
+- Kilo-style `AgentsTab` inside `RightPanelSheet` for power-user
+  inspection.
+- Four new `subagent.*` events on `ProviderRuntimeEvent` feeding the
+  derivation.
+- Path-based `PreviewPane` iframe with `ElementInspector` overlay
+  that serialises clicked DOM via `postMessage` (companion script at
+  `apps/web/public/preview-inspector-client.js`).
+- Server-side `portSniffer` Effect service that parses provider
+  stdout and `netstat` / `ss` / `lsof` output into `PortHint`
+  events.
+
+**New files (V3-owned, zero rebase risk):**
+
+- `apps/web/src/components/chat/subagent/subagentDerivation.ts`
+  (+ `.test.ts`) — pure state machine that folds the activity feed
+  into a `SubagentNode` forest (running / completed / failed), plus
+  `flattenSubagentTree` and `aggregateSubagents`.
+- `apps/web/src/components/chat/subagent/{SubagentCard,SubagentInlineStatus,SubagentSummaryChip,SubagentTree}.tsx`
+  — presentational components.
+- `apps/web/src/components/RightPanelSheet/AgentsTab.tsx` — two-
+  column flat list + detail view.
+- `apps/web/src/components/chat/preview/{PreviewPane,ElementInspector}.tsx`
+  - `previewUrl.ts` + `elementSerialization.ts` (each pure module
+    has its own `.test.ts`).
+- `apps/web/public/preview-inspector-client.js` — drop-in companion
+  script the previewed app can include for rich DOM inspection.
+- `apps/server/src/preview/portSniffer.ts` (+ `.test.ts`) — pure
+  `parseStdoutHints` + `parseListeningPorts` + `deduplicateHints`
+  helpers plus the `PortSnifferLive` Effect layer exposing a
+  `Stream<PortHint>`.
+
+**Modified upstream-adjacent files:**
+
+### `packages/contracts/src/providerRuntime.ts`
+
+- **Modified**: 2026-04-22 (P10)
+- **V3 phase**: Phase 10 — Subagent UI + preview
+- **Reason**: Represent the four subagent lifecycle events so the
+  client can render `SubagentCard` without re-deriving state from
+  tool_use payloads.
+- **What changed**:
+  - Added `"subagent.started"`, `"subagent.progress"`,
+    `"subagent.completed"`, `"subagent.failed"` to the
+    `ProviderRuntimeEventType` literal union (inserted between the
+    task and hook blocks).
+  - Added matching literal type aliases, payload structs
+    (`SubagentStartedPayload`, `SubagentProgressPayload`,
+    `SubagentCompletedPayload`, `SubagentFailedPayload`), and event
+    variants.
+  - Added all four variants to the `ProviderRuntimeEventV2` union.
+- **Conflict risk on rebase**: medium — upstream owns the same
+  literal union and may rearrange it. V3 additions stay contiguous
+  between the task and hook blocks so the merge tooling recognises
+  them as one hunk.
+- **Upstream signals to watch**: new `task.*` events inserted after
+  `task.completed`; V3 subagent block must stay immediately after
+  task and before hook.
+- **Last rebase verified**: 2026-04-22
+
+### `packages/contracts/src/providerRuntime.test.ts`
+
+- **Modified**: 2026-04-22 (P10)
+- **V3 phase**: Phase 10 — Subagent UI + preview
+- **Reason**: Guard against regressions in the new subagent event
+  variants.
+- **What changed**:
+  - Appended one `it("decodes subagent.started / progress / completed / failed variants", …)`
+    case that decodes all four variants through the unified event
+    schema.
+- **Conflict risk on rebase**: low — new tests appended at the end.
+- **Last rebase verified**: 2026-04-22

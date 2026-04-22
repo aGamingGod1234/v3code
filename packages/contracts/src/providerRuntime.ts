@@ -176,6 +176,23 @@ const ProviderRuntimeEventType = Schema.Literals([
   "task.started",
   "task.progress",
   "task.completed",
+  // V3 Phase 10 — subagent lifecycle events.
+  //
+  // Upstream T3 fires `collab_agent_tool_call` item activity when the
+  // primary agent dispatches a subagent (via Claude SDK's Agent tool
+  // or Codex nested agent). These four events add structured lifecycle
+  // hooks on top of that: clients can now render a live card that
+  // transitions `started → progress* → (completed | failed)` without
+  // re-deriving state from tool_use payloads.
+  //
+  // `subagentId` is a stable identifier — upstream uses the Claude
+  // `parent_tool_use_id` / Codex nested-session id where available, and
+  // falls back to a synthesized "{turnId}:{toolUseId}" for providers
+  // that don't expose one directly.
+  "subagent.started",
+  "subagent.progress",
+  "subagent.completed",
+  "subagent.failed",
   "hook.started",
   "hook.progress",
   "hook.completed",
@@ -226,6 +243,10 @@ const UserInputResolvedType = Schema.Literal("user-input.resolved");
 const TaskStartedType = Schema.Literal("task.started");
 const TaskProgressType = Schema.Literal("task.progress");
 const TaskCompletedType = Schema.Literal("task.completed");
+const SubagentStartedType = Schema.Literal("subagent.started");
+const SubagentProgressType = Schema.Literal("subagent.progress");
+const SubagentCompletedType = Schema.Literal("subagent.completed");
+const SubagentFailedType = Schema.Literal("subagent.failed");
 const HookStartedType = Schema.Literal("hook.started");
 const HookProgressType = Schema.Literal("hook.progress");
 const HookCompletedType = Schema.Literal("hook.completed");
@@ -476,6 +497,59 @@ const TaskCompletedPayload = Schema.Struct({
   usage: Schema.optional(Schema.Unknown),
 });
 export type TaskCompletedPayload = typeof TaskCompletedPayload.Type;
+
+// V3 Phase 10 — subagent lifecycle payloads.
+//
+// `subagentId` is stable across all events for the same subagent run
+// (see the literal discussion above `SubagentStartedType`).
+// `parentSubagentId` encodes nesting: Claude's Agent tool can itself
+// spawn Agent tools, producing a shallow tree. When absent, the
+// subagent is a direct child of the main turn.
+// `label` is the primary display string (falls back to `agentType`
+// when the SDK doesn't expose one) so the UI always has something
+// meaningful to render in the status header.
+
+const SubagentStartedPayload = Schema.Struct({
+  subagentId: TrimmedNonEmptyStringSchema,
+  parentSubagentId: Schema.optional(TrimmedNonEmptyStringSchema),
+  parentToolUseId: Schema.optional(TrimmedNonEmptyStringSchema),
+  agentType: Schema.optional(TrimmedNonEmptyStringSchema),
+  label: Schema.optional(TrimmedNonEmptyStringSchema),
+  prompt: Schema.optional(Schema.String),
+  model: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+export type SubagentStartedPayload = typeof SubagentStartedPayload.Type;
+
+const SubagentProgressPayload = Schema.Struct({
+  subagentId: TrimmedNonEmptyStringSchema,
+  summary: Schema.optional(TrimmedNonEmptyStringSchema),
+  lastToolName: Schema.optional(TrimmedNonEmptyStringSchema),
+  toolCount: Schema.optional(NonNegativeInt),
+  elapsedSeconds: Schema.optional(Schema.Number),
+  usage: Schema.optional(Schema.Unknown),
+});
+export type SubagentProgressPayload = typeof SubagentProgressPayload.Type;
+
+const SubagentCompletedPayload = Schema.Struct({
+  subagentId: TrimmedNonEmptyStringSchema,
+  summary: Schema.optional(TrimmedNonEmptyStringSchema),
+  toolCount: Schema.optional(NonNegativeInt),
+  elapsedSeconds: Schema.optional(Schema.Number),
+  usage: Schema.optional(Schema.Unknown),
+  result: Schema.optional(Schema.String),
+});
+export type SubagentCompletedPayload = typeof SubagentCompletedPayload.Type;
+
+const SubagentFailedPayload = Schema.Struct({
+  subagentId: TrimmedNonEmptyStringSchema,
+  reason: Schema.Literals(["error", "stopped", "timeout", "aborted"]),
+  summary: Schema.optional(TrimmedNonEmptyStringSchema),
+  errorMessage: Schema.optional(TrimmedNonEmptyStringSchema),
+  toolCount: Schema.optional(NonNegativeInt),
+  elapsedSeconds: Schema.optional(Schema.Number),
+  usage: Schema.optional(Schema.Unknown),
+});
+export type SubagentFailedPayload = typeof SubagentFailedPayload.Type;
 
 const HookStartedPayload = Schema.Struct({
   hookId: TrimmedNonEmptyStringSchema,
@@ -828,6 +902,36 @@ const ProviderRuntimeTaskCompletedEvent = Schema.Struct({
 });
 export type ProviderRuntimeTaskCompletedEvent = typeof ProviderRuntimeTaskCompletedEvent.Type;
 
+// V3 Phase 10 — subagent lifecycle event variants.
+const ProviderRuntimeSubagentStartedEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: SubagentStartedType,
+  payload: SubagentStartedPayload,
+});
+export type ProviderRuntimeSubagentStartedEvent = typeof ProviderRuntimeSubagentStartedEvent.Type;
+
+const ProviderRuntimeSubagentProgressEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: SubagentProgressType,
+  payload: SubagentProgressPayload,
+});
+export type ProviderRuntimeSubagentProgressEvent = typeof ProviderRuntimeSubagentProgressEvent.Type;
+
+const ProviderRuntimeSubagentCompletedEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: SubagentCompletedType,
+  payload: SubagentCompletedPayload,
+});
+export type ProviderRuntimeSubagentCompletedEvent =
+  typeof ProviderRuntimeSubagentCompletedEvent.Type;
+
+const ProviderRuntimeSubagentFailedEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: SubagentFailedType,
+  payload: SubagentFailedPayload,
+});
+export type ProviderRuntimeSubagentFailedEvent = typeof ProviderRuntimeSubagentFailedEvent.Type;
+
 const ProviderRuntimeHookStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
   type: HookStartedType,
@@ -975,6 +1079,10 @@ export const ProviderRuntimeEventV2 = Schema.Union([
   ProviderRuntimeTaskStartedEvent,
   ProviderRuntimeTaskProgressEvent,
   ProviderRuntimeTaskCompletedEvent,
+  ProviderRuntimeSubagentStartedEvent,
+  ProviderRuntimeSubagentProgressEvent,
+  ProviderRuntimeSubagentCompletedEvent,
+  ProviderRuntimeSubagentFailedEvent,
   ProviderRuntimeHookStartedEvent,
   ProviderRuntimeHookProgressEvent,
   ProviderRuntimeHookCompletedEvent,
