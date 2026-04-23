@@ -617,9 +617,15 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     };
     if (signed) {
       winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
-    } else {
-      winConfig.signAndEditExecutable = false;
     }
+    // Note: do NOT set `signAndEditExecutable: false` for unsigned builds.
+    // That flag disables both code-signing AND the rcedit step that
+    // embeds icon / product-name / company-name into the .exe's PE
+    // resources, which Windows Firewall + the taskbar read. The signing
+    // side is already gated separately via CSC_IDENTITY_AUTO_DISCOVERY=false
+    // (see buildEnv below), so leaving this at its default `true` lets
+    // rcedit run and brand the binary as "V3 Code" without ever trying
+    // to sign.
     buildConfig.win = winConfig;
   }
 
