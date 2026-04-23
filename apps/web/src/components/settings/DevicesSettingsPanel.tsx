@@ -46,12 +46,14 @@ function ServerNodeSetupPrompt({
           <div className="min-w-0 flex-1 space-y-3">
             <div>
               <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">
-                {deviceCount} devices on this Google account — set up a server node
+                {deviceCount} V3 installs signed into this Google account &mdash; set up a server
+                node
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Each device is running its own local V3 server right now, so chats and sessions
-                don't follow you between them. Pick one always-on machine to host a server node and
-                the rest will connect to it.
+                Each install is running its own local V3 server right now, so chats and sessions
+                don&rsquo;t follow you between them. Pick one always-on machine to host a server
+                node and the rest will connect to it. Devices only appear in the list below once
+                they&rsquo;ve actually paired with this client.
               </p>
             </div>
             <ol className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -90,7 +92,7 @@ function ServerNodeSetupPrompt({
                 <ArrowRightIcon className="size-3.5" />
               </Button>
               <a
-                href="https://github.com/openai/codex/tree/main/docs"
+                href="https://github.com/aGamingGod1234/v3code#server-node-mode"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
