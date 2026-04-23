@@ -29,9 +29,15 @@ before filing anything.
   Server-node-side ID token verification against Google JWKS. Drive
   App Data auto-discovery of the server URL.
 - GitHub OAuth with encrypted-at-rest token storage (AES-256-GCM).
+  Desktop runs the consent UI in the user's system browser via a
+  loopback callback (matches Google sign-in), not inside the Electron
+  window; web/cloud-mode keeps the server-hosted redirect flow.
 - Device approval with bootstrap rule: first device auto-approves;
   subsequent new devices need sign-off from an already-connected
-  device.
+  device. When two or more devices sign in on the same Google
+  account without a published server URL, the Devices settings
+  panel prompts the user to run the server-node setup wizard and
+  walks them through it step-by-step.
 - WebSocket mesh with gap-fill replay, spec-§5.1 backoff curve
   (1-2-4-8-16-30 s), and session-based presence.
 - Cross-device prompt forwarding with offline-host rejection +
