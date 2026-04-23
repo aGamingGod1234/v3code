@@ -20,6 +20,7 @@ release-mock/
 apps/web/.playwright
 apps/web/playwright-report
 apps/web/src/components/__screenshots__
+apps/desktop/src/embeddedAuthConfig.ts
 .vitest-*
 __screenshots__/
 .tanstack

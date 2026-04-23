@@ -54,7 +54,7 @@ function describeExhaustedToast(): string {
 }
 
 function buildReconnectTitle(_status: WsConnectionStatus): string {
-  return "Disconnected from T3 Server";
+  return "Disconnected from V3 Server";
 }
 
 function describeRecoveredToast(
@@ -79,7 +79,17 @@ function describeSlowRpcAckToast(requests: ReadonlyArray<SlowRpcAckRequest>): Re
   const count = requests.length;
   const thresholdSeconds = Math.round((requests[0]?.thresholdMs ?? 0) / 1000);
 
-  return `${count} request${count === 1 ? "" : "s"} waiting longer than ${thresholdSeconds}s.`;
+  // Include the RPC method tags so users/operators can tell which
+  // subsystems are stuck rather than just seeing "3 requests slow".
+  const tagCounts = new Map<string, number>();
+  for (const request of requests) {
+    tagCounts.set(request.tag, (tagCounts.get(request.tag) ?? 0) + 1);
+  }
+  const tagSummary = Array.from(tagCounts.entries())
+    .map(([tag, n]) => (n > 1 ? `${tag}\u00d7${n}` : tag))
+    .join(", ");
+
+  return `${count} request${count === 1 ? "" : "s"} waiting longer than ${thresholdSeconds}s${tagSummary ? ` (${tagSummary})` : ""}.`;
 }
 
 export function shouldAutoReconnect(
@@ -270,7 +280,7 @@ export function WebSocketConnectionCoordinator() {
               },
               description: describeExhaustedToast(),
               timeout: 0,
-              title: "Disconnected from T3 Server",
+              title: "Disconnected from V3 Server",
               type: "error" as const,
               data: {
                 hideCopyButton: true,
@@ -310,7 +320,7 @@ export function WebSocketConnectionCoordinator() {
     ) {
       const successToast = {
         description: describeRecoveredToast(previousDisconnectedAt, status.connectedAt),
-        title: "Reconnected to T3 Server",
+        title: "Reconnected to V3 Server",
         type: "success" as const,
         timeout: 0,
         data: {

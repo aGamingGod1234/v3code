@@ -21,7 +21,7 @@ export const AdminServerInfo = Schema.Struct({
   githubConfigured: Schema.Boolean,
   publicUrl: Schema.NullOr(Schema.String),
   uptimeSeconds: Schema.Int,
-  startedAt: Schema.DateTimeUtc,
+  startedAt: Schema.DateTimeUtcFromString,
 });
 export type AdminServerInfo = typeof AdminServerInfo.Type;
 
@@ -35,8 +35,8 @@ export const AdminActiveSession = Schema.Struct({
   deviceKind: Schema.NullOr(Schema.String),
   userEmail: Schema.NullOr(Schema.String),
   connected: Schema.Boolean,
-  lastHeartbeatAt: Schema.NullOr(Schema.DateTimeUtc),
-  connectedAt: Schema.NullOr(Schema.DateTimeUtc),
+  lastHeartbeatAt: Schema.NullOr(Schema.DateTimeUtcFromString),
+  connectedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 });
 export type AdminActiveSession = typeof AdminActiveSession.Type;
 
@@ -55,7 +55,7 @@ export const AdminEventLogRow = Schema.Struct({
   hostDeviceId: Schema.NullOr(TrimmedNonEmptyString),
   eventCount: Schema.Int,
   sizeBytes: Schema.Int,
-  lastEventAt: Schema.NullOr(Schema.DateTimeUtc),
+  lastEventAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 });
 export type AdminEventLogRow = typeof AdminEventLogRow.Type;
 
@@ -83,7 +83,7 @@ export const AdminContainerInfo = Schema.Struct({
   status: Schema.Literals(["starting", "running", "stopping", "dead"]),
   cpuCount: Schema.Int,
   memoryMb: Schema.Int,
-  startedAt: Schema.DateTimeUtc,
+  startedAt: Schema.DateTimeUtcFromString,
   uptimeSeconds: Schema.Int,
 });
 export type AdminContainerInfo = typeof AdminContainerInfo.Type;
@@ -119,9 +119,9 @@ export const AdminFcmConfigStatus = Schema.Struct({
   configured: Schema.Boolean,
   projectId: Schema.NullOr(TrimmedNonEmptyString),
   clientEmail: Schema.NullOr(TrimmedNonEmptyString),
-  uploadedAt: Schema.NullOr(Schema.DateTimeUtc),
+  uploadedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   tokenCount: Schema.Int,
-  lastDispatchAt: Schema.NullOr(Schema.DateTimeUtc),
+  lastDispatchAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   lastError: Schema.NullOr(Schema.String),
 });
 export type AdminFcmConfigStatus = typeof AdminFcmConfigStatus.Type;

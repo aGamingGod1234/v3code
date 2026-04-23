@@ -22,7 +22,7 @@ describe("branding", () => {
           getAppBranding: () => ({
             baseName: "V3 Code",
             stageLabel: "Nightly",
-            displayName: "T3 Code (Nightly)",
+            displayName: "V3 Code (Nightly)",
           }),
         },
       },
@@ -32,6 +32,6 @@ describe("branding", () => {
 
     expect(branding.APP_BASE_NAME).toBe("V3 Code");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("V3 Code (Nightly)");
   });
 });

@@ -76,11 +76,18 @@ function devicesQueryOptions(enabled: boolean) {
   });
 }
 
+// Stable shared reference for the "not signed in" / "data still loading"
+// case. Returning a fresh `[]` every render makes `devices` fail
+// reference equality in downstream `useEffect` deps (see
+// meshSubscriptions), which can chain into a render loop once another
+// effect sets an atom on each render.
+const EMPTY_DEVICES: ReadonlyArray<DeviceInfo> = Object.freeze([]);
+
 export function useDevices() {
   const signInSnapshot = useV3SignInSnapshot();
   const query = useQuery(devicesQueryOptions(signInSnapshot.email !== null));
   const isSignedIn = signInSnapshot.email !== null;
-  const devices = isSignedIn ? (query.data?.devices ?? []) : [];
+  const devices = isSignedIn ? (query.data?.devices ?? EMPTY_DEVICES) : EMPTY_DEVICES;
   const currentDeviceId = isSignedIn ? (query.data?.currentDeviceId ?? null) : null;
 
   return {

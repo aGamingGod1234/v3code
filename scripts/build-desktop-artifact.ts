@@ -554,7 +554,7 @@ export function resolveMockUpdateServerUrl(mockUpdateServerPort: number | undefi
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
+    ? "V3 Code (Nightly)"
     : (desktopPackageJson.productName ?? "V3 Code");
 }
 
@@ -567,12 +567,27 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   mockUpdateServerPort: number | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: "com.t3tools.t3code",
+    appId: "com.agaminggod.v3code",
     productName: resolveDesktopProductName(version),
-    artifactName: "T3-Code-${version}-${arch}.${ext}",
+    artifactName: "V3-Code-${version}-${arch}.${ext}",
     directories: {
       buildResources: "apps/desktop/resources",
     },
+    // Keep icon files outside the asar archive so BrowserWindow.icon
+    // and Windows taskbar can load them reliably. Without this, Windows
+    // falls back to Electron's default icon (the blue orbital shape
+    // users often mistake for a React logo).
+    asarUnpack: ["apps/desktop/resources/**/*", "apps/desktop/prod-resources/**/*"],
+    // Also copy the icons to `process.resourcesPath` directly so the
+    // runtime code's path-4 fallback (`process.resourcesPath/icon.ico`)
+    // resolves even on platforms where asarUnpack path resolution acts
+    // up. This is belt-and-braces: either asarUnpack or extraResources
+    // alone would be enough.
+    extraResources: [
+      { from: "apps/desktop/resources/icon.ico", to: "icon.ico" },
+      { from: "apps/desktop/resources/icon.png", to: "icon.png" },
+      { from: "apps/desktop/resources/icon.icns", to: "icon.icns" },
+    ],
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
   const publishConfig = resolveGitHubPublishConfig(updateChannel);
@@ -598,12 +613,12 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "linux") {
     buildConfig.linux = {
       target: [target],
-      executableName: "t3code",
+      executableName: "v3code",
       icon: "icon.png",
       category: "Development",
       desktop: {
         entry: {
-          StartupWMClass: "t3code",
+          StartupWMClass: "v3code",
         },
       },
     };
@@ -784,13 +799,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.copy(stageResourcesDir, path.join(stageAppDir, "apps/desktop/prod-resources"));
 
   const stagePackageJson: StagePackageJson = {
-    name: "t3code",
+    name: "v3code",
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
     private: true,
-    description: "T3 Code desktop build",
-    author: "T3 Tools",
+    description: "V3 Code desktop build",
+    author: "aGamingGod1234",
     main: "apps/desktop/dist-electron/main.cjs",
     build: yield* createBuildConfig(
       options.platform,
@@ -948,7 +963,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for T3 Code."),
+  Command.withDescription("Build a desktop artifact for V3 Code."),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

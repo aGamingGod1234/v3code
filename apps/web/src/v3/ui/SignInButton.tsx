@@ -81,8 +81,19 @@ export function V3SignInButton({ className }: SignInButtonProps): React.ReactEle
           : "V3 multi-device sync is now linked to this device.",
       });
     } catch (error) {
+      // Surface the actual exception text when we don't have a tagged
+      // V3SignInError — the previous "Could not complete sign-in."
+      // placeholder hid the real diagnostic (schema decode failure,
+      // IPC reject, etc.) and made it impossible to tell *what* went
+      // wrong from the toast alone. Logging mirrors the toast so we
+      // also capture stack traces in devtools.
+      console.error("[v3] Sign-in failed", error);
       const messageBody =
-        error instanceof V3SignInError ? error.message : "Could not complete sign-in.";
+        error instanceof V3SignInError
+          ? error.message
+          : error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : "Could not complete sign-in.";
       const titleByCode: Record<string, string> = {
         "not-configured": "Google sign-in not configured",
         "browser-not-supported": "Use the desktop app to sign in",

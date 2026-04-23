@@ -77,26 +77,17 @@ const snapshotWithError = (
   };
 };
 
-const writeSnapshot = (snapshot: V3DriveAppDataSnapshot): void => {
-  try {
-    window.localStorage.setItem(DRIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
-  } catch {
-    // Quota/disabled storage: ignore. The next successful capture
-    // rehydrates the key.
-  }
-  notifyListeners();
-};
+// Cached snapshot reference. `getV3DriveAppDataSnapshot` is called by
+// React's `useSyncExternalStore` on every render to compare against the
+// previous value via Object.is. If we returned a fresh `JSON.parse(...)`
+// each time, the reference would always differ and useSyncExternalStore
+// would schedule a re-render every frame — infinite loop (React error
+// #185). Cache the parsed value and only invalidate when
+// writeSnapshot/clearSnapshot/storage-event fires.
+let cachedDriveSnapshot: V3DriveAppDataSnapshot | null = null;
+let cachedDriveSnapshotInitialized = false;
 
-const clearSnapshot = (): void => {
-  try {
-    window.localStorage.removeItem(DRIVE_SNAPSHOT_KEY);
-  } catch {
-    // ignore
-  }
-  notifyListeners();
-};
-
-const readSnapshot = (): V3DriveAppDataSnapshot | null => {
+const parseSnapshot = (): V3DriveAppDataSnapshot | null => {
   let raw: string | null;
   try {
     raw = window.localStorage.getItem(DRIVE_SNAPSHOT_KEY);
@@ -110,6 +101,39 @@ const readSnapshot = (): V3DriveAppDataSnapshot | null => {
     return null;
   }
 };
+
+const refreshCachedDriveSnapshot = (): void => {
+  cachedDriveSnapshot = parseSnapshot();
+  cachedDriveSnapshotInitialized = true;
+};
+
+const writeSnapshot = (snapshot: V3DriveAppDataSnapshot): void => {
+  try {
+    window.localStorage.setItem(DRIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Quota/disabled storage: ignore. The next successful capture
+    // rehydrates the key.
+  }
+  cachedDriveSnapshot = snapshot;
+  cachedDriveSnapshotInitialized = true;
+  notifyListeners();
+};
+
+const clearSnapshot = (): void => {
+  try {
+    window.localStorage.removeItem(DRIVE_SNAPSHOT_KEY);
+  } catch {
+    // ignore
+  }
+  cachedDriveSnapshot = null;
+  cachedDriveSnapshotInitialized = true;
+  notifyListeners();
+};
+
+// Kept for write paths (snapshotWithError) that need the current
+// persisted value without using the cache — the cache may be out of
+// date here because we're mid-update.
+const readSnapshot = (): V3DriveAppDataSnapshot | null => parseSnapshot();
 
 const listeners = new Set<() => void>();
 
@@ -250,16 +274,37 @@ export const captureDriveAppDataSnapshot = async (
   }
 };
 
-export const getV3DriveAppDataSnapshot = (): V3DriveAppDataSnapshot | null => readSnapshot();
+export const getV3DriveAppDataSnapshot = (): V3DriveAppDataSnapshot | null => {
+  if (!cachedDriveSnapshotInitialized) {
+    refreshCachedDriveSnapshot();
+  }
+  return cachedDriveSnapshot;
+};
 
 export const subscribeV3DriveAppDataSnapshot = (listener: () => void): (() => void) => {
+  if (listeners.size === 0 && typeof window !== "undefined") {
+    // Keep the cache in sync with cross-tab localStorage mutations the
+    // first time anyone starts listening.
+    window.addEventListener("storage", handleStorageEvent);
+  }
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+    if (listeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorageEvent);
+    }
   };
+};
+
+const handleStorageEvent = (event: StorageEvent): void => {
+  if (event.key !== DRIVE_SNAPSHOT_KEY) return;
+  refreshCachedDriveSnapshot();
+  notifyListeners();
 };
 
 // Test seam.
 export const __resetV3DriveAppDataSnapshotForTests = (): void => {
   clearSnapshot();
+  cachedDriveSnapshot = null;
+  cachedDriveSnapshotInitialized = false;
 };
