@@ -170,6 +170,7 @@ function createLocalStorageStub(): Storage {
 function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
   return {
     getAppBranding: () => null,
+    getHostname: () => null,
     getLocalEnvironmentBootstrap: () => null,
     getClientSettings: async () => null,
     setClientSettings: async () => undefined,
@@ -204,6 +205,11 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       expiresAt: "2036-04-07T01:00:00.000Z",
       scope: "openid email profile",
       tokenType: "Bearer",
+    }),
+    openV3GitHubSignIn: async () => ({
+      accessToken: "mock-gh-access-token",
+      scopes: [],
+      tokenType: "bearer",
     }),
     v3Wizard: {
       probeDocker: async () => ({ status: "ok", version: "27.0.0", message: null }),

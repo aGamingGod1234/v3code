@@ -9,7 +9,7 @@
 //     the server-hosted redirect flow.
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangleIcon, GithubIcon, LogOutIcon, RefreshCwIcon } from "lucide-react";
+import { AlertTriangleIcon, GithubIcon, LoaderIcon, LogOutIcon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { toastManager } from "../../components/ui/toast";
@@ -18,7 +18,10 @@ import {
   disconnectGitHub,
   fetchGitHubClientConfig,
   fetchGitHubConnectionStatus,
+  preferDesktopGitHubFlow,
   startConnectGitHub,
+  startConnectGitHubDesktop,
+  V3GitHubConnectError,
 } from "../auth/connectGitHub";
 import type { GitHubConnectionStatus } from "@v3tools/contracts";
 
@@ -59,10 +62,36 @@ export function V3ConnectGitHubButton({ className }: ConnectGitHubButtonProps) {
     return () => controller.abort();
   }, [refresh]);
 
-  const handleConnect = useCallback(() => {
+  const handleConnect = useCallback(async () => {
     if (!config?.available) return;
-    startConnectGitHub();
-  }, [config?.available]);
+    if (!preferDesktopGitHubFlow()) {
+      startConnectGitHub();
+      return;
+    }
+    setBusy(true);
+    try {
+      const scopes = config.scopes.length > 0 ? config.scopes : "repo read:user user:email";
+      const result = await startConnectGitHubDesktop(scopes);
+      toastManager.add({
+        type: "success",
+        title: "GitHub connected",
+        description: `Signed in as ${result.username}.`,
+      });
+      await refresh();
+    } catch (error) {
+      if (error instanceof V3GitHubConnectError && error.code === "user-cancelled") {
+        // Silent — user closed the browser tab.
+        return;
+      }
+      toastManager.add({
+        type: "error",
+        title: "Could not connect GitHub",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [config?.available, config?.scopes, refresh]);
 
   const handleDisconnect = useCallback(async () => {
     if (!status?.connected) return;
@@ -134,11 +163,17 @@ export function V3ConnectGitHubButton({ className }: ConnectGitHubButtonProps) {
             type="button"
             variant="outline"
             size="xs"
-            onClick={handleConnect}
+            onClick={() => {
+              void handleConnect();
+            }}
             disabled={busy}
             className="gap-1"
           >
-            <RefreshCwIcon className="size-3.5" />
+            {busy ? (
+              <LoaderIcon className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCwIcon className="size-3.5" />
+            )}
             Reconnect
           </Button>
           <button
@@ -190,11 +225,18 @@ export function V3ConnectGitHubButton({ className }: ConnectGitHubButtonProps) {
       type="button"
       variant="outline"
       size="sm"
-      onClick={handleConnect}
+      onClick={() => {
+        void handleConnect();
+      }}
+      disabled={busy}
       className={cn("gap-2", className)}
     >
-      <GithubIcon className="size-3.5" />
-      Connect GitHub
+      {busy ? (
+        <LoaderIcon className="size-3.5 animate-spin" />
+      ) : (
+        <GithubIcon className="size-3.5" />
+      )}
+      {busy ? "Waiting for browser…" : "Connect GitHub"}
     </Button>
   );
 }
