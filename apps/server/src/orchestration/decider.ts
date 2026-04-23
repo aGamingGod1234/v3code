@@ -2,6 +2,7 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationThread,
   ThreadId,
 } from "@v3tools/contracts";
 import { Effect } from "effect";
@@ -775,9 +776,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
 export interface ChatForkValidationResult {
   readonly sourceThread: {
     readonly id: ThreadId;
-    readonly projectId: string;
-    readonly title: string;
-    readonly hostDeviceId: string | null;
+    readonly projectId: OrchestrationThread["projectId"];
+    readonly title: OrchestrationThread["title"];
+    readonly hostDeviceId: Exclude<OrchestrationThread["hostDeviceId"], undefined>;
   };
   readonly targetProjectId: string;
 }

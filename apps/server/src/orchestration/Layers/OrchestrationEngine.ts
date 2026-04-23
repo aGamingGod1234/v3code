@@ -171,8 +171,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
               });
             }
 
-            const targetProjectId =
-              command.targetProjectId ?? (validation.sourceThread.projectId as ProjectId);
+            const targetProjectId = command.targetProjectId ?? validation.sourceThread.projectId;
             const newHostDeviceId =
               command.targetDeviceId !== undefined ? command.targetDeviceId : undefined;
             const forkResult = yield* eventStore.forkThreadEvents({
@@ -189,15 +188,19 @@ const makeOrchestrationEngine = Effect.gen(function* () {
               ...(newHostDeviceId !== undefined ? { newHostDeviceId } : {}),
               forkOccurredAt: command.createdAt,
               forkCommandId: command.commandId,
-              parentDeviceId: validation.sourceThread.hostDeviceId as never,
+              parentDeviceId: validation.sourceThread.hostDeviceId,
             });
 
             // Stream the new target thread's events back through the projection
             // pipeline + in-memory read-model so all consumers (sidebar, mesh
             // subscribers, etc.) see the forked chat in the same shape they'd
-            // see a freshly-created one.
+            // see a freshly-created one. Uses the inclusive `readThreadStreamAll`
+            // so the copied `thread.created` at `stream_version 0` is included
+            // in the replay (the exclusive `readThreadStream(..., 0)` would
+            // skip it and the projection pipeline would never see the target
+            // thread creation).
             const newThreadEvents = yield* Stream.runCollect(
-              eventStore.readThreadStream(command.targetThreadId, 0, Number.MAX_SAFE_INTEGER),
+              eventStore.readThreadStreamAll(command.targetThreadId),
             ).pipe(Effect.map((chunk) => Array.from(chunk)));
 
             let nextReadModel = readModel;
