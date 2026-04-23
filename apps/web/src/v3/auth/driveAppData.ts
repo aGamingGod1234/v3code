@@ -19,11 +19,14 @@
 
 import {
   createV3DriveAppDataClient,
+  type V3DriveConfig,
   V3DriveClientError,
   type DriveDeviceEntry,
   type V3DriveAppDataClient,
   type V3DriveClientErrorReason,
 } from "@v3tools/client-runtime";
+import { clearPendingDrivePublish, readPendingDrivePublish } from "./drivePublishState";
+import { getFreshGoogleAccessToken } from "./googleTokenStore";
 
 const DRIVE_SNAPSHOT_KEY = "v3.drive-app-data-snapshot";
 
@@ -41,7 +44,7 @@ export interface V3DriveAppDataSnapshot {
 }
 
 interface CaptureInput {
-  readonly accessToken: string;
+  readonly accessToken?: string;
   readonly thisDevice: DriveDeviceEntry;
   readonly client?: V3DriveAppDataClient;
   readonly now?: () => Date;
@@ -56,24 +59,35 @@ const emptySnapshot = (capturedAt: string): V3DriveAppDataSnapshot => ({
   error: null,
 });
 
-const writeSnapshot = (snapshot: V3DriveAppDataSnapshot): void => {
-  try {
-    window.localStorage.setItem(DRIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
-  } catch {
-    // Quota/disabled storage: ignore. The next successful capture
-    // rehydrates the key.
+const snapshotWithError = (
+  capturedAt: string,
+  error: V3DriveClientErrorReason,
+): V3DriveAppDataSnapshot => {
+  const previous = readSnapshot();
+  if (!previous) {
+    return {
+      ...emptySnapshot(capturedAt),
+      error,
+    };
   }
+  return {
+    ...previous,
+    capturedAt,
+    error,
+  };
 };
 
-const clearSnapshot = (): void => {
-  try {
-    window.localStorage.removeItem(DRIVE_SNAPSHOT_KEY);
-  } catch {
-    // ignore
-  }
-};
+// Cached snapshot reference. `getV3DriveAppDataSnapshot` is called by
+// React's `useSyncExternalStore` on every render to compare against the
+// previous value via Object.is. If we returned a fresh `JSON.parse(...)`
+// each time, the reference would always differ and useSyncExternalStore
+// would schedule a re-render every frame — infinite loop (React error
+// #185). Cache the parsed value and only invalidate when
+// writeSnapshot/clearSnapshot/storage-event fires.
+let cachedDriveSnapshot: V3DriveAppDataSnapshot | null = null;
+let cachedDriveSnapshotInitialized = false;
 
-const readSnapshot = (): V3DriveAppDataSnapshot | null => {
+const parseSnapshot = (): V3DriveAppDataSnapshot | null => {
   let raw: string | null;
   try {
     raw = window.localStorage.getItem(DRIVE_SNAPSHOT_KEY);
@@ -88,6 +102,117 @@ const readSnapshot = (): V3DriveAppDataSnapshot | null => {
   }
 };
 
+const refreshCachedDriveSnapshot = (): void => {
+  cachedDriveSnapshot = parseSnapshot();
+  cachedDriveSnapshotInitialized = true;
+};
+
+const writeSnapshot = (snapshot: V3DriveAppDataSnapshot): void => {
+  try {
+    window.localStorage.setItem(DRIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Quota/disabled storage: ignore. The next successful capture
+    // rehydrates the key.
+  }
+  cachedDriveSnapshot = snapshot;
+  cachedDriveSnapshotInitialized = true;
+  notifyListeners();
+};
+
+const clearSnapshot = (): void => {
+  try {
+    window.localStorage.removeItem(DRIVE_SNAPSHOT_KEY);
+  } catch {
+    // ignore
+  }
+  cachedDriveSnapshot = null;
+  cachedDriveSnapshotInitialized = true;
+  notifyListeners();
+};
+
+// Kept for write paths (snapshotWithError) that need the current
+// persisted value without using the cache — the cache may be out of
+// date here because we're mid-update.
+const readSnapshot = (): V3DriveAppDataSnapshot | null => parseSnapshot();
+
+const listeners = new Set<() => void>();
+
+const notifyListeners = (): void => {
+  for (const listener of listeners) {
+    listener();
+  }
+};
+
+const toSnapshot = (
+  config: V3DriveConfig,
+  input: {
+    readonly capturedAt: string;
+    readonly blobExists: boolean;
+    readonly error: V3DriveClientErrorReason | null;
+  },
+): V3DriveAppDataSnapshot => ({
+  serverUrl: config.v3_config.server_url ?? null,
+  devices: config.v3_config.device_list,
+  blobExists: input.blobExists,
+  capturedAt: input.capturedAt,
+  error: input.error,
+});
+
+const appendDeviceIfMissing = (
+  config: V3DriveConfig,
+  device: DriveDeviceEntry,
+): { readonly config: V3DriveConfig; readonly changed: boolean } => {
+  if (config.v3_config.device_list.some((entry) => entry.device_id === device.device_id)) {
+    return { config, changed: false };
+  }
+  return {
+    changed: true,
+    config: {
+      v3_config: {
+        ...config.v3_config,
+        device_list: [...config.v3_config.device_list, device],
+      },
+    },
+  };
+};
+
+const applyPendingPublish = (
+  config: V3DriveConfig,
+  device: DriveDeviceEntry,
+): {
+  readonly config: V3DriveConfig;
+  readonly changed: boolean;
+  readonly consumedPublish: boolean;
+} => {
+  const withDevice = appendDeviceIfMissing(config, device);
+  const pendingPublish = readPendingDrivePublish();
+  if (!pendingPublish) {
+    return {
+      config: withDevice.config,
+      changed: withDevice.changed,
+      consumedPublish: false,
+    };
+  }
+
+  return {
+    changed:
+      withDevice.changed ||
+      withDevice.config.v3_config.server_url !== pendingPublish.server_url ||
+      withDevice.config.v3_config.server_version_installed !==
+        pendingPublish.server_version_installed ||
+      withDevice.config.v3_config.setup_at !== pendingPublish.setup_at,
+    consumedPublish: true,
+    config: {
+      v3_config: {
+        ...withDevice.config.v3_config,
+        ...(pendingPublish.server_url ? { server_url: pendingPublish.server_url } : {}),
+        server_version_installed: pendingPublish.server_version_installed,
+        setup_at: pendingPublish.setup_at,
+      },
+    },
+  };
+};
+
 export const captureDriveAppDataSnapshot = async (
   input: CaptureInput,
 ): Promise<V3DriveAppDataSnapshot> => {
@@ -95,71 +220,53 @@ export const captureDriveAppDataSnapshot = async (
   const logger = input.logger ?? console;
   const client = input.client ?? createV3DriveAppDataClient();
   const capturedAt = now().toISOString();
+  const accessToken = input.accessToken ?? (await getFreshGoogleAccessToken());
+  if (!accessToken) {
+    const snapshot = snapshotWithError(capturedAt, "unauthorized");
+    writeSnapshot(snapshot);
+    return snapshot;
+  }
 
-  let existing: Awaited<ReturnType<V3DriveAppDataClient["read"]>>;
+  let existing: V3DriveConfig;
+  let blobExists = true;
   try {
-    existing = await client.read(input.accessToken);
+    const observed = await client.read(accessToken);
+    blobExists = observed !== null;
+    existing = observed ?? (await client.readOrInit(accessToken));
   } catch (cause) {
     if (cause instanceof V3DriveClientError) {
       logger.warn(`[v3] Drive App Data read failed: ${cause.reason}`);
-      const snapshot: V3DriveAppDataSnapshot = {
-        ...emptySnapshot(capturedAt),
-        error: cause.reason,
-      };
+      const snapshot = snapshotWithError(capturedAt, cause.reason);
       writeSnapshot(snapshot);
       return snapshot;
     }
     throw cause;
   }
 
-  if (existing === null) {
-    const snapshot = emptySnapshot(capturedAt);
-    writeSnapshot(snapshot);
-    return snapshot;
-  }
+  const next = applyPendingPublish(existing, input.thisDevice);
 
-  const hasServerUrl =
-    typeof existing.v3_config.server_url === "string" && existing.v3_config.server_url.length > 0;
-  const alreadyListed = existing.v3_config.device_list.some(
-    (device) => device.device_id === input.thisDevice.device_id,
-  );
-
-  // Per P2c ground rules: no writes in single-device mode (no server
-  // URL = no mesh). Only append ourselves when a server node already
-  // exists on this account.
-  if (!hasServerUrl || alreadyListed) {
-    const snapshot: V3DriveAppDataSnapshot = {
-      serverUrl: existing.v3_config.server_url ?? null,
-      devices: existing.v3_config.device_list,
-      blobExists: true,
-      capturedAt,
-      error: null,
-    };
+  if (!next.changed) {
+    const snapshot = toSnapshot(existing, { capturedAt, blobExists, error: null });
     writeSnapshot(snapshot);
     return snapshot;
   }
 
   try {
-    const updated = await client.appendDevice(input.accessToken, input.thisDevice);
-    const snapshot: V3DriveAppDataSnapshot = {
-      serverUrl: updated.v3_config.server_url ?? null,
-      devices: updated.v3_config.device_list,
-      blobExists: true,
-      capturedAt,
-      error: null,
-    };
+    await client.write(accessToken, next.config);
+    if (next.consumedPublish) {
+      clearPendingDrivePublish();
+    }
+    const snapshot = toSnapshot(next.config, { capturedAt, blobExists: true, error: null });
     writeSnapshot(snapshot);
     return snapshot;
   } catch (cause) {
     if (cause instanceof V3DriveClientError) {
-      logger.warn(`[v3] Drive App Data append failed: ${cause.reason}`);
-      const snapshot: V3DriveAppDataSnapshot = {
-        serverUrl: existing.v3_config.server_url ?? null,
-        devices: existing.v3_config.device_list,
-        blobExists: true,
+      logger.warn(`[v3] Drive App Data write failed: ${cause.reason}`);
+      const snapshot = toSnapshot(existing, {
         capturedAt,
+        blobExists,
         error: cause.reason,
-      };
+      });
       writeSnapshot(snapshot);
       return snapshot;
     }
@@ -167,9 +274,37 @@ export const captureDriveAppDataSnapshot = async (
   }
 };
 
-export const getV3DriveAppDataSnapshot = (): V3DriveAppDataSnapshot | null => readSnapshot();
+export const getV3DriveAppDataSnapshot = (): V3DriveAppDataSnapshot | null => {
+  if (!cachedDriveSnapshotInitialized) {
+    refreshCachedDriveSnapshot();
+  }
+  return cachedDriveSnapshot;
+};
+
+export const subscribeV3DriveAppDataSnapshot = (listener: () => void): (() => void) => {
+  if (listeners.size === 0 && typeof window !== "undefined") {
+    // Keep the cache in sync with cross-tab localStorage mutations the
+    // first time anyone starts listening.
+    window.addEventListener("storage", handleStorageEvent);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorageEvent);
+    }
+  };
+};
+
+const handleStorageEvent = (event: StorageEvent): void => {
+  if (event.key !== DRIVE_SNAPSHOT_KEY) return;
+  refreshCachedDriveSnapshot();
+  notifyListeners();
+};
 
 // Test seam.
 export const __resetV3DriveAppDataSnapshotForTests = (): void => {
   clearSnapshot();
+  cachedDriveSnapshot = null;
+  cachedDriveSnapshotInitialized = false;
 };

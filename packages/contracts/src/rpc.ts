@@ -53,6 +53,7 @@ import {
   MeshChatStreamItem,
   MeshForkChatInput,
   MeshForkChatResult,
+  MeshDeviceApprovalStreamItem,
   MeshPublishEventInput,
   MeshPresenceStreamItem,
   MeshPromptStreamItem,
@@ -60,6 +61,12 @@ import {
   MeshSendPromptInput,
   MeshSubscribeChatInput,
 } from "./mesh/chat.ts";
+import {
+  MESH_PUSH_WS_METHODS,
+  MeshPushRpcSchemas,
+  MeshRegisterPushTokenInput,
+  MeshUnregisterPushTokenInput,
+} from "./mesh/push.ts";
 import {
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
@@ -406,6 +413,28 @@ export const WsMeshSubscribePromptsRpc = Rpc.make(MESH_WS_METHODS.subscribePromp
   stream: true,
 });
 
+export const WsMeshSubscribeDeviceApprovalsRpc = Rpc.make(
+  MESH_WS_METHODS.subscribeDeviceApprovals,
+  {
+    payload: Schema.Struct({}),
+    success: MeshDeviceApprovalStreamItem,
+    error: MeshRpcError,
+    stream: true,
+  },
+);
+
+export const WsMeshRegisterPushTokenRpc = Rpc.make(MESH_PUSH_WS_METHODS.registerPushToken, {
+  payload: MeshRegisterPushTokenInput,
+  success: MeshPushRpcSchemas.registerPushToken.output,
+  error: MeshRpcError,
+});
+
+export const WsMeshUnregisterPushTokenRpc = Rpc.make(MESH_PUSH_WS_METHODS.unregisterPushToken, {
+  payload: MeshUnregisterPushTokenInput,
+  success: MeshPushRpcSchemas.unregisterPushToken.output,
+  error: MeshRpcError,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -444,6 +473,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsMeshForkChatRpc,
   WsMeshSubscribePresenceRpc,
   WsMeshSubscribePromptsRpc,
+  WsMeshSubscribeDeviceApprovalsRpc,
+  WsMeshRegisterPushTokenRpc,
+  WsMeshUnregisterPushTokenRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,

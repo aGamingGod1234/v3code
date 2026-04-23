@@ -1,5 +1,7 @@
 node_modules
 .bun
+.claude
+.deploy-secrets
 .turbo
 .DS_Store
 *.log
@@ -18,6 +20,7 @@ release-mock/
 apps/web/.playwright
 apps/web/playwright-report
 apps/web/src/components/__screenshots__
+apps/desktop/src/embeddedAuthConfig.ts
 .vitest-*
 __screenshots__/
 .tanstack

@@ -74,6 +74,7 @@ import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import { OrchestrationEventStore } from "./persistence/Services/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import {
   ProviderRegistry,
@@ -121,11 +122,18 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
+import { DevicePushTokenRepositoryLive } from "./identity/Layers/DevicePushTokenRepository.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { FcmPushConfigRepositoryLive } from "./identity/Layers/FcmPushConfigRepository.ts";
+import { GitHubIdentityServiceLive } from "./identity/Layers/GitHubIdentityService.ts";
+import { GoogleTokenHandoffStoreLive } from "./identity/Layers/GoogleTokenHandoffStore.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
 import { UserContextResolverLive } from "./identity/Layers/UserContextResolver.ts";
 import { UserRepositoryLive } from "./identity/Layers/UserRepository.ts";
+import { ContainerManager } from "./cloud/Services/ContainerManager.ts";
+import { CloudError } from "./cloud/errors.ts";
+import { ProviderService } from "./provider/Services/ProviderService.ts";
 
 const defaultProjectId = ProjectId.make("project-default");
 const defaultThreadId = ThreadId.make("thread-default");
@@ -214,16 +222,6 @@ const makeDefaultOrchestrationThreadShell = (
   };
 };
 
-const workspaceAndProjectServicesLayer = Layer.mergeAll(
-  WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
-  WorkspaceFileSystemLive.pipe(
-    Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
-  ),
-  ProjectFaviconResolverLive,
-);
-
 const browserOtlpTracingLayer = Layer.mergeAll(
   FetchHttpClient.layer,
   OtlpSerialization.layerJson,
@@ -235,14 +233,21 @@ const authTestLayer = ServerAuthLive.pipe(
   Layer.provide(ServerSecretStoreLive),
 );
 
+// V3 Phase 7 — the browser Google sign-in routes yield `ServerSecretStore`
+// directly to derive the OAuth flow signing key. Re-expose the live layer
+// here (same pattern as `server.ts`'s `V3IdentityLayerLive`) so the test
+// router seam satisfies the route context without spinning up a real FS.
 const v3IdentityTestLayer = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
   DeviceSessionRepositoryLive,
-  DeviceApprovalServiceLive.pipe(Layer.provide(DeviceRepositoryLive)),
+  DevicePushTokenRepositoryLive,
+  FcmPushConfigRepositoryLive,
   GoogleIdentityServiceLive,
+  GoogleTokenHandoffStoreLive,
+  GitHubIdentityServiceLive,
   UserContextResolverLive.pipe(Layer.provide(DeviceSessionRepositoryLive)),
-).pipe(Layer.provide(SqlitePersistenceMemory));
+).pipe(Layer.provideMerge(SqlitePersistenceMemory), Layer.provideMerge(ServerSecretStoreLive));
 
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
@@ -406,6 +411,23 @@ const buildAppUnderTest = (options?: {
       googleClientId: undefined,
       authorizedEmails: [],
       postgresUrl: undefined,
+      googleClientSecret: undefined,
+      serverPublicUrl: undefined,
+      cloudModeStaticDir: undefined,
+      githubClientId: undefined,
+      githubClientSecret: undefined,
+      githubOauthScopes: "read:user repo",
+      cloudEnvEnabled: false,
+      cloudEnvDockerSocket: undefined,
+      cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
+      cloudEnvMaxContainers: 10,
+      cloudEnvContainerCpuLimit: 2,
+      cloudEnvContainerMemoryMb: 4096,
+      cloudEnvContainerDiskGb: 20,
+      cloudEnvContainerMaxRuntimeHours: 720,
+      maxDevicesPerUser: 20,
+      maxChatsPerUser: 10_000,
+      maxEventLogSizeMb: 100_000,
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);
@@ -440,6 +462,13 @@ const buildAppUnderTest = (options?: {
           ...options.layers.gitStatusBroadcaster,
         })
       : GitStatusBroadcasterLive.pipe(Layer.provide(gitManagerLayer));
+    const deviceRegistryLayer = Layer.mock(DeviceRegistry)({
+      register: () => Effect.void,
+      unregister: () => Effect.void,
+      isOnline: () => Effect.succeed(false),
+      getAnyOnlineSessionId: () => Effect.succeed(Option.none()),
+      ...options?.layers?.deviceRegistry,
+    });
 
     const servedRoutesLayer = HttpRouter.serve(makeRoutesLayer, {
       disableListenLog: true,
@@ -547,15 +576,7 @@ const buildAppUnderTest = (options?: {
           ...options?.layers?.chatSubscriptionManager,
         }),
       ),
-      Layer.provide(
-        Layer.mock(DeviceRegistry)({
-          register: () => Effect.void,
-          unregister: () => Effect.void,
-          isOnline: () => Effect.succeed(false),
-          getAnyOnlineSessionId: () => Effect.succeed(Option.none()),
-          ...options?.layers?.deviceRegistry,
-        }),
-      ),
+      Layer.provide(deviceRegistryLayer),
       Layer.provide(
         Layer.mock(MeshEventIngestion)({
           publishCommand: () => Effect.succeed({ sequence: 0 }),
@@ -581,6 +602,60 @@ const buildAppUnderTest = (options?: {
           subscribeSession: () => Stream.empty,
           ...options?.layers?.promptRouter,
         }),
+      ),
+      Layer.provide(
+        Layer.mock(OrchestrationEventStore)({
+          append: () =>
+            Effect.die(
+              new Error("OrchestrationEventStore.append is not implemented in server tests."),
+            ),
+          readFromSequence: () => Stream.empty,
+          readThreadStream: () => Stream.empty,
+          getLatestThreadStreamVersion: () => Effect.succeed(0),
+          readAll: () => Stream.empty,
+          forkThreadEvents: () =>
+            Effect.die(
+              new Error(
+                "OrchestrationEventStore.forkThreadEvents is not implemented in server tests.",
+              ),
+            ),
+        }),
+      ),
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(ContainerManager, {
+            dockerAvailable: () => Effect.succeed(false),
+            isAvailable: () => Effect.succeed(false),
+            getWorkspaceMetadata: () => Effect.succeed(Option.none()),
+            createWorkspace: () =>
+              Effect.fail(new CloudError({ message: "Cloud env disabled in tests." })),
+            prepareProviderLaunch: (input) =>
+              Effect.succeed({
+                binaryPath: input.binaryPath,
+                ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+              }),
+            resolvePreviewTarget: () => Effect.succeed(Option.none()),
+            stopThreadEnvironment: () => Effect.void,
+            listContainers: () => Effect.succeed([]),
+            pruneExpired: () => Effect.void,
+          } satisfies typeof ContainerManager.Service),
+          Layer.mock(ProviderService)({
+            startSession: () => Effect.die(new Error("ProviderService not implemented in tests.")),
+            stopSession: () => Effect.void,
+            sendTurn: () => Effect.die(new Error("ProviderService not implemented in tests.")),
+            interruptTurn: () => Effect.die(new Error("ProviderService not implemented in tests.")),
+            respondToRequest: () =>
+              Effect.die(new Error("ProviderService not implemented in tests.")),
+            respondToUserInput: () =>
+              Effect.die(new Error("ProviderService not implemented in tests.")),
+            listSessions: () => Effect.succeed([]),
+            getCapabilities: () =>
+              Effect.die(new Error("ProviderService not implemented in tests.")),
+            rollbackConversation: () =>
+              Effect.die(new Error("ProviderService not implemented in tests.")),
+            streamEvents: Stream.empty,
+          }),
+        ),
       ),
     );
 
@@ -622,6 +697,12 @@ const buildAppUnderTest = (options?: {
       ),
       Layer.provideMerge(authTestLayer),
       Layer.provideMerge(v3IdentityTestLayer),
+      Layer.provideMerge(
+        DeviceApprovalServiceLive.pipe(
+          Layer.provideMerge(v3IdentityTestLayer),
+          Layer.provide(deviceRegistryLayer),
+        ),
+      ),
       Layer.provide(workspaceAndProjectServicesLayer),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provide(layerConfig),

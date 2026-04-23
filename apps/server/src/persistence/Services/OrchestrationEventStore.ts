@@ -11,11 +11,8 @@
  */
 import {
   OrchestrationEvent,
-  TrimmedNonEmptyString,
   type CommandId,
   type DeviceId,
-  type IsoDateTime,
-  type ProjectId,
   type ThreadId,
 } from "@v3tools/contracts";
 import { Context } from "effect";
@@ -35,12 +32,12 @@ import type { OrchestrationEventStoreError } from "../Errors.ts";
 export interface ForkThreadEventsInput {
   readonly sourceThreadId: ThreadId;
   readonly targetThreadId: ThreadId;
-  readonly newProjectId?: ProjectId | undefined;
-  readonly newTitle?: typeof TrimmedNonEmptyString.Type | undefined;
-  readonly newBranch?: typeof TrimmedNonEmptyString.Type | null | undefined;
-  readonly newWorktreePath?: typeof TrimmedNonEmptyString.Type | null | undefined;
+  readonly newProjectId?: string | undefined;
+  readonly newTitle?: string | undefined;
+  readonly newBranch?: string | null | undefined;
+  readonly newWorktreePath?: string | null | undefined;
   readonly newHostDeviceId?: DeviceId | null | undefined;
-  readonly forkOccurredAt: IsoDateTime;
+  readonly forkOccurredAt: string;
   readonly forkCommandId: CommandId;
   readonly parentDeviceId: DeviceId | null;
 }

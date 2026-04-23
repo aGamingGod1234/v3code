@@ -10,4 +10,7 @@ export default defineConfig({
       },
     ],
   },
+  test: {
+    exclude: ["**/.claude/**", "**/.docs/**", "**/.git/**", "**/.plans/**", "**/.turbo/**"],
+  },
 });

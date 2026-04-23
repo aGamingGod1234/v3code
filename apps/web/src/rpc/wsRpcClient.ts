@@ -5,6 +5,7 @@ import {
   type GitStatusResult,
   type GitStatusStreamEvent,
   type LocalApi,
+  MESH_PUSH_WS_METHODS,
   MESH_WS_METHODS,
   ORCHESTRATION_WS_METHODS,
   type ServerSettingsPatch,
@@ -116,9 +117,15 @@ export interface WsRpcClient {
   readonly mesh: {
     readonly publishEvent: RpcUnaryMethod<typeof MESH_WS_METHODS.publishEvent>;
     readonly sendPrompt: RpcUnaryMethod<typeof MESH_WS_METHODS.sendPrompt>;
+    readonly forkChat: RpcUnaryMethod<typeof MESH_WS_METHODS.forkChat>;
     readonly subscribeChat: RpcInputStreamMethod<typeof MESH_WS_METHODS.subscribeChat>;
     readonly subscribePresence: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePresence>;
     readonly subscribePrompts: RpcStreamMethod<typeof MESH_WS_METHODS.subscribePrompts>;
+    readonly subscribeDeviceApprovals: RpcStreamMethod<
+      typeof MESH_WS_METHODS.subscribeDeviceApprovals
+    >;
+    readonly registerPushToken: RpcUnaryMethod<typeof MESH_PUSH_WS_METHODS.registerPushToken>;
+    readonly unregisterPushToken: RpcUnaryMethod<typeof MESH_PUSH_WS_METHODS.unregisterPushToken>;
   };
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
@@ -245,6 +252,7 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[MESH_WS_METHODS.publishEvent](input)),
       sendPrompt: (input) =>
         transport.request((client) => client[MESH_WS_METHODS.sendPrompt](input)),
+      forkChat: (input) => transport.request((client) => client[MESH_WS_METHODS.forkChat](input)),
       subscribeChat: (input, listener, options) =>
         transport.subscribe(
           (client) => client[MESH_WS_METHODS.subscribeChat](input),
@@ -263,6 +271,16 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
           listener,
           options,
         ),
+      subscribeDeviceApprovals: (listener, options) =>
+        transport.subscribe(
+          (client) => client[MESH_WS_METHODS.subscribeDeviceApprovals]({}),
+          listener,
+          options,
+        ),
+      registerPushToken: (input) =>
+        transport.request((client) => client[MESH_PUSH_WS_METHODS.registerPushToken](input)),
+      unregisterPushToken: (input) =>
+        transport.request((client) => client[MESH_PUSH_WS_METHODS.unregisterPushToken](input)),
     },
     orchestration: {
       dispatchCommand: (input) =>

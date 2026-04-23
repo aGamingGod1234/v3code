@@ -1,8 +1,10 @@
 export * from "./baseSchemas.ts";
+export * from "./admin.ts";
 export * from "./auth.ts";
 export * from "./identity.ts";
 export * from "./mesh/chat.ts";
 export { HelloPayload, PresenceUpdatePayload } from "./mesh/device.ts";
+export * from "./mesh/push.ts";
 export * from "./environment.ts";
 export * from "./ipc.ts";
 export * from "./terminal.ts";
@@ -18,3 +20,4 @@ export * from "./editor.ts";
 export * from "./project.ts";
 export * from "./filesystem.ts";
 export * from "./rpc.ts";
+export * from "./cloud.ts";

@@ -12,6 +12,7 @@ import { QueryClient, useQueryClient } from "@tanstack/react-query";
 
 import { APP_DISPLAY_NAME } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
+import { ConfigureServerBanner } from "../components/chat/ConfigureServerBanner";
 import { CommandPalette } from "../components/CommandPalette";
 import {
   SlowRpcAckToastCoordinator,
@@ -52,6 +53,7 @@ import {
 } from "../environments/primary";
 import { V3StartupSignInNudge } from "../v3/ui/StartupSignInNudge";
 import { V3DeviceApprovalToast } from "../v3/ui/DeviceApprovalToast";
+import { V3CloudSignInBootstrap } from "../v3/ui/CloudSignInBootstrap";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -105,12 +107,14 @@ function RootRouteView() {
         <WebSocketConnectionSurface>
           <CommandPalette>
             <AppSidebarLayout>
+              <ConfigureServerBanner />
               <Outlet />
             </AppSidebarLayout>
           </CommandPalette>
         </WebSocketConnectionSurface>
         <V3StartupSignInNudge />
         <V3DeviceApprovalToast />
+        <V3CloudSignInBootstrap />
       </AnchoredToastProvider>
     </ToastProvider>
   );

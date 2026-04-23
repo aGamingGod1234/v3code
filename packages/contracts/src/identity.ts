@@ -21,6 +21,11 @@ export type UserId = typeof UserId.Type;
 export const DeviceId = TrimmedNonEmptyString.pipe(Schema.brand("DeviceId"));
 export type DeviceId = typeof DeviceId.Type;
 
+export const CLOUD_DEVICE_ID = "cloud";
+export const CLOUD_DEVICE_NAME = "Cloud";
+
+export const makeCloudDeviceId = (): DeviceId => DeviceId.make(CLOUD_DEVICE_ID);
+
 // ---------------------------------------------------------------------------
 // Platform / kind / capability enums (spec §15)
 // ---------------------------------------------------------------------------
@@ -67,7 +72,7 @@ export const UserInfo = Schema.Struct({
   displayName: Schema.NullOr(Schema.String),
   avatarUrl: Schema.NullOr(Schema.String),
   githubUsername: Schema.NullOr(Schema.String),
-  createdAt: Schema.DateTimeUtc,
+  createdAt: Schema.DateTimeUtcFromString,
 });
 export type UserInfo = typeof UserInfo.Type;
 
@@ -84,8 +89,8 @@ export const DeviceInfo = Schema.Struct({
   capabilities: Schema.Array(DeviceCapability),
   approved: Schema.Boolean,
   online: Schema.Boolean,
-  firstSeenAt: Schema.DateTimeUtc,
-  lastSeenAt: Schema.NullOr(Schema.DateTimeUtc),
+  firstSeenAt: Schema.DateTimeUtcFromString,
+  lastSeenAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 });
 export type DeviceInfo = typeof DeviceInfo.Type;
 
@@ -123,6 +128,37 @@ export const GoogleBootstrapResult = Schema.Struct({
   needsApproval: Schema.Boolean,
 });
 export type GoogleBootstrapResult = typeof GoogleBootstrapResult.Type;
+
+export const GoogleTokenBundle = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  idToken: TrimmedNonEmptyString,
+  refreshToken: Schema.NullOr(TrimmedNonEmptyString),
+  expiresAt: TrimmedNonEmptyString,
+  scope: Schema.NullOr(Schema.String),
+  tokenType: Schema.NullOr(Schema.String),
+});
+export type GoogleTokenBundle = typeof GoogleTokenBundle.Type;
+
+export const GoogleTokenRefreshInput = Schema.Struct({
+  refreshToken: TrimmedNonEmptyString,
+  idToken: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type GoogleTokenRefreshInput = typeof GoogleTokenRefreshInput.Type;
+
+export const GoogleTokenHandoffSnapshot = Schema.Struct({
+  email: TrimmedNonEmptyString,
+  displayName: Schema.NullOr(Schema.String),
+  avatarUrl: Schema.NullOr(Schema.String),
+  pendingApproval: Schema.Boolean,
+  deviceId: DeviceId,
+});
+export type GoogleTokenHandoffSnapshot = typeof GoogleTokenHandoffSnapshot.Type;
+
+export const GoogleTokenHandoffConsumeResult = Schema.Struct({
+  snapshot: GoogleTokenHandoffSnapshot,
+  tokens: GoogleTokenBundle,
+});
+export type GoogleTokenHandoffConsumeResult = typeof GoogleTokenHandoffConsumeResult.Type;
 
 // ---------------------------------------------------------------------------
 // Public client config for Google sign-in (P1d wire shape)
@@ -170,3 +206,113 @@ export const V3RemoveDeviceResult = Schema.Struct({
   removed: Schema.Boolean,
 });
 export type V3RemoveDeviceResult = typeof V3RemoveDeviceResult.Type;
+
+export const DeviceApprovalStreamEvent = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("device-registered"),
+    userId: UserId,
+    device: DeviceInfo,
+    needsApproval: Schema.Boolean,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("device-approved"),
+    userId: UserId,
+    device: DeviceInfo,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("device-removed"),
+    userId: UserId,
+    deviceId: DeviceId,
+  }),
+]);
+export type DeviceApprovalStreamEvent = typeof DeviceApprovalStreamEvent.Type;
+
+// ---------------------------------------------------------------------------
+// GitHub identity (P1e)
+//
+// Phase 1e wires a user-scoped GitHub OAuth flow onto the server node so the
+// V3 server can store a per-user installation / user-access token at rest
+// (AES-256-GCM encrypted via tokenEncryption.ts). The flow mirrors P7's
+// browser Google sign-in but lives on top of an authenticated V3 session —
+// users must sign in with Google first, then "Connect GitHub" as a second
+// consent step.
+//
+// The flow is redirect-based:
+//   1. Browser hits  GET /api/auth/github/authorize    (requires V3 session)
+//   2. Server generates flow envelope + redirects to github.com
+//   3. GitHub → GET /api/auth/github/callback?code=…&state=…
+//   4. Server exchanges code for access_token, fetches /user, stores
+//      encrypted token on v3_users, redirects back to /app/.
+//
+// Desktop (Electron) shells use the same server-hosted endpoint; the
+// difference is purely which origin the user ends up on after the
+// redirect.
+// ---------------------------------------------------------------------------
+
+export const GitHubOAuthScope = TrimmedNonEmptyString.pipe(Schema.brand("GitHubOAuthScope"));
+export type GitHubOAuthScope = typeof GitHubOAuthScope.Type;
+
+export const GitHubUserSummary = Schema.Struct({
+  login: TrimmedNonEmptyString,
+  id: Schema.Int,
+  name: Schema.NullOr(Schema.String),
+  email: Schema.NullOr(Schema.String),
+  avatarUrl: Schema.NullOr(Schema.String),
+});
+export type GitHubUserSummary = typeof GitHubUserSummary.Type;
+
+export const GitHubClientPublicConfig = Schema.Struct({
+  available: Schema.Boolean,
+  // Exposed so the client can display "Connect <org>" labels if the operator
+  // uses a GitHub App; null when GitHub sign-in is not configured.
+  clientId: Schema.NullOr(TrimmedNonEmptyString),
+  // Space-separated string — render as comma list in the UI. Empty string
+  // when the operator has not configured GitHub.
+  scopes: Schema.String,
+});
+export type GitHubClientPublicConfig = typeof GitHubClientPublicConfig.Type;
+
+// The server returns this shape on `/api/auth/github/status` so the UI can
+// reflect whether the currently-signed-in V3 user has linked GitHub and
+// what account they linked.
+export const GitHubConnectionStatus = Schema.Struct({
+  connected: Schema.Boolean,
+  username: Schema.NullOr(TrimmedNonEmptyString),
+  scopes: Schema.Array(GitHubOAuthScope),
+  connectedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
+  needsReconnect: Schema.Boolean,
+  reconnectReason: Schema.NullOr(Schema.String),
+});
+export type GitHubConnectionStatus = typeof GitHubConnectionStatus.Type;
+
+export const GitHubDisconnectResult = Schema.Struct({
+  disconnected: Schema.Boolean,
+});
+export type GitHubDisconnectResult = typeof GitHubDisconnectResult.Type;
+
+// Desktop (Electron) returns this after the loopback OAuth flow
+// completes. The access token is handed to the server via
+// `POST /api/auth/github/bootstrap`, which fetches the user profile,
+// encrypts the token at rest, and associates it with the signed-in V3
+// user. The renderer never stores the token itself.
+export const GitHubTokenBundle = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  scopes: Schema.Array(GitHubOAuthScope),
+  tokenType: Schema.NullOr(Schema.String),
+});
+export type GitHubTokenBundle = typeof GitHubTokenBundle.Type;
+
+// Input for the desktop-driven `POST /api/auth/github/bootstrap` route.
+// The server still fetches /user itself so it can verify the token and
+// record the canonical GitHub login rather than trust the renderer.
+export const GitHubBootstrapInput = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  scopes: Schema.Array(GitHubOAuthScope),
+});
+export type GitHubBootstrapInput = typeof GitHubBootstrapInput.Type;
+
+export const GitHubBootstrapResult = Schema.Struct({
+  connected: Schema.Boolean,
+  username: TrimmedNonEmptyString,
+});
+export type GitHubBootstrapResult = typeof GitHubBootstrapResult.Type;

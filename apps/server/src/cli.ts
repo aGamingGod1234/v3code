@@ -35,6 +35,7 @@ import {
   DEFAULT_PORT,
   deriveServerPaths,
   ensureServerDirectories,
+  resolveCloudModeStaticDir,
   resolveStaticDir,
   ServerConfig,
   RuntimeMode,
@@ -79,10 +80,9 @@ const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 6553
 // lowercasing each entry. Empty string → empty allowlist.
 const parseAuthorizedEmails = (raw: string | undefined): ReadonlyArray<string> => {
   if (raw === undefined) return [];
-  return raw
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter((entry) => entry.length > 0);
+  return [...new Set(raw.split(",").map((entry) => entry.trim().toLowerCase()))].filter(
+    (entry) => entry.length > 0,
+  );
 };
 
 const BootstrapEnvelopeSchema = Schema.Struct({
@@ -200,6 +200,79 @@ const EnvServerConfig = Config.all({
     Config.map(Option.getOrUndefined),
   ),
   postgresUrl: Config.string("V3CODE_POSTGRES_URL").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  // V3 Phase 7 — browser Google sign-in + cloud-mode web hosting.
+  googleClientSecret: Config.string("V3CODE_GOOGLE_CLIENT_SECRET").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  serverPublicUrl: Config.string("V3CODE_SERVER_PUBLIC_URL").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudModeStaticDir: Config.string("V3CODE_CLOUD_MODE_STATIC_DIR").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  // V3 Phase 1e — GitHub OAuth app client configuration.
+  githubClientId: Config.string("V3CODE_GITHUB_CLIENT_ID").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  githubClientSecret: Config.string("V3CODE_GITHUB_CLIENT_SECRET").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  githubOauthScopes: Config.string("V3CODE_GITHUB_OAUTH_SCOPES").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvEnabled: Config.boolean("V3CODE_CLOUD_ENV_ENABLED").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvDockerSocket: Config.string("V3CODE_CLOUD_ENV_DOCKER_SOCKET").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvBaseImage: Config.string("V3CODE_CLOUD_ENV_BASE_IMAGE").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvMaxContainers: Config.int("V3CODE_CLOUD_ENV_MAX_CONTAINERS").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerCpuLimit: Config.int("V3CODE_CLOUD_ENV_CONTAINER_CPU_LIMIT").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerMemoryMb: Config.int("V3CODE_CLOUD_ENV_CONTAINER_MEMORY_MB").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerDiskGb: Config.int("V3CODE_CLOUD_ENV_CONTAINER_DISK_GB").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  cloudEnvContainerMaxRuntimeHours: Config.int("V3CODE_CLOUD_ENV_CONTAINER_MAX_RUNTIME_HOURS").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  // V3 spec §10.4 `[limits]`. Operators can raise or lower these caps
+  // per deployment; defaults match the spec example values so an empty
+  // `[limits]` section still converges on something sane.
+  maxDevicesPerUser: Config.int("V3CODE_MAX_DEVICES_PER_USER").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  maxChatsPerUser: Config.int("V3CODE_MAX_CHATS_PER_USER").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  maxEventLogSizeMb: Config.int("V3CODE_MAX_EVENT_LOG_SIZE_MB").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
@@ -369,6 +442,13 @@ export const resolveServerConfig = (
       () => Boolean(devUrl),
     );
     const staticDir = devUrl ? undefined : yield* resolveStaticDir();
+    // V3 Phase 7: cloud bundle directory is independent of the legacy
+    // static bundle. When present, the server mounts it at `/app/*`.
+    // `resolveCloudModeStaticDir` prefers `V3CODE_CLOUD_MODE_STATIC_DIR`,
+    // then `<server-bundle>/client-cloud/`, then the monorepo
+    // `apps/web/dist-cloud/` fallback for local dev. Operators who have
+    // not yet produced a cloud build get `undefined` here.
+    const resolvedCloudStaticDir = env.cloudModeStaticDir ?? (yield* resolveCloudModeStaticDir());
     const host = Option.getOrElse(
       resolveOptionPrecedence(
         normalizedFlags.host,
@@ -379,6 +459,25 @@ export const resolveServerConfig = (
       () => (mode === "desktop" ? "127.0.0.1" : undefined),
     );
     const logLevel = Option.getOrElse(cliLogLevel, () => env.logLevel);
+
+    const authorizedEmails =
+      env.authorizedEmails !== undefined
+        ? parseAuthorizedEmails(env.authorizedEmails)
+        : [
+            ...new Set(
+              (tomlConfig?.auth?.authorized_emails ?? []).map((entry) =>
+                entry.trim().toLowerCase(),
+              ),
+            ),
+          ].filter((entry) => entry.length > 0);
+
+    if (mode === "server-node" && authorizedEmails.length > 1) {
+      return yield* Effect.fail(
+        new Error(
+          "Server-node mode supports exactly one authorized Google account. Configure a single authorized email.",
+        ),
+      );
+    }
 
     const config: ServerConfigShape = {
       logLevel,
@@ -412,11 +511,37 @@ export const resolveServerConfig = (
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
       googleClientId: env.googleClientId ?? tomlConfig?.auth?.google_client_id,
-      authorizedEmails:
-        env.authorizedEmails !== undefined
-          ? parseAuthorizedEmails(env.authorizedEmails)
-          : (tomlConfig?.auth?.authorized_emails ?? []).map((entry) => entry.trim().toLowerCase()),
+      authorizedEmails,
       postgresUrl: env.postgresUrl ?? tomlConfig?.database?.postgres_url,
+      googleClientSecret: env.googleClientSecret ?? tomlConfig?.auth?.google_client_secret,
+      serverPublicUrl: env.serverPublicUrl ?? tomlConfig?.server?.public_url,
+      cloudModeStaticDir: resolvedCloudStaticDir,
+      githubClientId: env.githubClientId ?? tomlConfig?.auth?.github_client_id,
+      githubClientSecret: env.githubClientSecret ?? tomlConfig?.auth?.github_client_secret,
+      githubOauthScopes: env.githubOauthScopes ?? "read:user repo",
+      cloudEnvEnabled:
+        env.cloudEnvEnabled ?? tomlConfig?.cloud_env?.enabled ?? mode === "server-node",
+      cloudEnvDockerSocket: env.cloudEnvDockerSocket ?? tomlConfig?.cloud_env?.docker_socket,
+      cloudEnvBaseImage:
+        env.cloudEnvBaseImage ??
+        tomlConfig?.cloud_env?.base_image ??
+        "ghcr.io/v3-code/cloud-env:latest",
+      cloudEnvMaxContainers:
+        env.cloudEnvMaxContainers ?? tomlConfig?.cloud_env?.max_containers ?? 10,
+      cloudEnvContainerCpuLimit:
+        env.cloudEnvContainerCpuLimit ?? tomlConfig?.cloud_env?.container_cpu_limit ?? 2,
+      cloudEnvContainerMemoryMb:
+        env.cloudEnvContainerMemoryMb ?? tomlConfig?.cloud_env?.container_memory_mb ?? 4096,
+      cloudEnvContainerDiskGb:
+        env.cloudEnvContainerDiskGb ?? tomlConfig?.cloud_env?.container_disk_gb ?? 20,
+      cloudEnvContainerMaxRuntimeHours:
+        env.cloudEnvContainerMaxRuntimeHours ??
+        tomlConfig?.cloud_env?.container_max_runtime_hours ??
+        720,
+      maxDevicesPerUser: env.maxDevicesPerUser ?? tomlConfig?.limits?.max_devices_per_user ?? 20,
+      maxChatsPerUser: env.maxChatsPerUser ?? tomlConfig?.limits?.max_chats_per_user ?? 10_000,
+      maxEventLogSizeMb:
+        env.maxEventLogSizeMb ?? tomlConfig?.limits?.max_event_log_size_mb ?? 100_000,
     };
 
     return config;
@@ -1162,13 +1287,13 @@ const runServerCommand = (
   });
 
 const startCommand = Command.make("start", { ...sharedServerCommandFlags }).pipe(
-  Command.withDescription("Run the T3 Code server."),
+  Command.withDescription("Run the V3 Code server."),
   Command.withHandler((flags) => runServerCommand(flags)),
 );
 
 const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe(
   Command.withDescription(
-    "Run the T3 Code server without opening a browser and print headless pairing details.",
+    "Run the V3 Code server without opening a browser and print headless pairing details.",
   ),
   Command.withHandler((flags) =>
     runServerCommand(flags, {
@@ -1179,7 +1304,7 @@ const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe
 );
 
 export const cli = Command.make("t3", { ...sharedServerCommandFlags }).pipe(
-  Command.withDescription("Run the T3 Code server."),
+  Command.withDescription("Run the V3 Code server."),
   Command.withHandler((flags) => runServerCommand(flags)),
   Command.withSubcommands([startCommand, serveCommand, authCommand, projectCommand]),
 );

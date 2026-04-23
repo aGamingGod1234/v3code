@@ -3,6 +3,8 @@ import * as Path from "node:path";
 
 import {
   ClientSettingsSchema,
+  GoogleTokenBundle,
+  type GoogleTokenBundle as GoogleTokenBundleValue,
   type ClientSettings,
   type PersistedSavedEnvironmentRecord,
 } from "@v3tools/contracts";
@@ -19,6 +21,10 @@ interface PersistedSavedEnvironmentStorageRecord extends PersistedSavedEnvironme
 
 interface SavedEnvironmentRegistryDocument {
   readonly records: readonly PersistedSavedEnvironmentStorageRecord[];
+}
+
+interface GoogleTokenDocument {
+  readonly encryptedTokens?: string;
 }
 
 export interface DesktopSecretStorage {
@@ -226,4 +232,45 @@ export function removeSavedEnvironmentSecret(input: {
       return toPersistedSavedEnvironmentRecord(record);
     }),
   } satisfies SavedEnvironmentRegistryDocument);
+}
+
+export function readV3GoogleTokens(input: {
+  readonly tokensPath: string;
+  readonly secretStorage: DesktopSecretStorage;
+}): GoogleTokenBundleValue | null {
+  const document = readJsonFile<GoogleTokenDocument>(input.tokensPath);
+  if (!document?.encryptedTokens || !input.secretStorage.isEncryptionAvailable()) {
+    return null;
+  }
+
+  try {
+    const decrypted = input.secretStorage.decryptString(
+      Buffer.from(document.encryptedTokens, "base64"),
+    );
+    return Schema.decodeUnknownSync(GoogleTokenBundle)(JSON.parse(decrypted));
+  } catch {
+    return null;
+  }
+}
+
+export function writeV3GoogleTokens(input: {
+  readonly tokensPath: string;
+  readonly tokens: GoogleTokenBundleValue;
+  readonly secretStorage: DesktopSecretStorage;
+}): void {
+  if (!input.secretStorage.isEncryptionAvailable()) {
+    throw new Error("Desktop secure storage is unavailable.");
+  }
+
+  const encryptedTokens = input.secretStorage
+    .encryptString(JSON.stringify(input.tokens))
+    .toString("base64");
+  writeJsonFile(input.tokensPath, { encryptedTokens } satisfies GoogleTokenDocument);
+}
+
+export function clearV3GoogleTokens(tokensPath: string): void {
+  if (!FS.existsSync(tokensPath)) {
+    return;
+  }
+  FS.rmSync(tokensPath, { force: true });
 }

@@ -8,6 +8,7 @@ import {
   SmartphoneIcon,
 } from "lucide-react";
 
+import { DateTime } from "effect";
 import type { DeviceInfo } from "@v3tools/contracts";
 import { scopeThreadRef, scopedThreadKey } from "@v3tools/client-runtime";
 
@@ -40,13 +41,33 @@ function DeviceIcon({ device }: { device: DeviceInfo }) {
   }
 }
 
+// Spec §8.1: "Hovering a device shows last-seen timestamp." The native
+// `title` attribute is the lightest reliable tooltip in the sidebar — we
+// avoid a tooltip portal here because the trigger is also a
+// CollapsibleTrigger button and layering two focus-trapping portals over
+// it hurts keyboard UX.
+function buildDeviceTooltip(device: DeviceInfo): string {
+  const name = device.name;
+  if (device.online) {
+    return `${name} · online now`;
+  }
+  if (device.lastSeenAt === null) {
+    return `${name} · never connected`;
+  }
+  const formatted = DateTime.formatIso(device.lastSeenAt);
+  return `${name} · last seen ${formatted}`;
+}
+
 export function DeviceGroup({ chats, currentDeviceId, device, routeThreadKey }: DeviceGroupProps) {
   const isCurrentDevice = device.id === currentDeviceId;
 
   return (
     <Collapsible defaultOpen={isCurrentDevice || device.online}>
-      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-accent">
-        <ChevronRightIcon className="size-3.5 text-muted-foreground transition-transform data-[panel-open]:rotate-90" />
+      <CollapsibleTrigger
+        title={buildDeviceTooltip(device)}
+        className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-accent"
+      >
+        <ChevronRightIcon className="size-3.5 text-muted-foreground transition-transform group-data-[panel-open]:rotate-90" />
         <span
           className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md ${
             device.online
@@ -64,7 +85,9 @@ export function DeviceGroup({ chats, currentDeviceId, device, routeThreadKey }: 
             {!device.approved ? " · Pending approval" : ""}
           </div>
         </div>
-        <span className="text-[10px] text-muted-foreground">{chats.length}</span>
+        {chats.length > 0 ? (
+          <span className="text-[10px] text-muted-foreground">{chats.length}</span>
+        ) : null}
       </CollapsibleTrigger>
 
       <CollapsibleContent className="pt-1">

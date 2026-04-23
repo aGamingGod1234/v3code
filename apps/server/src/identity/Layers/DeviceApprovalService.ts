@@ -3,9 +3,11 @@ import { Effect, Layer, Option, PubSub, Stream } from "effect";
 
 import { DeviceRepository } from "../Services/DeviceRepository.ts";
 import type { DeviceRecord } from "../Services/DeviceRepository.ts";
+import { DeviceRegistry } from "../../mesh/Services/DeviceRegistry.ts";
 import {
   DeviceApprovalEvent,
   DeviceApprovalService,
+  DeviceLimitReachedError,
   type DeviceApprovalServiceShape,
 } from "../Services/DeviceApprovalService.ts";
 
@@ -26,6 +28,7 @@ const toDeviceInfo = (record: DeviceRecord): DeviceInfo => ({
 
 export const makeDeviceApprovalService = Effect.gen(function* () {
   const devices = yield* DeviceRepository;
+  const deviceRegistry = yield* DeviceRegistry;
   const changesPubSub = yield* PubSub.unbounded<DeviceApprovalEvent>();
 
   const emit = (event: DeviceApprovalEvent) =>
@@ -35,6 +38,21 @@ export const makeDeviceApprovalService = Effect.gen(function* () {
     Effect.gen(function* () {
       const existing = yield* devices.get({ id: input.deviceId, userId: input.userId });
       const wasNewlyInserted = Option.isNone(existing);
+
+      if (wasNewlyInserted) {
+        // Spec §10.4 cap enforcement. We count *active* (non-removed)
+        // devices and reject if a new insert would exceed the limit.
+        // `listForUser` defaults to active-only so removed-then-reused
+        // device slots don't count against the cap.
+        const activeDevices = yield* devices.listForUser({ userId: input.userId });
+        if (activeDevices.length >= input.maxDevices) {
+          return yield* new DeviceLimitReachedError({
+            userId: input.userId,
+            currentCount: activeDevices.length,
+            limit: input.maxDevices,
+          });
+        }
+      }
 
       const registered = yield* devices.register({
         id: input.deviceId,
@@ -57,13 +75,19 @@ export const makeDeviceApprovalService = Effect.gen(function* () {
         };
       }
 
-      // Brand-new device. Auto-approve if this is the user's first device ever;
-      // otherwise leave unapproved and emit a request event so existing devices
-      // (in P2) can surface a prompt to the user.
+      // Brand-new device. Auto-approve when no other approved device for this
+      // user is currently online; otherwise leave it pending.
       const allDevices = yield* devices.listForUser({ userId: input.userId });
-      const isFirstDeviceEver = allDevices.length === 1;
+      const otherApprovedDevices = allDevices.filter(
+        (device) => device.id !== input.deviceId && device.approved,
+      );
+      const otherApprovedOnline = yield* Effect.forEach(
+        otherApprovedDevices,
+        (device) => deviceRegistry.isOnline(device.id),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((states) => states.some(Boolean)));
 
-      if (isFirstDeviceEver) {
+      if (!otherApprovedOnline) {
         yield* devices.setApproved({
           id: input.deviceId,
           userId: input.userId,

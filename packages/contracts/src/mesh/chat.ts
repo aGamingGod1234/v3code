@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "../baseSchemas.ts";
-import { DeviceId } from "../identity.ts";
+import { DeviceApprovalStreamEvent, DeviceId } from "../identity.ts";
 import {
   ChatForkCommand,
   ClientOrchestrationCommand,
@@ -19,6 +19,7 @@ export const MESH_WS_METHODS = {
   forkChat: "mesh.forkChat",
   subscribePresence: "mesh.subscribePresence",
   subscribePrompts: "mesh.subscribePrompts",
+  subscribeDeviceApprovals: "mesh.subscribeDeviceApprovals",
 } as const;
 
 export const MeshSubscribeChatInput = Schema.Struct({
@@ -87,11 +88,21 @@ export const MeshPresenceStreamItem = Schema.Union([
 ]);
 export type MeshPresenceStreamItem = typeof MeshPresenceStreamItem.Type;
 
-export const MeshPromptStreamItem = Schema.Struct({
-  kind: Schema.Literal("send_prompt_forward"),
-  command: ClientThreadTurnStartCommand,
-});
+export const MeshPromptStreamItem = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("send_prompt_forward"),
+    command: ClientThreadTurnStartCommand,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("fork_ready"),
+    threadId: ThreadId,
+    title: TrimmedNonEmptyString,
+  }),
+]);
 export type MeshPromptStreamItem = typeof MeshPromptStreamItem.Type;
+
+export const MeshDeviceApprovalStreamItem = DeviceApprovalStreamEvent;
+export type MeshDeviceApprovalStreamItem = typeof MeshDeviceApprovalStreamItem.Type;
 
 export class MeshRpcError extends Schema.TaggedErrorClass<MeshRpcError>()("MeshRpcError", {
   message: TrimmedNonEmptyString,
@@ -122,5 +133,9 @@ export const MeshRpcSchemas = {
   subscribePrompts: {
     input: Schema.Struct({}),
     output: MeshPromptStreamItem,
+  },
+  subscribeDeviceApprovals: {
+    input: Schema.Struct({}),
+    output: MeshDeviceApprovalStreamItem,
   },
 } as const;

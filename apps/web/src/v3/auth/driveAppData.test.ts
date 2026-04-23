@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { DriveDeviceEntry, V3DriveAppDataClient } from "@v3tools/client-runtime";
+import type {
+  DriveDeviceEntry,
+  V3DriveAppDataClient,
+  V3DriveConfig,
+} from "@v3tools/client-runtime";
 import { V3DriveClientError } from "@v3tools/client-runtime";
 
 import {
@@ -8,6 +12,11 @@ import {
   captureDriveAppDataSnapshot,
   getV3DriveAppDataSnapshot,
 } from "./driveAppData";
+import {
+  clearPendingDrivePublish,
+  readPendingDrivePublish,
+  writePendingDrivePublish,
+} from "./drivePublishState";
 
 const FROZEN_NOW = () => new Date("2026-04-19T00:00:00.000Z");
 const FROZEN_ISO = "2026-04-19T00:00:00.000Z";
@@ -24,11 +33,28 @@ const DESKTOP: DriveDeviceEntry = {
   added_at: "2026-04-18T10:00:00.000Z",
 };
 
-interface StorageShape {
-  readonly storage: Map<string, string>;
-}
+const EMPTY_CONFIG: V3DriveConfig = {
+  v3_config: {
+    device_list: [],
+  },
+};
 
-const installFakeStorage = (): StorageShape => {
+const CONFIG_WITH_DESKTOP: V3DriveConfig = {
+  v3_config: {
+    device_list: [DESKTOP],
+  },
+};
+
+const CONFIG_WITH_SERVER: V3DriveConfig = {
+  v3_config: {
+    server_url: "https://v3.agaminggod.com",
+    device_list: [DESKTOP],
+  },
+};
+
+const silentLogger = { warn: () => undefined };
+
+const installFakeStorage = () => {
   const storage = new Map<string, string>();
   Object.defineProperty(globalThis, "window", {
     configurable: true,
@@ -44,43 +70,47 @@ const installFakeStorage = (): StorageShape => {
       },
     },
   });
-  return { storage };
+  return storage;
 };
 
 interface StubClientSpec {
   readonly read: V3DriveAppDataClient["read"];
-  readonly appendDevice?: V3DriveAppDataClient["appendDevice"];
+  readonly readOrInit?: V3DriveAppDataClient["readOrInit"];
+  readonly write?: V3DriveAppDataClient["write"];
 }
 
 const makeStubClient = (spec: StubClientSpec): V3DriveAppDataClient => ({
   read: spec.read,
-  readOrInit: async (_token) => {
-    throw new Error("readOrInit not exercised in these tests");
-  },
-  write: async (_token, _config) => {
-    throw new Error("write not exercised in these tests");
-  },
-  appendDevice:
-    spec.appendDevice ??
-    (async (_token, _entry) => {
-      throw new Error("appendDevice not expected in this test");
+  readOrInit:
+    spec.readOrInit ??
+    (async () => {
+      throw new Error("readOrInit not expected in this test");
     }),
+  write:
+    spec.write ??
+    (async () => {
+      throw new Error("write not expected in this test");
+    }),
+  appendDevice: async () => {
+    throw new Error("appendDevice should not be used by the current implementation");
+  },
 });
-
-const silentLogger = { warn: () => undefined };
 
 beforeEach(() => {
   installFakeStorage();
 });
 
 afterEach(() => {
+  clearPendingDrivePublish();
   __resetV3DriveAppDataSnapshotForTests();
   Reflect.deleteProperty(globalThis, "window");
 });
 
 describe("captureDriveAppDataSnapshot", () => {
-  it("returns an empty snapshot when no blob exists and does not call appendDevice", async () => {
-    let appendCalls = 0;
+  it("initializes a missing blob and appends this device before a server URL exists", async () => {
+    let readOrInitCalls = 0;
+    let writtenConfig: V3DriveConfig | null = null;
+
     const snapshot = await captureDriveAppDataSnapshot({
       accessToken: "token",
       thisDevice: LAPTOP,
@@ -88,107 +118,117 @@ describe("captureDriveAppDataSnapshot", () => {
       logger: silentLogger,
       client: makeStubClient({
         read: async () => null,
-        appendDevice: async () => {
-          appendCalls += 1;
-          throw new Error("should not append");
+        readOrInit: async () => {
+          readOrInitCalls += 1;
+          return EMPTY_CONFIG;
+        },
+        write: async (_token, config) => {
+          writtenConfig = config;
         },
       }),
     });
+
+    expect(readOrInitCalls).toBe(1);
+    expect(writtenConfig).toEqual({
+      v3_config: {
+        device_list: [LAPTOP],
+      },
+    });
     expect(snapshot).toEqual({
       serverUrl: null,
-      devices: [],
-      blobExists: false,
+      devices: [LAPTOP],
+      blobExists: true,
       capturedAt: FROZEN_ISO,
       error: null,
     });
-    expect(appendCalls).toBe(0);
     expect(getV3DriveAppDataSnapshot()).toEqual(snapshot);
   });
 
-  it("captures the existing blob without writing when server_url is absent", async () => {
-    let appendCalls = 0;
+  it("appends the current device to an existing blob even before server_url is published", async () => {
+    let writtenConfig: V3DriveConfig | null = null;
+
     const snapshot = await captureDriveAppDataSnapshot({
       accessToken: "token",
       thisDevice: LAPTOP,
       now: FROZEN_NOW,
       logger: silentLogger,
       client: makeStubClient({
-        read: async () => ({
-          v3_config: { device_list: [DESKTOP] },
-        }),
-        appendDevice: async () => {
-          appendCalls += 1;
-          throw new Error("should not append when server_url missing");
+        read: async () => CONFIG_WITH_DESKTOP,
+        write: async (_token, config) => {
+          writtenConfig = config;
         },
       }),
     });
-    expect(appendCalls).toBe(0);
+
+    expect(writtenConfig).toEqual({
+      v3_config: {
+        device_list: [DESKTOP, LAPTOP],
+      },
+    });
     expect(snapshot).toEqual({
       serverUrl: null,
-      devices: [DESKTOP],
+      devices: [DESKTOP, LAPTOP],
       blobExists: true,
       capturedAt: FROZEN_ISO,
       error: null,
     });
   });
 
-  it("skips append and captures as-is when this device is already listed", async () => {
-    let appendCalls = 0;
-    const snapshot = await captureDriveAppDataSnapshot({
-      accessToken: "token",
-      thisDevice: DESKTOP,
-      now: FROZEN_NOW,
-      logger: silentLogger,
-      client: makeStubClient({
-        read: async () => ({
-          v3_config: {
-            server_url: "https://v3.agaminggod.com",
-            device_list: [DESKTOP],
-          },
-        }),
-        appendDevice: async () => {
-          appendCalls += 1;
-          throw new Error("should not re-append");
-        },
-      }),
+  it("consumes a pending setup publish and persists the server metadata", async () => {
+    let writtenConfig: V3DriveConfig | null = null;
+    writePendingDrivePublish({
+      server_url: "https://mesh.example.com",
+      server_version_installed: "3.0.0",
+      setup_at: "2026-04-19T00:00:00.000Z",
+      device_id: LAPTOP.device_id,
+      device_name: LAPTOP.name,
     });
-    expect(appendCalls).toBe(0);
-    expect(snapshot.devices).toEqual([DESKTOP]);
-    expect(snapshot.serverUrl).toBe("https://v3.agaminggod.com");
-  });
 
-  it("appends this device when server_url is set and we are missing", async () => {
-    let appendedWith: DriveDeviceEntry | null = null;
     const snapshot = await captureDriveAppDataSnapshot({
       accessToken: "token",
       thisDevice: LAPTOP,
       now: FROZEN_NOW,
       logger: silentLogger,
       client: makeStubClient({
-        read: async () => ({
-          v3_config: {
-            server_url: "https://v3.agaminggod.com",
-            device_list: [DESKTOP],
-          },
-        }),
-        appendDevice: async (_token, entry) => {
-          appendedWith = entry;
-          return {
-            v3_config: {
-              server_url: "https://v3.agaminggod.com",
-              device_list: [DESKTOP, entry],
-            },
-          };
+        read: async () => CONFIG_WITH_DESKTOP,
+        write: async (_token, config) => {
+          writtenConfig = config;
         },
       }),
     });
-    expect(appendedWith).toEqual(LAPTOP);
-    expect(snapshot.devices).toEqual([DESKTOP, LAPTOP]);
-    expect(snapshot.error).toBeNull();
+
+    expect(writtenConfig).toEqual({
+      v3_config: {
+        server_url: "https://mesh.example.com",
+        server_version_installed: "3.0.0",
+        setup_at: "2026-04-19T00:00:00.000Z",
+        device_list: [DESKTOP, LAPTOP],
+      },
+    });
+    expect(readPendingDrivePublish()).toBeNull();
+    expect(snapshot).toEqual({
+      serverUrl: "https://mesh.example.com",
+      devices: [DESKTOP, LAPTOP],
+      blobExists: true,
+      capturedAt: FROZEN_ISO,
+      error: null,
+    });
   });
 
-  it("log-and-ignores Drive read failures (keeps sign-in flowing)", async () => {
+  it("logs and ignores Drive read failures so sign-in can continue", async () => {
     const warnings: string[] = [];
+
+    await captureDriveAppDataSnapshot({
+      accessToken: "token",
+      thisDevice: LAPTOP,
+      now: () => new Date("2026-04-18T23:59:00.000Z"),
+      logger: silentLogger,
+      client: makeStubClient({
+        read: async () => CONFIG_WITH_SERVER,
+        write: async () => undefined,
+      }),
+    });
+
     const snapshot = await captureDriveAppDataSnapshot({
       accessToken: "token",
       thisDevice: LAPTOP,
@@ -204,27 +244,62 @@ describe("captureDriveAppDataSnapshot", () => {
         },
       }),
     });
-    expect(snapshot.error).toBe("unauthorized");
-    expect(snapshot.blobExists).toBe(false);
+
+    expect(snapshot).toEqual({
+      serverUrl: "https://v3.agaminggod.com",
+      devices: [DESKTOP, LAPTOP],
+      blobExists: true,
+      capturedAt: FROZEN_ISO,
+      error: "unauthorized",
+    });
     expect(warnings[0]).toContain("unauthorized");
     expect(getV3DriveAppDataSnapshot()).toEqual(snapshot);
   });
 
-  it("log-and-ignores quota-exhausted on append and keeps the last good state", async () => {
+  it("preserves the last good snapshot when no fresh Google access token is available", async () => {
+    await captureDriveAppDataSnapshot({
+      accessToken: "token",
+      thisDevice: LAPTOP,
+      now: () => new Date("2026-04-18T23:59:00.000Z"),
+      logger: silentLogger,
+      client: makeStubClient({
+        read: async () => CONFIG_WITH_SERVER,
+        write: async () => undefined,
+      }),
+    });
+
+    const snapshot = await captureDriveAppDataSnapshot({
+      accessToken: "",
+      thisDevice: LAPTOP,
+      now: FROZEN_NOW,
+      logger: silentLogger,
+      client: makeStubClient({
+        read: async () => {
+          throw new Error("read should not be called when accessToken is absent");
+        },
+      }),
+    });
+
+    expect(snapshot).toEqual({
+      serverUrl: "https://v3.agaminggod.com",
+      devices: [DESKTOP, LAPTOP],
+      blobExists: true,
+      capturedAt: FROZEN_ISO,
+      error: "unauthorized",
+    });
+  });
+
+  it("keeps the last good snapshot when Drive writes fail", async () => {
     const warnings: string[] = [];
+
     const snapshot = await captureDriveAppDataSnapshot({
       accessToken: "token",
       thisDevice: LAPTOP,
       now: FROZEN_NOW,
       logger: { warn: (message: unknown) => warnings.push(String(message)) },
       client: makeStubClient({
-        read: async () => ({
-          v3_config: {
-            server_url: "https://v3.agaminggod.com",
-            device_list: [DESKTOP],
-          },
-        }),
-        appendDevice: async () => {
+        read: async () => CONFIG_WITH_SERVER,
+        write: async () => {
           throw new V3DriveClientError({
             reason: "quota-exhausted",
             message: "full",
@@ -233,9 +308,14 @@ describe("captureDriveAppDataSnapshot", () => {
         },
       }),
     });
-    expect(snapshot.error).toBe("quota-exhausted");
-    expect(snapshot.serverUrl).toBe("https://v3.agaminggod.com");
-    expect(snapshot.devices).toEqual([DESKTOP]);
+
+    expect(snapshot).toEqual({
+      serverUrl: "https://v3.agaminggod.com",
+      devices: [DESKTOP],
+      blobExists: true,
+      capturedAt: FROZEN_ISO,
+      error: "quota-exhausted",
+    });
     expect(warnings[0]).toContain("quota-exhausted");
   });
 });

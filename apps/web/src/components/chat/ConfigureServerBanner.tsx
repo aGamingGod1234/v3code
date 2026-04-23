@@ -7,7 +7,8 @@ import { Button } from "../ui/button";
 
 export function ConfigureServerBanner() {
   const navigate = useNavigate();
-  const { dismiss, driveSnapshot, visible } = useShouldShowConfigureBanner();
+  const { dismissForNow, dismissPermanently, driveSnapshot, visible } =
+    useShouldShowConfigureBanner();
 
   if (!visible || driveSnapshot === null) {
     return null;
@@ -26,10 +27,13 @@ export function ConfigureServerBanner() {
         </AlertDescription>
         <AlertAction className="flex flex-wrap gap-2">
           <Button size="xs" onClick={() => void navigate({ to: "/setup" })}>
-            Open setup
+            Configure server
           </Button>
-          <Button size="xs" variant="outline" onClick={() => dismiss()}>
-            Dismiss for 7 days
+          <Button size="xs" variant="outline" onClick={() => dismissForNow()}>
+            Remind me later
+          </Button>
+          <Button size="xs" variant="ghost" onClick={() => dismissPermanently()}>
+            Keep single-device
           </Button>
         </AlertAction>
       </Alert>

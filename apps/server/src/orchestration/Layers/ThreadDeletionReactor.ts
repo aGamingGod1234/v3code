@@ -2,6 +2,7 @@ import type { OrchestrationEvent } from "@v3tools/contracts";
 import { makeDrainableWorker } from "@v3tools/shared/DrainableWorker";
 import { Cause, Effect, Layer, Stream } from "effect";
 
+import { ContainerManager } from "../../cloud/Services/ContainerManager.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
@@ -37,6 +38,7 @@ const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
   const terminalManager = yield* TerminalManager;
+  const containerManager = yield* ContainerManager;
 
   const stopProviderSession = (threadId: ThreadDeletedEvent["payload"]["threadId"]) =>
     logCleanupCauseUnlessInterrupted({
@@ -52,12 +54,22 @@ const make = Effect.gen(function* () {
       threadId,
     });
 
+  // V3 Phase 8 — tear down any cloud environment container associated
+  // with the deleted thread. No-op when the thread was never cloud-hosted.
+  const stopCloudEnvironment = (threadId: ThreadDeletedEvent["payload"]["threadId"]) =>
+    logCleanupCauseUnlessInterrupted({
+      effect: containerManager.stopThreadEnvironment(threadId),
+      message: "thread deletion cleanup skipped cloud environment stop",
+      threadId,
+    });
+
   const processThreadDeleted = Effect.fn("processThreadDeleted")(function* (
     event: ThreadDeletedEvent,
   ) {
     const { threadId } = event.payload;
     yield* stopProviderSession(threadId);
     yield* closeThreadTerminals(threadId);
+    yield* stopCloudEnvironment(threadId);
   });
 
   const processThreadDeletedSafely = (event: ThreadDeletedEvent) =>

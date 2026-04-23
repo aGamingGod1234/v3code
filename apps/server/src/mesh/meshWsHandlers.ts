@@ -3,21 +3,29 @@ import {
   type ChatForkCommand,
   type ClientThreadTurnStartCommand,
   DeviceId,
+  MESH_PUSH_WS_METHODS,
   MESH_WS_METHODS,
   MeshRpcError,
   type PresenceUpdatePayload,
+  type PushRegistrationPayload,
+  type PushUnregistrationPayload,
   type ProjectId,
   type UserId,
 } from "@v3tools/contracts";
-import { Effect, Option, Schema, Stream } from "effect";
+import * as Crypto from "node:crypto";
+import { DateTime, Effect, Option, Schema, Stream } from "effect";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 
+import { ServerConfig } from "../config.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { OrchestrationEventStore } from "../persistence/Services/OrchestrationEventStore.ts";
 import {
   MeshEventIngestion,
   type MeshEventIngestionShape,
 } from "../orchestration/Services/MeshEventIngestion.ts";
+import { DeviceApprovalService } from "../identity/Services/DeviceApprovalService.ts";
+import { DevicePushTokenRepository } from "../identity/Services/DevicePushTokenRepository.ts";
 import { DeviceRepository } from "../identity/Services/DeviceRepository.ts";
 import { ChatSubscriptionManager } from "./Services/ChatSubscriptionManager.ts";
 import { DeviceRegistry } from "./Services/DeviceRegistry.ts";
@@ -78,11 +86,45 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
     const chatSubscriptions = yield* ChatSubscriptionManager;
     const meshEventIngestion: MeshEventIngestionShape = yield* MeshEventIngestion;
     const devices = yield* DeviceRepository;
+    const pushTokens = yield* DevicePushTokenRepository;
+    const approvals = yield* DeviceApprovalService;
     const deviceRegistry = yield* DeviceRegistry;
     const presence = yield* PresenceBroadcaster;
     const promptRouter = yield* PromptRouter;
     const orchestrationEngine = yield* OrchestrationEngineService;
+    const eventStore = yield* OrchestrationEventStore;
+    const serverConfig = yield* ServerConfig;
     yield* MeshPublisher;
+
+    // Spec §10.4 [limits].max_chats_per_user enforcement. Rejects a
+    // `thread.create` command when the user already holds at least
+    // `max_chats_per_user` non-archived threads. We read the latest
+    // read-model snapshot rather than plumbing a dedicated counter
+    // because the cap is a rare guardrail, not a hot path; every other
+    // command (turn starts, tool calls, etc.) bypasses the check.
+    const enforceChatCap = (
+      command: Parameters<MeshEventIngestionShape["publishCommand"]>[0]["command"],
+    ) =>
+      command.type === "thread.create"
+        ? projectionSnapshotQuery.getSnapshot().pipe(
+            Effect.mapError((cause) =>
+              toMeshRpcError("Failed to evaluate chat cap before publishing.", cause),
+            ),
+            Effect.flatMap((snapshot) => {
+              const activeThreadCount = snapshot.threads.filter(
+                (thread) => thread.archivedAt === null,
+              ).length;
+              if (activeThreadCount >= serverConfig.maxChatsPerUser) {
+                return Effect.fail(
+                  toMeshRpcError(
+                    `Chat limit reached: ${activeThreadCount} active chats (cap: ${serverConfig.maxChatsPerUser}). Archive old chats from the sidebar before starting a new one.`,
+                  ),
+                );
+              }
+              return Effect.void;
+            }),
+          )
+        : Effect.void;
 
     const requireSignedInMeshUser = () =>
       context.userId !== null
@@ -175,14 +217,20 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
       }) =>
         observeRpcEffect(
           MESH_WS_METHODS.publishEvent,
-          meshEventIngestion
-            .publishCommand({
-              command: input.command,
-              deviceId: context.deviceId,
-            })
-            .pipe(
-              Effect.mapError((cause) => toMeshRpcError("Failed to publish mesh command.", cause)),
+          enforceChatCap(input.command).pipe(
+            Effect.flatMap(() =>
+              meshEventIngestion
+                .publishCommand({
+                  command: input.command,
+                  deviceId: context.deviceId,
+                })
+                .pipe(
+                  Effect.mapError((cause) =>
+                    toMeshRpcError("Failed to publish mesh command.", cause),
+                  ),
+                ),
             ),
+          ),
           { "rpc.aggregate": "mesh" },
         ),
       [MESH_WS_METHODS.sendPrompt]: (input: { command: ClientThreadTurnStartCommand }) =>
@@ -271,19 +319,15 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
           MESH_WS_METHODS.forkChat,
           Effect.gen(function* () {
             const command = input.command;
-            // Always stamp the source device id from the authenticated
-            // session — the server is the only source of truth for "which
-            // device kicked off this fork". If the client supplied a
-            // different `sourceDeviceId`, it is discarded. When the caller
-            // has no authenticated device (pre-V3 pairing-only session) we
-            // strip the field entirely rather than let the client fill it.
-            const stampedCommand: ChatForkCommand =
-              context.deviceId !== null
-                ? { ...command, sourceDeviceId: context.deviceId }
-                : (() => {
-                    const { sourceDeviceId: _discarded, ...commandWithoutSourceDevice } = command;
-                    return commandWithoutSourceDevice;
-                  })();
+            // Stamp the source device id from the authenticated session so the
+            // server is the source of truth for "which device kicked off the
+            // fork" — clients can suggest it but cannot spoof it.
+            const stampedCommand: ChatForkCommand = {
+              ...command,
+              ...(context.deviceId !== null && command.sourceDeviceId === undefined
+                ? { sourceDeviceId: context.deviceId }
+                : {}),
+            };
 
             yield* orchestrationEngine
               .dispatch(stampedCommand)
@@ -293,37 +337,79 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
                 ),
               );
 
-            // Read back the projected target thread shell + fork lineage to
-            // populate a truthful result payload. The fork-lineage row is
-            // written by the `thread.forked` projection handler, so its
-            // `forkedFromStreamVersion` matches exactly what the event store
-            // used as the cursor when copying the source stream.
-            const [targetShellOpt, forkLineageOpt] = yield* Effect.all(
-              [
-                projectionSnapshotQuery.getThreadShellById(stampedCommand.targetThreadId),
-                projectionSnapshotQuery.getThreadForkLineage(stampedCommand.targetThreadId),
-              ],
-              { concurrency: "unbounded" },
+            // Read back the projected target thread shell to populate the
+            // result payload (mainly for the source UI to know which projectId
+            // and host device the new chat ended up on after defaults were
+            // resolved server-side).
+            const targetShellOpt = yield* projectionSnapshotQuery
+              .getThreadShellById(stampedCommand.targetThreadId)
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError("Failed to read forked chat shell.", cause),
+                ),
+              );
+
+            if (Option.isNone(targetShellOpt)) {
+              return yield* toMeshRpcError(
+                `Forked chat ${stampedCommand.targetThreadId} could not be loaded after creation.`,
+              );
+            }
+
+            const targetShell = targetShellOpt.value;
+            const targetHostDeviceId = targetShell.hostDeviceId ?? null;
+            const targetEvents = yield* Stream.runCollect(
+              eventStore.readThreadStream(
+                stampedCommand.targetThreadId,
+                0,
+                Number.MAX_SAFE_INTEGER,
+              ),
             ).pipe(
+              Effect.map((chunk) => Array.from(chunk)),
               Effect.mapError((cause) =>
-                toMeshRpcError("Failed to read forked chat metadata.", cause),
+                toMeshRpcError("Failed to read the forked chat event stream.", cause),
               ),
             );
+            const trailingForkEvent = targetEvents.findLast(
+              (event) =>
+                event.type === "thread.forked" &&
+                event.payload.threadId === stampedCommand.targetThreadId,
+            );
+            const copiedEventCount = Math.max(0, targetEvents.length - 1);
 
-            const targetShell = Option.isSome(targetShellOpt) ? targetShellOpt.value : null;
-            const forkedFromStreamVersion = Option.isSome(forkLineageOpt)
-              ? forkLineageOpt.value.forkedFromStreamVersion
-              : 0;
-            // Source had events at stream_version 0..N where N is
-            // `forkedFromStreamVersion`, so the fork copied N+1 events.
-            const copiedEventCount = forkedFromStreamVersion + 1;
+            if (
+              context.userId !== null &&
+              targetHostDeviceId !== null &&
+              targetHostDeviceId !== context.deviceId
+            ) {
+              const targetSessionId = yield* deviceRegistry
+                .getAnyOnlineSessionId(targetHostDeviceId)
+                .pipe(
+                  Effect.mapError((cause) =>
+                    toMeshRpcError("Failed to resolve the target device session.", cause),
+                  ),
+                );
+
+              if (Option.isSome(targetSessionId)) {
+                yield* promptRouter.publishToSession({
+                  sessionId: targetSessionId.value,
+                  item: {
+                    kind: "fork_ready",
+                    threadId: targetShell.id,
+                    title: targetShell.title,
+                  },
+                });
+              }
+            }
 
             return {
               targetThreadId: stampedCommand.targetThreadId,
               copiedEventCount,
-              forkedFromStreamVersion,
-              hostedOnDeviceId: targetShell?.hostDeviceId ?? null,
-              targetProjectId: (targetShell?.projectId ?? command.targetProjectId) as ProjectId,
+              forkedFromStreamVersion:
+                trailingForkEvent?.type === "thread.forked"
+                  ? trailingForkEvent.payload.forkedFromStreamVersion
+                  : copiedEventCount,
+              hostedOnDeviceId: targetHostDeviceId,
+              targetProjectId: targetShell.projectId as ProjectId,
             } as const;
           }).pipe(
             Effect.mapError((cause) =>
@@ -386,6 +472,110 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
         observeRpcStreamEffect(
           MESH_WS_METHODS.subscribePrompts,
           Effect.succeed(promptRouter.subscribeSession(context.sessionId)),
+          { "rpc.aggregate": "mesh" },
+        ),
+      [MESH_WS_METHODS.subscribeDeviceApprovals]: (_input: {}) =>
+        observeRpcStreamEffect(
+          MESH_WS_METHODS.subscribeDeviceApprovals,
+          Effect.gen(function* () {
+            const userId = yield* requireSignedInMeshUser();
+            return approvals.streamChanges.pipe(
+              Stream.filter((event) => event.userId === userId),
+              Stream.mapError((cause) =>
+                toMeshRpcError("Failed to stream device approval events.", cause),
+              ),
+            );
+          }),
+          { "rpc.aggregate": "mesh" },
+        ),
+      // V3 Phase 9 — mobile push token registration.
+      //
+      // Called by Capacitor clients once FCM has handed them a device
+      // token. Idempotent: same token for the same device just bumps
+      // `last_seen_at`. A new token rotates the old one to soft-delete
+      // so the push service doesn't try to deliver to stale addresses.
+      [MESH_PUSH_WS_METHODS.registerPushToken]: (input: PushRegistrationPayload) =>
+        observeRpcEffect(
+          MESH_PUSH_WS_METHODS.registerPushToken,
+          Effect.gen(function* () {
+            const userId = yield* requireSignedInMeshUser();
+            if (context.deviceId === null) {
+              return yield* toMeshRpcError(
+                "Push token registration requires a registered device context.",
+              );
+            }
+            if (input.device_id !== context.deviceId) {
+              return yield* toMeshRpcError(
+                "Push tokens must be registered from the owning device's session.",
+              );
+            }
+            const now = yield* DateTime.now;
+            const issuedAt = (() => {
+              try {
+                return DateTime.makeUnsafe(input.issued_at);
+              } catch {
+                return now;
+              }
+            })();
+            const result = yield* pushTokens
+              .upsert({
+                id: Crypto.randomUUID(),
+                deviceId: input.device_id,
+                userId,
+                platform: input.platform,
+                provider: input.provider,
+                token: input.token,
+                appVersion: input.app_version,
+                issuedAt,
+                now,
+              })
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError("Failed to persist mobile push token.", cause),
+                ),
+              );
+            return {
+              registered_at: DateTime.formatIso(result.record.lastSeenAt),
+              rotated: result.rotated,
+            };
+          }).pipe(
+            Effect.mapError((cause) =>
+              Schema.is(MeshRpcError)(cause)
+                ? cause
+                : toMeshRpcError("Failed to register push token.", cause),
+            ),
+          ),
+          { "rpc.aggregate": "mesh" },
+        ),
+      [MESH_PUSH_WS_METHODS.unregisterPushToken]: (input: PushUnregistrationPayload) =>
+        observeRpcEffect(
+          MESH_PUSH_WS_METHODS.unregisterPushToken,
+          Effect.gen(function* () {
+            if (context.deviceId === null || context.deviceId !== input.device_id) {
+              return yield* toMeshRpcError(
+                "Push tokens must be unregistered from the owning device's session.",
+              );
+            }
+            const now = yield* DateTime.now;
+            const removed = yield* pushTokens
+              .remove({
+                deviceId: input.device_id,
+                token: input.token,
+                now,
+              })
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError("Failed to unregister push token.", cause),
+                ),
+              );
+            return { acknowledged: removed };
+          }).pipe(
+            Effect.mapError((cause) =>
+              Schema.is(MeshRpcError)(cause)
+                ? cause
+                : toMeshRpcError("Failed to unregister push token.", cause),
+            ),
+          ),
           { "rpc.aggregate": "mesh" },
         ),
     };

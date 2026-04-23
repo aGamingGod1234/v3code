@@ -30,7 +30,7 @@ import { applyClaudePromptEffortPrefix, createModelSelection } from "@v3tools/sh
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@v3tools/shared/projectScripts";
 import { truncate } from "@v3tools/shared/String";
 import { Debouncer } from "@tanstack/react-pacer";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { useGitStatus } from "~/lib/gitStatusState";
@@ -138,10 +138,13 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
+import { ForkAcceptDialog } from "./chat/ForkAcceptDialog";
+import { requestOpenForkChatDialog } from "./chat/forkChatOpener";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
+import { RemoteHostBanner } from "./chat/RemoteHostBanner";
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
@@ -184,6 +187,48 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROPOSED_PLANS: Thread["proposedPlans"] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+
+function focusComposerHandleAtEnd(composerRef: RefObject<ChatComposerHandle | null>): void {
+  composerRef.current?.focusAtEnd();
+}
+
+function appendComposerTerminalContext(
+  composerRef: RefObject<ChatComposerHandle | null>,
+  selection: TerminalContextSelection,
+): void {
+  composerRef.current?.addTerminalContext(selection);
+}
+
+function resetComposerCursor(
+  composerRef: RefObject<ChatComposerHandle | null>,
+  cursor: number,
+): void {
+  composerRef.current?.resetCursorState({ cursor });
+}
+
+function syncComposerPendingUserInputCursor(
+  composerRef: RefObject<ChatComposerHandle | null>,
+  input: {
+    readonly value: string;
+    readonly nextCursor: number;
+    readonly expandedCursor: number;
+  },
+): void {
+  const snapshot = composerRef.current?.readSnapshot();
+  if (
+    snapshot?.value !== input.value ||
+    snapshot?.cursor !== input.nextCursor ||
+    snapshot?.expandedCursor !== input.expandedCursor
+  ) {
+    composerRef.current?.focusAt(input.nextCursor);
+  }
+}
+
+function readComposerSendContext(
+  composerRef: RefObject<ChatComposerHandle | null>,
+): ReturnType<ChatComposerHandle["getSendContext"]> | undefined {
+  return composerRef.current?.getSendContext();
+}
 
 type ThreadPlanCatalogEntry = Pick<Thread, "id" | "proposedPlans">;
 
@@ -1589,16 +1634,19 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   const focusComposer = useCallback(() => {
-    composerRef.current?.focusAtEnd();
-  }, []);
+    focusComposerHandleAtEnd(composerRef);
+  }, [composerRef]);
   const scheduleComposerFocus = useCallback(() => {
     window.requestAnimationFrame(() => {
       focusComposer();
     });
   }, [focusComposer]);
-  const addTerminalContextToDraft = useCallback((selection: TerminalContextSelection) => {
-    composerRef.current?.addTerminalContext(selection);
-  }, []);
+  const addTerminalContextToDraft = useCallback(
+    (selection: TerminalContextSelection) => {
+      appendComposerTerminalContext(composerRef, selection);
+    },
+    [composerRef],
+  );
   const setTerminalOpen = useCallback(
     (open: boolean) => {
       if (!activeThreadRef) return;
@@ -2394,7 +2442,31 @@ export default function ChatView(props: ChatViewProps) {
     e?.preventDefault();
     const api = readEnvironmentApi(environmentId);
     if (!api || !activeThread || isSendBusy || isConnecting || sendInFlightRef.current) return;
-    if (remoteHostInputDisabledReason) return;
+    if (remoteHostInputDisabledReason) {
+      // Spec §9.1: when the remote host is offline we surface a toast on
+      // the send attempt so the user notices the pending input isn't
+      // being delivered (the input itself stays disabled via
+      // `remoteHostInputDisabledReason`). The action opens the
+      // ForkChatButton's dialog so they can pick a different online
+      // device to take over the chat.
+      const forkableRef = activeThread
+        ? scopeThreadRef(activeThread.environmentId, activeThread.id)
+        : null;
+      toastManager.add({
+        type: "error",
+        title: "Can't send",
+        description: remoteHostInputDisabledReason,
+        ...(forkableRef
+          ? {
+              actionProps: {
+                children: "Open on another device",
+                onClick: () => requestOpenForkChatDialog(forkableRef),
+              },
+            }
+          : {}),
+      });
+      return;
+    }
     if (activePendingProgress) {
       onAdvanceActivePendingUserInput();
       return;
@@ -2792,9 +2864,9 @@ export default function ChatView(props: ChatViewProps) {
         };
       });
       promptRef.current = "";
-      composerRef.current?.resetCursorState({ cursor: 0 });
+      resetComposerCursor(composerRef, 0);
     },
-    [activePendingProgress?.activeQuestion, activePendingUserInput],
+    [activePendingProgress?.activeQuestion, activePendingUserInput, composerRef],
   );
 
   const onChangeActivePendingUserInputCustomAnswer = useCallback(
@@ -2819,16 +2891,13 @@ export default function ChatView(props: ChatViewProps) {
           ),
         },
       }));
-      const snapshot = composerRef.current?.readSnapshot();
-      if (
-        snapshot?.value !== value ||
-        snapshot.cursor !== nextCursor ||
-        snapshot.expandedCursor !== expandedCursor
-      ) {
-        composerRef.current?.focusAt(nextCursor);
-      }
+      syncComposerPendingUserInputCursor(composerRef, {
+        value,
+        nextCursor,
+        expandedCursor,
+      });
     },
-    [activePendingUserInput],
+    [activePendingUserInput, composerRef],
   );
 
   const onAdvanceActivePendingUserInput = useCallback(() => {
@@ -2883,7 +2952,7 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
 
-      const sendCtx = composerRef.current?.getSendContext();
+      const sendCtx = readComposerSendContext(composerRef);
       if (!sendCtx) {
         return;
       }
@@ -3000,6 +3069,7 @@ export default function ChatView(props: ChatViewProps) {
       runtimeMode,
       setComposerDraftInteractionMode,
       setThreadError,
+      composerRef,
       environmentId,
     ],
   );
@@ -3019,7 +3089,7 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
 
-    const sendCtx = composerRef.current?.getSendContext();
+    const sendCtx = readComposerSendContext(composerRef);
     if (!sendCtx) {
       return;
     }
@@ -3130,6 +3200,7 @@ export default function ChatView(props: ChatViewProps) {
     navigate,
     resetLocalDispatch,
     runtimeMode,
+    composerRef,
     environmentId,
   ]);
 
@@ -3287,6 +3358,18 @@ export default function ChatView(props: ChatViewProps) {
       <ThreadErrorBanner
         error={activeThread.error}
         onDismiss={() => setThreadError(activeThread.id, null)}
+      />
+      {/* Spec §8.2: remote-host awareness strip. */}
+      <RemoteHostBanner
+        currentDeviceId={currentDeviceId}
+        hostDeviceId={activeThread.hostDeviceId}
+        devices={meshDeviceSnapshot.devices}
+      />
+      <ForkAcceptDialog
+        threadRef={{
+          environmentId: activeThread.environmentId,
+          threadId: activeThread.id,
+        }}
       />
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 min-w-0 flex-1">

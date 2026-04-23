@@ -36,6 +36,7 @@ const gitStatusListeners = new Set<(event: GitStatusResult) => void>();
 
 const rpcClientMock = {
   dispose: vi.fn(),
+  reconnect: vi.fn(),
   terminal: {
     open: vi.fn(),
     write: vi.fn(),
@@ -82,6 +83,14 @@ const rpcClientMock = {
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),
     subscribeAuthAccess: vi.fn(),
+  },
+  mesh: {
+    publishEvent: vi.fn(),
+    sendPrompt: vi.fn(),
+    forkChat: vi.fn(),
+    subscribeChat: vi.fn(() => () => undefined),
+    subscribePresence: vi.fn(() => () => undefined),
+    subscribePrompts: vi.fn(() => () => undefined),
   },
   orchestration: {
     dispatchCommand: vi.fn(),
@@ -161,6 +170,7 @@ function createLocalStorageStub(): Storage {
 function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
   return {
     getAppBranding: () => null,
+    getHostname: () => null,
     getLocalEnvironmentBootstrap: () => null,
     getClientSettings: async () => null,
     setClientSettings: async () => undefined,
@@ -185,9 +195,21 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     showContextMenu: async () => null,
     openExternal: async () => true,
     onMenuAction: () => () => undefined,
+    getV3GoogleTokens: async () => null,
+    setV3GoogleTokens: async () => undefined,
+    clearV3GoogleTokens: async () => undefined,
     openV3GoogleSignIn: async () => ({
-      idToken: "mock-id-token",
       accessToken: "mock-access-token",
+      idToken: "mock-id-token",
+      refreshToken: "mock-refresh-token",
+      expiresAt: "2036-04-07T01:00:00.000Z",
+      scope: "openid email profile",
+      tokenType: "Bearer",
+    }),
+    openV3GitHubSignIn: async () => ({
+      accessToken: "mock-gh-access-token",
+      scopes: [],
+      tokenType: "bearer",
     }),
     v3Wizard: {
       probeDocker: async () => ({ status: "ok", version: "27.0.0", message: null }),
@@ -560,6 +582,8 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual" as const,
       sidebarThreadSortOrder: "created_at" as const,
       timestampFormat: "24-hour" as const,
+      v3ConfigureServerBannerDismissedPermanently: false,
+      v3ServerNodeUrlOverride: "",
     };
     const getClientSettings = vi.fn().mockResolvedValue({
       ...clientSettings,
@@ -617,6 +641,8 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual" as const,
       sidebarThreadSortOrder: "created_at" as const,
       timestampFormat: "24-hour" as const,
+      v3ConfigureServerBannerDismissedPermanently: false,
+      v3ServerNodeUrlOverride: "",
     };
 
     await api.persistence.setClientSettings(clientSettings);

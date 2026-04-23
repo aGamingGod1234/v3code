@@ -42,6 +42,7 @@ import type {
 } from "./terminal.ts";
 import type { ServerUpsertKeybindingInput } from "./server.ts";
 import type {
+  ChatForkCommand,
   ClientOrchestrationCommand,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
@@ -53,6 +54,8 @@ import type {
 } from "./orchestration.ts";
 import type { EnvironmentId } from "./baseSchemas.ts";
 import { EditorId } from "./editor.ts";
+import type { GitHubTokenBundle, GoogleTokenBundle } from "./identity.ts";
+import type { MeshForkChatResult } from "./mesh/chat.ts";
 import { ServerSettings, type ClientSettings, type ServerSettingsPatch } from "./settings.ts";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -200,6 +203,12 @@ export interface V3WizardWriteConfigResult {
 
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
+  // Machine hostname (from `os.hostname()`). Used as the default
+  // device name for V3 device registration so the user sees a
+  // recognisable label like "DESKTOP-1EJU8UJ" instead of synthetic
+  // "App Name (platform)" strings. Returns null if the main process
+  // fails to resolve the hostname.
+  getHostname: () => string | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
@@ -210,6 +219,9 @@ export interface DesktopBridge {
   getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
   setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
   removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+  getV3GoogleTokens: () => Promise<GoogleTokenBundle | null>;
+  setV3GoogleTokens: (tokens: GoogleTokenBundle) => Promise<void>;
+  clearV3GoogleTokens: () => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
@@ -236,9 +248,16 @@ export interface DesktopBridge {
   // read/write the `v3_config.json` discovery blob in the user's per-app
   // Drive folder. Rejects on cancellation, timeout, network failure, or
   // a misconfigured client.
-  openV3GoogleSignIn: (input: {
-    clientId: string;
-  }) => Promise<{ idToken: string; accessToken: string }>;
+  openV3GoogleSignIn: (input: { clientId: string }) => Promise<GoogleTokenBundle>;
+  // V3 GitHub sign-in. Runs the same loopback pattern as Google: main
+  // process starts a one-shot `http://127.0.0.1:<port>/callback` server,
+  // opens the external browser to GitHub's consent screen, captures the
+  // `?code=` callback, and exchanges it for an access token using the
+  // embedded OAuth client. The renderer POSTs the bundle to
+  // `/api/auth/github/bootstrap` so the server can encrypt and persist
+  // it against the signed-in V3 user. Rejects on cancellation, timeout,
+  // network failure, or when the embedded client credentials are absent.
+  openV3GitHubSignIn: (input: { scopes: string }) => Promise<GitHubTokenBundle>;
   // V3 (Phase 2d): server-node setup wizard IPC. Grouped under a single
   // object so the renderer can pass the whole namespace around as a
   // dependency without the `DesktopBridge` surface exploding flat-list-
@@ -352,6 +371,7 @@ export interface EnvironmentApi {
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
+    forkChat: (command: ChatForkCommand) => Promise<MeshForkChatResult>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,

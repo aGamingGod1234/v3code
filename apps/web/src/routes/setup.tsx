@@ -13,7 +13,14 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ExternalLinkIcon, LoaderIcon, ShieldCheckIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  CircleDashedIcon,
+  ExternalLinkIcon,
+  LoaderIcon,
+  ShieldCheckIcon,
+  XCircleIcon,
+} from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -26,10 +33,12 @@ import {
   isExposureReady,
   isPreflightReady,
   reduceV3SetupWizard,
+  STEP_TITLES,
   type V3SetupWizardStep,
 } from "../v3/setup/state";
 import { buildServerNodeConfigToml } from "../v3/setup/tomlBuilder";
 import { resolveDeviceId } from "../v3/auth/deviceId";
+import { writePendingDrivePublish } from "../v3/auth/drivePublishState";
 
 export const Route = createFileRoute("/setup")({
   component: V3SetupWizardPage,
@@ -44,16 +53,6 @@ const STEP_ORDER: ReadonlyArray<V3SetupWizardStep> = [
   "review",
   "done",
 ];
-
-const STEP_TITLES: Record<V3SetupWizardStep, string> = {
-  overview: "Overview",
-  preflight: "Pre-flight checks",
-  exposure: "Public URL",
-  "data-dir": "Data directory",
-  auth: "Authentication",
-  review: "Review",
-  done: "Finished",
-};
 
 function V3SetupWizardPage() {
   const [state, dispatch] = useReducer(reduceV3SetupWizard, initialV3SetupWizardState);
@@ -86,7 +85,6 @@ function V3SetupWizardPage() {
             Step {stepIndex + 1} of {STEP_ORDER.length} — {STEP_TITLES[state.step]}
           </p>
         </div>
-        <div className="text-xs text-muted-foreground">V3 Phase 2d</div>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-5">
@@ -158,48 +156,95 @@ function OverviewScreen({ dispatch }: { dispatch: WizardDispatch }) {
     <section className="space-y-4">
       <h2 className="text-base font-semibold">This machine becomes your V3 server node.</h2>
       <p className="text-sm text-muted-foreground">
-        The wizard will check prerequisites, ask for a public URL + authentication details, write
-        <code> ~/.v3-code-server/config.toml</code>, and hand you instructions for restarting V3 in
-        server-node mode. Your existing V3 install keeps working as a client; only a separate
+        The wizard checks prerequisites, asks for a public URL and authentication details, writes{" "}
+        <code>~/.v3-code-server/config.toml</code>, and hands you instructions for restarting V3 in
+        server-node mode. Your existing V3 install keeps working as a client &mdash; only a separate
         server-node process changes behaviour.
       </p>
       <Alert>
         <AlertTitle>Before you begin</AlertTitle>
         <AlertDescription>
-          Install Docker Desktop (or Docker Engine on Linux) and make sure port 8080 is free. The
-          wizard will also ask whether you plan to use Cloudflare Tunnel; installing{" "}
-          <code>cloudflared</code> up front keeps the flow tidier.
+          You&rsquo;ll need Docker Desktop (or Docker Engine on Linux) and a free port for the
+          server to bind to. If you plan to expose the server through Cloudflare Tunnel, install{" "}
+          <code>cloudflared</code> first &mdash; the wizard will check for it.
         </AlertDescription>
       </Alert>
       <StepNav
         canContinue
         onContinue={() => dispatch({ _tag: "go-to", step: "preflight" })}
-        continueLabel="Start pre-flight checks"
+        continueLabel="Run system checks"
       />
     </section>
   );
 }
 
+type PreflightRowStatus = "unchecked" | "running" | "ok" | "warning" | "error";
+
 function PreflightRow({
   label,
   value,
+  status,
   onRun,
+  installHref,
+  installLabel,
 }: {
   readonly label: string;
   readonly value: string;
+  readonly status: PreflightRowStatus;
   readonly onRun?: () => void;
+  readonly installHref?: string;
+  readonly installLabel?: string;
 }) {
+  const styles = {
+    unchecked: "border-border bg-background",
+    running: "border-border bg-background",
+    ok: "border-emerald-500/30 bg-emerald-500/8",
+    warning: "border-amber-500/30 bg-amber-500/8",
+    error: "border-destructive/40 bg-destructive/8",
+  }[status];
+
+  const icon =
+    status === "ok" ? (
+      <CheckCircle2Icon className="size-4 text-emerald-500" aria-label="Pass" />
+    ) : status === "warning" ? (
+      <CircleDashedIcon className="size-4 text-amber-500" aria-label="Optional" />
+    ) : status === "error" ? (
+      <XCircleIcon className="size-4 text-destructive" aria-label="Fail" />
+    ) : status === "running" ? (
+      <LoaderIcon className="size-4 animate-spin text-muted-foreground" aria-label="Running" />
+    ) : (
+      <CircleDashedIcon className="size-4 text-muted-foreground/60" aria-label="Pending" />
+    );
+
   return (
-    <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
-      <div>
-        <div className="text-sm font-medium">{label}</div>
-        <div className="text-xs text-muted-foreground">{value}</div>
+    <div
+      className={`flex items-center justify-between rounded-md border px-3 py-2 transition-colors ${styles}`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="shrink-0">{icon}</span>
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{label}</div>
+          <div className="truncate text-xs text-muted-foreground">{value}</div>
+        </div>
       </div>
-      {onRun ? (
-        <Button variant="ghost" size="sm" onClick={onRun}>
-          Run check
-        </Button>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        {installHref && (status === "error" || status === "warning") ? (
+          <a
+            href={installHref}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
+          >
+            {installLabel ?? "Install"}
+            <ExternalLinkIcon className="size-3" />
+          </a>
+        ) : null}
+        {onRun ? (
+          <Button variant="ghost" size="sm" onClick={onRun} disabled={status === "running"}>
+            {status === "unchecked" ? "Run check" : "Re-run"}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -219,46 +264,98 @@ function PreflightScreen({
   const paths = state.preflight.paths;
   const ready = isPreflightReady(state);
 
+  const [runningDocker, setRunningDocker] = useState(false);
+  const [runningPort, setRunningPort] = useState(false);
+  const [runningCloudflared, setRunningCloudflared] = useState(false);
+
   const runDocker = useCallback(() => {
-    void bridge.probeDocker().then((result) => {
-      dispatch({ _tag: "preflight-docker", value: result });
-    });
+    setRunningDocker(true);
+    void bridge
+      .probeDocker()
+      .then((result) => dispatch({ _tag: "preflight-docker", value: result }))
+      .finally(() => setRunningDocker(false));
   }, [bridge, dispatch]);
 
   const runPort = useCallback(() => {
-    void bridge.probePort(state.exposure.bindPort).then((result) => {
-      dispatch({ _tag: "preflight-port", value: result });
-    });
+    setRunningPort(true);
+    void bridge
+      .probePort(state.exposure.bindPort)
+      .then((result) => dispatch({ _tag: "preflight-port", value: result }))
+      .finally(() => setRunningPort(false));
   }, [bridge, dispatch, state.exposure.bindPort]);
 
   const runCloudflared = useCallback(() => {
-    void bridge.probeCloudflared().then((result) => {
-      dispatch({ _tag: "preflight-cloudflared", value: result });
-    });
+    setRunningCloudflared(true);
+    void bridge
+      .probeCloudflared()
+      .then((result) => dispatch({ _tag: "preflight-cloudflared", value: result }))
+      .finally(() => setRunningCloudflared(false));
   }, [bridge, dispatch]);
+
+  // Auto-run all probes once when the user lands on the step. Each row
+  // can still be re-run manually after install/config changes.
+  useEffect(() => {
+    if (docker === "unchecked") runDocker();
+    if (port === "unchecked") runPort();
+    if (cloudflared === "unchecked") runCloudflared();
+    // We intentionally only re-trigger when a slot flips back to
+    // "unchecked" (e.g. after a reset). Run-on-mount semantics, not a
+    // polling loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docker === "unchecked", port === "unchecked", cloudflared === "unchecked"]);
+
+  const dockerStatus: PreflightRowStatus = runningDocker
+    ? "running"
+    : docker === "unchecked"
+      ? "unchecked"
+      : docker.status === "ok"
+        ? "ok"
+        : "error";
 
   const dockerLine =
     docker === "unchecked"
-      ? "Unchecked"
+      ? runningDocker
+        ? "Checking…"
+        : "Not yet checked"
       : docker.status === "ok"
-        ? `Docker ${docker.version ?? "ok"}`
+        ? `Docker ${docker.version ?? "detected"}`
         : docker.status === "missing"
-          ? "Not found on PATH"
+          ? "Not found on PATH — install Docker to continue"
           : `Error: ${docker.message ?? "unknown"}`;
+
+  const portStatus: PreflightRowStatus = runningPort
+    ? "running"
+    : port === "unchecked"
+      ? "unchecked"
+      : port.available
+        ? "ok"
+        : "error";
 
   const portLine =
     port === "unchecked"
-      ? "Unchecked"
+      ? runningPort
+        ? "Checking…"
+        : "Not yet checked"
       : port.available
         ? `Port ${port.port} is free`
         : `Port ${port.port}: ${port.message ?? "in use"}`;
 
+  const cloudflaredStatus: PreflightRowStatus = runningCloudflared
+    ? "running"
+    : cloudflared === "unchecked"
+      ? "unchecked"
+      : cloudflared.status === "ok"
+        ? "ok"
+        : "warning";
+
   const cloudflaredLine =
     cloudflared === "unchecked"
-      ? "Unchecked"
+      ? runningCloudflared
+        ? "Checking…"
+        : "Not yet checked"
       : cloudflared.status === "ok"
-        ? `cloudflared ${cloudflared.version ?? "ok"}`
-        : "Not installed (install if using Cloudflare Tunnel)";
+        ? `cloudflared ${cloudflared.version ?? "detected"}`
+        : "Not installed — only required for the Cloudflare Tunnel option";
 
   const pathsLine =
     paths === "unchecked"
@@ -267,20 +364,35 @@ function PreflightScreen({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-base font-semibold">Pre-flight checks</h2>
+      <h2 className="text-base font-semibold">System checks</h2>
       <p className="text-sm text-muted-foreground">
-        Verify the host meets V3's hard requirements (Docker + a free port) and, optionally, that
-        cloudflared is available.
+        V3 needs Docker and a free port to host the server node. Cloudflare Tunnel is optional and
+        only required if you picked it as the exposure method.
       </p>
       <div className="space-y-2">
-        <PreflightRow label="Docker Engine" value={dockerLine} onRun={runDocker} />
-        <PreflightRow label={`Port ${state.exposure.bindPort}`} value={portLine} onRun={runPort} />
+        <PreflightRow
+          label="Docker Engine"
+          value={dockerLine}
+          status={dockerStatus}
+          onRun={runDocker}
+          installHref="https://www.docker.com/products/docker-desktop/"
+          installLabel="Install Docker"
+        />
+        <PreflightRow
+          label={`Port ${state.exposure.bindPort}`}
+          value={portLine}
+          status={portStatus}
+          onRun={runPort}
+        />
         <PreflightRow
           label="cloudflared (optional)"
           value={cloudflaredLine}
+          status={cloudflaredStatus}
           onRun={runCloudflared}
+          installHref="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+          installLabel="Install cloudflared"
         />
-        <PreflightRow label="Config path" value={pathsLine} />
+        <PreflightRow label="Config path" value={pathsLine} status="unchecked" />
       </div>
       <StepNav
         canContinue={ready}
@@ -627,19 +739,12 @@ function DoneScreen({ state }: { readonly state: ReturnType<typeof reduceV3Setup
 // the wizard later.
 // ---------------------------------------------------------------------------
 
-export const V3_PENDING_DRIVE_PUBLISH_KEY = "v3.pending-drive-publish";
-
 async function publishDriveSnapshot(state: ReturnType<typeof reduceV3SetupWizard>): Promise<void> {
-  const desired = {
+  writePendingDrivePublish({
     server_url: state.exposure.publicUrl || null,
     server_version_installed: "0.1.0",
     setup_at: new Date().toISOString(),
     device_id: resolveDeviceId(),
     device_name: "V3 server node",
-  };
-  try {
-    window.localStorage.setItem(V3_PENDING_DRIVE_PUBLISH_KEY, JSON.stringify(desired));
-  } catch {
-    // Quota / disabled storage: ignore. A later wizard run re-queues.
-  }
+  });
 }

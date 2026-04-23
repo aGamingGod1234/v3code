@@ -12,19 +12,27 @@
 //      localStorage for P3 to render the "Configure server" banner.
 //   5. Persist non-sensitive sign-in state for the UI to read.
 //
-// The Electron half lives in `apps/desktop/src/v3GoogleAuthFlow.ts` and is
-// reached via `window.desktopBridge.openV3GoogleSignIn`. Browser-only
-// support is deferred to P7 (web cloud mode) — it requires a
-// server-hosted callback that performs the code-for-token exchange with a
-// client secret, which P1d does not yet ship.
+// The Electron half lives in `apps/desktop/src/v3GoogleAuthFlow.ts` and
+// is reached via `window.desktopBridge.openV3GoogleSignIn`.
+//
+// **Browser (cloud-mode) flow — added in Phase 7:** a plain browser
+// cannot hold a Google OAuth client secret and cannot register a custom
+// URI scheme, so cloud-mode delegates to a server-hosted redirect-based
+// flow. `startV3GoogleSignInBrowser` sends the browser to
+// `/api/auth/google/authorize` with the device metadata the server
+// needs to call `DeviceApprovalService.registerOrResume`. The server
+// handles the rest and redirects back to the original page with a
+// session cookie already set.
 
 import { GoogleBootstrapResult, type DeviceCapability } from "@v3tools/contracts";
 import { Schema } from "effect";
 
+import { IS_CLOUD_MODE } from "../../build-flags";
 import { resolvePrimaryEnvironmentHttpUrl } from "../../environments/primary";
 import { isElectron } from "../../env";
 import { resolveDeviceId } from "./deviceId";
 import { captureDriveAppDataSnapshot, type V3DriveAppDataSnapshot } from "./driveAppData";
+import { clearPersistedGoogleTokens, writePersistedGoogleTokens } from "./googleTokenStore";
 import { recordV3SignedIn, clearV3SignedIn, type V3SignInSnapshot } from "./signInState";
 
 const APP_VERSION_FALLBACK = "0.0.1-dev";
@@ -68,13 +76,28 @@ const resolvePlatform = (): "windows" | "macos" | "linux" | "android" | "ios" | 
   return "web";
 };
 
+const PLATFORM_LABEL: Record<ReturnType<typeof resolvePlatform>, string> = {
+  windows: "Windows PC",
+  macos: "Mac",
+  linux: "Linux PC",
+  android: "Android",
+  ios: "iPhone",
+  web: "Browser",
+};
+
 const resolveDeviceName = (
   platform: ReturnType<typeof resolvePlatform>,
   fallback: string,
 ): string => {
-  const branded = isElectron ? (window.desktopBridge?.getAppBranding?.() ?? null) : null;
-  if (branded?.displayName) return `${branded.displayName} (${platform})`;
-  return fallback;
+  // Prefer the real machine hostname (e.g. "DESKTOP-1EJU8UJ") so the
+  // user sees a recognisable label in the device list. Falls through to
+  // a platform-shaped label ("Windows PC" / "Mac" / "iPhone" ...) when
+  // the bridge can't resolve it — this is still strictly better than
+  // "${APP_DISPLAY_NAME} (${platform})" which leaked release channel
+  // parens into the device row ("V3 Code (Alpha) (windows)").
+  const hostname = isElectron ? (window.desktopBridge?.getHostname?.() ?? null) : null;
+  if (hostname && hostname.length > 0) return hostname;
+  return PLATFORM_LABEL[platform] ?? fallback;
 };
 
 const resolveCapabilities = (): readonly DeviceCapability[] =>
@@ -116,6 +139,23 @@ export const startV3GoogleSignIn = async (): Promise<V3SignInResult> => {
     throw new V3SignInError(
       "not-configured",
       "Google sign-in is not configured on this V3 server.",
+    );
+  }
+
+  // In the cloud-mode browser bundle, there is no Electron bridge — the
+  // server-hosted redirect flow takes over. `startV3GoogleSignInBrowser`
+  // never returns a `V3SignInResult` because the browser navigates away
+  // to Google mid-call; the caller should treat a fulfilled promise the
+  // same as "flow started" and rely on the reload-after-callback to pick
+  // up the new state.
+  if (IS_CLOUD_MODE) {
+    await startV3GoogleSignInBrowser();
+    // The browser navigates to Google before this line runs on the
+    // happy path. If we reach here, the redirect was blocked — raise a
+    // bridge-unavailable so the UI can surface the problem.
+    throw new V3SignInError(
+      "bridge-unavailable",
+      "Browser sign-in did not navigate to Google. Check that pop-up redirects are allowed.",
     );
   }
 
@@ -170,6 +210,9 @@ export const startV3GoogleSignIn = async (): Promise<V3SignInResult> => {
   }
 
   const decoded = Schema.decodeUnknownSync(GoogleBootstrapResult)(await bootstrapResponse.json());
+  await writePersistedGoogleTokens(handoff).catch((cause) => {
+    console.warn("[v3] Failed to persist Google tokens", cause);
+  });
   recordV3SignedIn({
     email: decoded.user.email,
     displayName: decoded.user.displayName,
@@ -185,7 +228,6 @@ export const startV3GoogleSignIn = async (): Promise<V3SignInResult> => {
   // the recordV3SignedIn call first means the top-right chip updates
   // immediately while Drive work continues.
   const driveSnapshot = await captureDriveAppDataSnapshot({
-    accessToken: handoff.accessToken,
     thisDevice: {
       device_id: deviceId,
       name: deviceName,
@@ -216,5 +258,53 @@ export const endV3GoogleSignInLocally = (): void => {
   // Local-only sign-out for P1d: clears the visible chrome but does not
   // revoke the server-side session. P3 will add a real /api/auth/session
   // delete that wipes the cookie too.
+  void clearPersistedGoogleTokens();
   clearV3SignedIn();
+};
+
+// ---------------------------------------------------------------------------
+// V3 Phase 7 — browser Google sign-in.
+// ---------------------------------------------------------------------------
+
+/**
+ * Kick off the cloud-mode Google sign-in redirect. The browser navigates
+ * off to `/api/auth/google/authorize`, which in turn 302s to Google's
+ * consent screen and eventually lands on `/api/auth/google/callback`.
+ * The callback stores an opaque one-time handoff cookie that the renderer
+ * consumes through `/api/auth/google/tokens/consume`.
+ */
+export const startV3GoogleSignInBrowser = async (): Promise<void> => {
+  const config = await fetchGoogleClientConfig().catch((cause) => {
+    throw new V3SignInError("network", "Could not reach the V3 server.", { cause });
+  });
+  if (!config.available) {
+    throw new V3SignInError(
+      "not-configured",
+      "Google sign-in is not configured on this V3 server.",
+    );
+  }
+
+  const deviceId = resolveDeviceId();
+  const platform = resolvePlatform();
+  const deviceName = resolveDeviceName(platform, "V3 Browser");
+  const capabilities = resolveCapabilities();
+  const returnTo =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/app/";
+  const params = new URLSearchParams({
+    device_id: deviceId,
+    device_name: deviceName,
+    platform,
+    kind: "browser",
+    capabilities: capabilities.join(","),
+    app_version: APP_VERSION_FALLBACK,
+    return_to: returnTo,
+  });
+  const target = resolvePrimaryEnvironmentHttpUrl(
+    `/api/auth/google/authorize?${params.toString()}`,
+  );
+  if (typeof window !== "undefined") {
+    window.location.href = target;
+  }
 };

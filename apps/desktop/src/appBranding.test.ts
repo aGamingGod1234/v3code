@@ -41,7 +41,7 @@ describe("resolveDesktopAppBranding", () => {
     ).toEqual({
       baseName: "V3 Code",
       stageLabel: "Nightly",
-      displayName: "T3 Code (Nightly)",
+      displayName: "V3 Code (Nightly)",
     });
   });
 });

@@ -18,9 +18,11 @@ import {
   ThreadId,
 } from "@v3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Fiber, Layer, Random, Stream } from "effect";
+import { Effect, Fiber, Layer, Option, Random, Stream } from "effect";
 
 import { attachmentRelativePath } from "../../attachmentStore.ts";
+import { ContainerManager } from "../../cloud/Services/ContainerManager.ts";
+import { CloudError } from "../../cloud/errors.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
@@ -162,8 +164,25 @@ function makeHarness(config?: {
       : {}),
   };
 
+  const noopContainerManager = Layer.succeed(ContainerManager, {
+    dockerAvailable: () => Effect.succeed(false),
+    isAvailable: () => Effect.succeed(false),
+    getWorkspaceMetadata: () => Effect.succeed(Option.none()),
+    createWorkspace: () => Effect.fail(new CloudError({ message: "Cloud env disabled in tests." })),
+    prepareProviderLaunch: (input) =>
+      Effect.succeed({
+        binaryPath: input.binaryPath,
+        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+      }),
+    resolvePreviewTarget: () => Effect.succeed(Option.none()),
+    stopThreadEnvironment: () => Effect.void,
+    listContainers: () => Effect.succeed([]),
+    pruneExpired: () => Effect.void,
+  } satisfies typeof ContainerManager.Service);
+
   return {
     layer: makeClaudeAdapterLive(adapterOptions).pipe(
+      Layer.provide(noopContainerManager),
       Layer.provideMerge(
         ServerConfig.layerTest(
           config?.cwd ?? "/tmp/claude-adapter-test",
@@ -1316,6 +1335,24 @@ describe("ClaudeAdapterLive", () => {
         return query;
       },
     }).pipe(
+      Layer.provide(
+        Layer.succeed(ContainerManager, {
+          dockerAvailable: () => Effect.succeed(false),
+          isAvailable: () => Effect.succeed(false),
+          getWorkspaceMetadata: () => Effect.succeed(Option.none()),
+          createWorkspace: () =>
+            Effect.fail(new CloudError({ message: "Cloud env disabled in tests." })),
+          prepareProviderLaunch: (input) =>
+            Effect.succeed({
+              binaryPath: input.binaryPath,
+              ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+            }),
+          resolvePreviewTarget: () => Effect.succeed(Option.none()),
+          stopThreadEnvironment: () => Effect.void,
+          listContainers: () => Effect.succeed([]),
+          pruneExpired: () => Effect.void,
+        } satisfies typeof ContainerManager.Service),
+      ),
       Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(NodeServices.layer),
@@ -1401,6 +1438,24 @@ describe("ClaudeAdapterLive", () => {
         return query;
       },
     }).pipe(
+      Layer.provide(
+        Layer.succeed(ContainerManager, {
+          dockerAvailable: () => Effect.succeed(false),
+          isAvailable: () => Effect.succeed(false),
+          getWorkspaceMetadata: () => Effect.succeed(Option.none()),
+          createWorkspace: () =>
+            Effect.fail(new CloudError({ message: "Cloud env disabled in tests." })),
+          prepareProviderLaunch: (input) =>
+            Effect.succeed({
+              binaryPath: input.binaryPath,
+              ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+            }),
+          resolvePreviewTarget: () => Effect.succeed(Option.none()),
+          stopThreadEnvironment: () => Effect.void,
+          listContainers: () => Effect.succeed([]),
+          pruneExpired: () => Effect.void,
+        } satisfies typeof ContainerManager.Service),
+      ),
       Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(NodeServices.layer),

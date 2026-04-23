@@ -10,8 +10,11 @@ import {
   type PersistenceSqlError,
 } from "../../persistence/Errors.ts";
 import {
+  ClearGitHubTokenInput,
   GetUserByGoogleSubInput,
   GetUserByIdInput,
+  GitHubTokenRecord,
+  SetGitHubTokenInput,
   UpsertFromGoogleInput,
   UserRecord,
   UserRepository,
@@ -104,6 +107,24 @@ const makeUserRepository = Effect.gen(function* () {
       `,
   });
 
+  const selectAll = SqlSchema.findAll({
+    Request: Schema.Struct({}),
+    Result: UserDbRow,
+    execute: () => sql`
+      SELECT
+        id AS "id",
+        google_sub AS "googleSub",
+        email AS "email",
+        display_name AS "displayName",
+        avatar_url AS "avatarUrl",
+        github_username AS "githubUsername",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM v3_users
+      ORDER BY created_at ASC
+    `,
+  });
+
   const selectById = SqlSchema.findOneOption({
     Request: GetUserByIdInput,
     Result: UserDbRow,
@@ -148,13 +169,138 @@ const makeUserRepository = Effect.gen(function* () {
       Effect.map((opt) => Option.map(opt, toUserRecord)),
     );
 
+  const listAll: UserRepositoryShape["listAll"] = () =>
+    selectAll({}).pipe(
+      Effect.mapError(mapErr("UserRepository.listAll:query", "UserRepository.listAll:decode")),
+      Effect.map((rows) => rows.map(toUserRecord)),
+    );
+
   const getById: UserRepositoryShape["getById"] = (input) =>
     selectById(input).pipe(
       Effect.mapError(mapErr("UserRepository.getById:query", "UserRepository.getById:decode")),
       Effect.map((opt) => Option.map(opt, toUserRecord)),
     );
 
-  return { upsertFromGoogle, getByGoogleSub, getById } satisfies UserRepositoryShape;
+  // V3 Phase 1e — GitHub token persistence.
+  //
+  // `setGitHubToken` writes the AES-GCM blobs + scopes + connected_at.
+  // `clearGitHubToken` nulls the same columns back out. `getGitHubToken`
+  // loads the blob row for the currently signed-in user so callers can
+  // decrypt it when they need to call the GitHub API server-side (e.g.
+  // P8 Cloud env container token minting).
+  const GitHubTokenDbRow = Schema.Struct({
+    userId: UserId,
+    githubUsername: TrimmedNonEmptyString,
+    githubAccessTokenEnc: Schema.Uint8Array,
+    githubTokenEncIv: Schema.Uint8Array,
+    githubScopes: Schema.String,
+    connectedAt: Schema.DateTimeUtcFromString,
+  });
+
+  const updateGitHubTokenRow = SqlSchema.findAll({
+    Request: SetGitHubTokenInput,
+    Result: Schema.Struct({ userId: UserId }),
+    execute: (input) =>
+      sql`
+        UPDATE v3_users
+        SET
+          github_access_token_enc = ${input.githubAccessTokenEnc},
+          github_token_enc_iv = ${input.githubTokenEncIv},
+          github_username = ${input.githubUsername},
+          github_scopes = ${input.githubScopes},
+          github_connected_at = ${input.now},
+          updated_at = ${input.now}
+        WHERE id = ${input.userId}
+        RETURNING id AS "userId"
+      `,
+  });
+
+  const clearGitHubTokenRow = SqlSchema.findAll({
+    Request: ClearGitHubTokenInput,
+    Result: Schema.Struct({ userId: UserId }),
+    execute: (input) =>
+      sql`
+        UPDATE v3_users
+        SET
+          github_access_token_enc = NULL,
+          github_token_enc_iv = NULL,
+          github_username = NULL,
+          github_scopes = NULL,
+          github_connected_at = NULL,
+          updated_at = ${input.now}
+        WHERE id = ${input.userId}
+        RETURNING id AS "userId"
+      `,
+  });
+
+  const selectGitHubTokenRow = SqlSchema.findOneOption({
+    Request: GetUserByIdInput,
+    Result: GitHubTokenDbRow,
+    execute: ({ id }) =>
+      sql`
+        SELECT
+          id AS "userId",
+          github_username AS "githubUsername",
+          github_access_token_enc AS "githubAccessTokenEnc",
+          github_token_enc_iv AS "githubTokenEncIv",
+          github_scopes AS "githubScopes",
+          github_connected_at AS "connectedAt"
+        FROM v3_users
+        WHERE id = ${id}
+          AND github_access_token_enc IS NOT NULL
+          AND github_token_enc_iv IS NOT NULL
+          AND github_username IS NOT NULL
+          AND github_scopes IS NOT NULL
+          AND github_connected_at IS NOT NULL
+      `,
+  });
+
+  const setGitHubToken: UserRepositoryShape["setGitHubToken"] = (input) =>
+    updateGitHubTokenRow(input).pipe(
+      Effect.mapError(
+        mapErr("UserRepository.setGitHubToken:query", "UserRepository.setGitHubToken:decode"),
+      ),
+      Effect.asVoid,
+    );
+
+  const clearGitHubToken: UserRepositoryShape["clearGitHubToken"] = (input) =>
+    clearGitHubTokenRow(input).pipe(
+      Effect.mapError(
+        mapErr("UserRepository.clearGitHubToken:query", "UserRepository.clearGitHubToken:decode"),
+      ),
+      Effect.asVoid,
+    );
+
+  const getGitHubToken: UserRepositoryShape["getGitHubToken"] = (input) =>
+    selectGitHubTokenRow(input).pipe(
+      Effect.mapError(
+        mapErr("UserRepository.getGitHubToken:query", "UserRepository.getGitHubToken:decode"),
+      ),
+      Effect.map(
+        (opt): Option.Option<GitHubTokenRecord> =>
+          Option.map(
+            opt,
+            (row): GitHubTokenRecord => ({
+              userId: row.userId,
+              githubUsername: row.githubUsername,
+              githubAccessTokenEnc: row.githubAccessTokenEnc,
+              githubTokenEncIv: row.githubTokenEncIv,
+              githubScopes: row.githubScopes,
+              connectedAt: row.connectedAt,
+            }),
+          ),
+      ),
+    );
+
+  return {
+    upsertFromGoogle,
+    listAll,
+    getByGoogleSub,
+    getById,
+    setGitHubToken,
+    clearGitHubToken,
+    getGitHubToken,
+  } satisfies UserRepositoryShape;
 });
 
 export const UserRepositoryLive = Layer.effect(UserRepository, makeUserRepository);

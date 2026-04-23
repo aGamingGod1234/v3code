@@ -38,6 +38,7 @@ import {
   type CodexAppServerStartSessionInput,
 } from "../../codexAppServerManager.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
+import { ContainerManager } from "../../cloud/Services/ContainerManager.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
@@ -1373,6 +1374,7 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     }),
   );
   const serverSettingsService = yield* ServerSettingsService;
+  const containerManager = yield* ContainerManager;
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
     function* (input) {
@@ -1396,12 +1398,35 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             }),
         ),
       );
-      const binaryPath = codexSettings.binaryPath;
+      // V3 Phase 8 — Cloud env. When the thread has a cloud workspace,
+      // ContainerManager.prepareProviderLaunch returns the per-thread
+      // wrapper script that runs `docker exec -i <container> codex` with
+      // cwd=/workspace. For local threads it echoes the input back.
+      const cloudLaunch = yield* containerManager
+        .prepareProviderLaunch({
+          threadId: input.threadId,
+          provider: "codex",
+          binaryPath: codexSettings.binaryPath,
+          ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+                detail: cause instanceof Error ? cause.message : "Failed to prepare cloud launch.",
+                cause,
+              }),
+          ),
+        );
+      const binaryPath = cloudLaunch.binaryPath;
+      const effectiveCwd = cloudLaunch.cwd ?? input.cwd;
       const homePath = codexSettings.homePath;
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
-        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+        ...(effectiveCwd !== undefined ? { cwd: effectiveCwd } : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: input.runtimeMode,
         binaryPath,

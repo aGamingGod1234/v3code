@@ -11,6 +11,8 @@ import {
   resetWsConnectionStateForTests,
   setBrowserOnlineStatus,
   WS_RECONNECT_MAX_ATTEMPTS,
+  WS_RECONNECT_MAX_DELAY_MS,
+  WS_RECONNECT_MAX_RETRIES,
 } from "./wsConnectionState";
 
 describe("wsConnectionState", () => {
@@ -58,6 +60,27 @@ describe("wsConnectionState", () => {
       reconnectAttemptCount: 1,
       reconnectPhase: "waiting",
     });
+  });
+
+  // Spec §5.1 prescribes the reconnect curve 1s, 2s, 4s, 8s, 16s, 30s
+  // (cap). The last two retries should both clamp to the 30s cap rather
+  // than continuing to double into minute-long waits.
+  it("follows the spec reconnect curve and clamps at 30 s", () => {
+    const curve: ReadonlyArray<number> = Array.from(
+      { length: WS_RECONNECT_MAX_RETRIES },
+      (_, index) => getWsReconnectDelayMsForRetry(index) ?? -1,
+    );
+
+    expect(curve).toStrictEqual([
+      1_000,
+      2_000,
+      4_000,
+      8_000,
+      16_000,
+      WS_RECONNECT_MAX_DELAY_MS,
+      WS_RECONNECT_MAX_DELAY_MS,
+    ]);
+    expect(WS_RECONNECT_MAX_DELAY_MS).toBe(30_000);
   });
 
   it("marks the reconnect cycle as exhausted after the final attempt fails", () => {

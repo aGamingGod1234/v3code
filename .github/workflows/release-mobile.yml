@@ -1,0 +1,161 @@
+name: Release mobile (Android AAB)
+
+# V3 Phase 9 — Android app build + Play Store internal testing publish.
+#
+# Two triggers:
+#
+#   * `workflow_dispatch` — manual trigger, prompts for the Play Store
+#     track ("internal", "alpha", or "production"). Uses the workflow
+#     input as `VITE_V3_MOBILE_CHANNEL` so `scripts/build-webview-bundle.mjs`
+#     stamps the runtime config accordingly.
+#   * `push` on `v*.*.*` tags — matches the main release tagging scheme
+#     (`release.yml`) and always publishes to `internal`. Promotion to
+#     open / production is an explicit manual dispatch.
+#
+# Required secrets (set at repo / org level):
+#
+#   MOBILE_SERVER_URL            default V3 server URL baked into the APK
+#   ANDROID_KEYSTORE_BASE64      base64-encoded release keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD    keystore password
+#   ANDROID_KEY_ALIAS            signing key alias
+#   ANDROID_KEY_PASSWORD         key password
+#   FIREBASE_GOOGLE_SERVICES     google-services.json contents
+#   PLAY_SERVICE_ACCOUNT_JSON    Play Developer API service account JSON
+#
+# The `turf-pro/upload-google-play` action handles the AAB upload. No
+# extra tooling needed inside the job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Play Store track to publish to"
+        required: true
+        default: "internal"
+        type: choice
+        options:
+          - internal
+          - closed
+          - open
+      skipPublish:
+        description: "Build only (skip Play Store upload)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  android-aab:
+    name: Build + sign + publish Android AAB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Bun
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Cache Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Decode google-services.json
+        if: env.FIREBASE_GOOGLE_SERVICES != ''
+        run: |
+          mkdir -p apps/mobile/android/app
+          echo "$FIREBASE_GOOGLE_SERVICES" > apps/mobile/android/app/google-services.json
+        env:
+          FIREBASE_GOOGLE_SERVICES: ${{ secrets.FIREBASE_GOOGLE_SERVICES }}
+
+      - name: Decode release keystore
+        run: |
+          mkdir -p apps/mobile/android/app
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > apps/mobile/android/app/v3-release.keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Write keystore.properties
+        run: |
+          cat > apps/mobile/android/keystore.properties <<EOF
+          storeFile=v3-release.keystore
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build cloud web bundle
+        env:
+          VITE_V3_CLOUD_MODE: "1"
+          VITE_V3_MOBILE_SERVER_URL: ${{ secrets.MOBILE_SERVER_URL }}
+          VITE_V3_MOBILE_CHANNEL: ${{ github.event.inputs.track || 'internal' }}
+          VITE_V3_MOBILE_APP_VERSION: ${{ github.ref_name }}
+        run: |
+          bun run build:web-cloud
+          bun run --cwd apps/mobile build
+
+      - name: Capacitor sync
+        run: bun run --cwd apps/mobile sync
+
+      - name: Build signed AAB
+        run: |
+          cd apps/mobile/android
+          ./gradlew :app:bundleRelease --stacktrace \
+            -Pv3VersionCode=${{ github.run_number }} \
+            -Pv3VersionName=${{ github.ref_name || '0.0.20' }}
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-code-${{ github.ref_name || 'manual' }}.aab
+          path: apps/mobile/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish to Play Store
+        if: ${{ github.event.inputs.skipPublish != 'true' && env.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+        uses: r0adkll/upload-google-play@v1
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.agaminggod.v3code
+          releaseFiles: apps/mobile/android/app/build/outputs/bundle/release/*.aab
+          track: ${{ github.event.inputs.track || 'internal' }}
+          status: draft
+          inAppUpdatePriority: 2

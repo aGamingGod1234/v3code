@@ -59,6 +59,7 @@ import {
 } from "effect";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
+import { ContainerManager } from "../../cloud/Services/ContainerManager.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { getClaudeModelCapabilities, resolveClaudeApiModelId } from "./ClaudeProvider.ts";
@@ -980,6 +981,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const sessions = new Map<ThreadId, ClaudeSessionContext>();
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const serverSettingsService = yield* ServerSettingsService;
+  const containerManager = yield* ContainerManager;
 
   const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
   const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.make(id));
@@ -2819,7 +2821,32 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             }),
         ),
       );
-      const claudeBinaryPath = claudeSettings.binaryPath;
+      // V3 Phase 8 — Cloud env. When the thread has a cloud workspace,
+      // ContainerManager.prepareProviderLaunch returns a per-thread
+      // wrapper script that invokes `docker exec -i <container> claude`
+      // and mounts the repo clone at /workspace. prepareProviderLaunch
+      // is a no-op for local threads: it returns the unchanged binary
+      // and cwd.
+      const cloudLaunch = yield* containerManager
+        .prepareProviderLaunch({
+          threadId: input.threadId,
+          provider: "claudeAgent",
+          binaryPath: claudeSettings.binaryPath,
+          ...(input.cwd ? { cwd: input.cwd } : {}),
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+                detail: cause instanceof Error ? cause.message : "Failed to prepare cloud launch.",
+                cause,
+              }),
+          ),
+        );
+      const claudeBinaryPath = cloudLaunch.binaryPath;
+      const effectiveCwd = cloudLaunch.cwd ?? input.cwd;
       const extraArgs = parseCliArgs(claudeSettings.launchArgs).flags;
       const modelSelection =
         input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
@@ -2844,7 +2871,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       };
 
       const queryOptions: ClaudeQueryOptions = {
-        ...(input.cwd ? { cwd: input.cwd } : {}),
+        ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         ...(apiModelId ? { model: apiModelId } : {}),
         pathToClaudeCodeExecutable: claudeBinaryPath,
         settingSources: [...CLAUDE_SETTING_SOURCES],
@@ -2865,7 +2892,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         includePartialMessages: true,
         canUseTool,
         env: process.env,
-        ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
+        ...(effectiveCwd ? { additionalDirectories: [effectiveCwd] } : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
       };
 
@@ -2889,7 +2916,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         provider: PROVIDER,
         status: "ready",
         runtimeMode: input.runtimeMode,
-        ...(input.cwd ? { cwd: input.cwd } : {}),
+        ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         ...(modelSelection?.model ? { model: modelSelection.model } : {}),
         ...(threadId ? { threadId } : {}),
         resumeCursor: {

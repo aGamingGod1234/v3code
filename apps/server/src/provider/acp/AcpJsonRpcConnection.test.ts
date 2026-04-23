@@ -13,7 +13,7 @@ import type * as EffectAcpProtocol from "effect-acp/protocol";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mockAgentPath = path.join(__dirname, "../../../scripts/acp-mock-agent.ts");
-const bunExe = "bun";
+const bunExe = process.execPath;
 
 describe("AcpSessionRuntime", () => {
   it.effect("merges custom initialize client capabilities into the ACP handshake", () => {

@@ -23,6 +23,8 @@ import {
 } from "effect";
 
 import { CheckpointStoreLive } from "../src/checkpointing/Layers/CheckpointStore.ts";
+import { ContainerManager } from "../src/cloud/Services/ContainerManager.ts";
+import { CloudError } from "../src/cloud/errors.ts";
 import { CheckpointStore } from "../src/checkpointing/Services/CheckpointStore.ts";
 import { GitCoreLive } from "../src/git/Layers/GitCore.ts";
 import { GitCore, type GitCoreShape } from "../src/git/Services/GitCore.ts";
@@ -274,7 +276,28 @@ export const makeOrchestrationIntegrationHarness = (
         } as typeof ProviderAdapterRegistry.Service;
       }),
     ).pipe(
-      Layer.provide(makeCodexAdapterLive()),
+      Layer.provide(
+        makeCodexAdapterLive().pipe(
+          Layer.provide(
+            Layer.succeed(ContainerManager, {
+              dockerAvailable: () => Effect.succeed(false),
+              isAvailable: () => Effect.succeed(false),
+              getWorkspaceMetadata: () => Effect.succeed(Option.none()),
+              createWorkspace: () =>
+                Effect.fail(new CloudError({ message: "Cloud env disabled in tests." })),
+              prepareProviderLaunch: (input) =>
+                Effect.succeed({
+                  binaryPath: input.binaryPath,
+                  ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+                }),
+              resolvePreviewTarget: () => Effect.succeed(Option.none()),
+              stopThreadEnvironment: () => Effect.void,
+              listContainers: () => Effect.succeed([]),
+              pruneExpired: () => Effect.void,
+            } satisfies typeof ContainerManager.Service),
+          ),
+        ),
+      ),
       Layer.provideMerge(ServerConfig.layerTest(workspaceDir, rootDir)),
       Layer.provideMerge(NodeServices.layer),
       Layer.provideMerge(providerSessionDirectoryLayer),

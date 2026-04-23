@@ -1,0 +1,71 @@
+# V3 Code — Fly.io deploy template.
+#
+# Copy this file to the repo root before running `fly launch --no-deploy`.
+# Fly's launcher will rewrite most fields (app name, primary region,
+# build stanza) — the template seeds the pieces it doesn't guess:
+#
+#   * `[env]` injects V3CODE_MODE=server-node so the server picks the
+#     Postgres + admin-panel behaviour on boot.
+#   * `[env].V3CODE_POSTGRES_URL` aliases the Fly-attached DATABASE_URL
+#     so you don't need to dual-set secrets.
+#   * `[[services]]` exposes ports 80 + 443 and routes WebSocket
+#     upgrades (the mesh layer and the devtools).
+#
+# You still need to set Google + GitHub OAuth secrets via `fly secrets`;
+# those shouldn't live in fly.toml (which is tracked in git).
+
+app = "v3-replace-me"
+primary_region = "iad"
+
+[build]
+dockerfile = "deploy/flyio/Dockerfile"
+
+[env]
+V3CODE_MODE = "server-node"
+V3CODE_HOST = "0.0.0.0"
+V3CODE_PORT = "8080"
+# `V3CODE_POSTGRES_URL` is set via `fly postgres attach`, which writes
+# DATABASE_URL — we alias it at runtime in the Dockerfile entrypoint.
+V3CODE_STARTUP_PRESENTATION = "headless"
+V3CODE_NO_BROWSER = "1"
+V3CODE_LOG_WS_EVENTS = "0"
+V3CODE_GITHUB_OAUTH_SCOPES = "read:user repo"
+
+[[services]]
+internal_port = 8080
+protocol = "tcp"
+auto_stop_machines = "suspend"
+auto_start_machines = true
+min_machines_running = 1
+
+[[services.ports]]
+port = 80
+handlers = ["http"]
+force_https = true
+
+[[services.ports]]
+port = 443
+handlers = ["tls", "http"]
+
+[services.concurrency]
+type = "connections"
+hard_limit = 250
+soft_limit = 200
+
+[[services.http_checks]]
+interval = "30s"
+timeout = "5s"
+grace_period = "30s"
+method = "get"
+path = "/.well-known/t3/environment"
+protocol = "http"
+
+[[vm]]
+# Spec §7.2 caps a single Cloud env container at 4 GB RAM. The server
+# node process + Postgres + at least one concurrent container needs
+# ~8 GB of headroom, so we size the Machine at 8 GB by default.
+# Operators who don't enable cloud_env can shrink this via
+# `fly scale memory 2048`.
+cpu_kind = "shared"
+cpus = 4
+memory_mb = 8192

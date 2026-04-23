@@ -21,6 +21,7 @@ import { ensureLocalApi } from "~/localApi";
 import { Struct } from "effect";
 import { applyServerSettingsPatch } from "@v3tools/shared/serverSettings";
 import { applySettingsUpdated, getServerConfig, useServerSettings } from "~/rpc/serverState";
+import { writeBrowserClientSettings } from "../clientPersistenceStorage";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 
@@ -64,7 +65,9 @@ async function hydrateClientSettings(): Promise<void> {
     try {
       const persistedSettings = await ensureLocalApi().persistence.getClientSettings();
       if (persistedSettings) {
-        replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
+        const hydrated = { ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings };
+        replaceClientSettingsSnapshot(hydrated);
+        writeBrowserClientSettings(hydrated);
       }
     } catch (error) {
       console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} hydrate failed`, error);
@@ -85,6 +88,7 @@ async function hydrateClientSettings(): Promise<void> {
 
 function persistClientSettings(settings: ClientSettings): void {
   replaceClientSettingsSnapshot(settings);
+  writeBrowserClientSettings(settings);
   void ensureLocalApi()
     .persistence.setClientSettings(settings)
     .catch((error) => {

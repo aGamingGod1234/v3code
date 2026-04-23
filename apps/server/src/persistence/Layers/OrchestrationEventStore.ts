@@ -207,7 +207,7 @@ function rewriteEventForFork({
   const baseMetadata = (event.metadata ?? {}) as Record<string, unknown>;
   const rewrittenMetadata = {
     ...baseMetadata,
-    forkedFromChatId: ThreadId.make(sourceThreadId),
+    forkedFromChatId: sourceThreadId,
   } as typeof OrchestrationEventMetadata.Type;
 
   return {

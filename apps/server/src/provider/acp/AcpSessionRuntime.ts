@@ -189,7 +189,7 @@ const makeAcpSessionRuntime = (
         ChildProcess.make(options.spawn.command, [...options.spawn.args], {
           ...(options.spawn.cwd ? { cwd: options.spawn.cwd } : {}),
           ...(options.spawn.env ? { env: { ...process.env, ...options.spawn.env } } : {}),
-          shell: process.platform === "win32",
+          shell: process.platform === "win32" && shouldUseWindowsShell(options.spawn.command),
         }),
       )
       .pipe(
@@ -538,6 +538,14 @@ const makeAcpSessionRuntime = (
       notify: acp.raw.notify,
     } satisfies AcpSessionRuntimeShape;
   });
+
+function shouldUseWindowsShell(command: string): boolean {
+  const normalized = command.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return true;
+  }
+  return !normalized.endsWith(".exe") && !normalized.endsWith(".com");
+}
 
 function sessionConfigOptionsFromSetup(
   response:

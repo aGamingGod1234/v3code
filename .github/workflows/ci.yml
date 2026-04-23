@@ -9,7 +9,7 @@ on:
 jobs:
   quality:
     name: Format, Lint, Typecheck, Test, Browser Test, Build
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -76,7 +76,7 @@ jobs:
 
   release_smoke:
     name: Release Smoke
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -97,3 +97,78 @@ jobs:
 
       - name: Exercise release-only workflow steps
         run: node scripts/release-smoke.ts
+
+  mobile_smoke:
+    name: Mobile Android Build Smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Bun
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Cache Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Intentionally no keystore / google-services.json — this job
+      # proves the Android debug build + Capacitor sync pipeline is
+      # healthy before a tag cut triggers the real release workflow
+      # (`.github/workflows/release-mobile.yml`), which needs those
+      # secrets. Spec §8.6 integration details are tested there, not
+      # here.
+      - name: Build cloud web bundle
+        env:
+          VITE_V3_CLOUD_MODE: "1"
+          VITE_V3_MOBILE_CHANNEL: "internal"
+        run: |
+          bun run build:web-cloud
+          bun run --cwd apps/mobile build
+
+      - name: Capacitor sync
+        run: bun run --cwd apps/mobile sync
+
+      - name: Gradle debug build (no signing)
+        run: |
+          cd apps/mobile/android
+          ./gradlew :app:assembleDebug --stacktrace \
+            -Pv3VersionCode=${{ github.run_number }} \
+            -Pv3VersionName="0.0.0-ci"
+
+      - name: Verify debug APK exists
+        run: |
+          test -f apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          echo "Debug APK size:"
+          du -h apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk

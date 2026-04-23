@@ -1954,3 +1954,653 @@ thread.forked` test asserting copied event count, highest source
 - **Conflict risk on rebase**: medium — header action cluster is
   upstream-touched but the addition is additive.
 - **Last rebase verified**: 2026-04-19
+
+## Phase 7 — Web app cloud mode (2026-04-20)
+
+P7 delivers the cloud-mode variant of `apps/web`: a `VITE_V3_CLOUD_MODE`
+build flag, an `/app/*` static route on the server node that serves the
+variant bundle, a browser-hosted Google sign-in redirect flow, a
+GitHubRepoBrowser component for the "no local filesystem" case, and a
+Cloudflare Pages deploy template for operators who want the bundle on
+its own hostname. All deliverables are additive; the legacy Electron +
+pairing flow is untouched.
+
+**New files (V3-owned — no rebase conflict risk):**
+
+- `apps/web/src/build-flags.ts` (+ `.test.ts`) — `IS_CLOUD_MODE`,
+  `IS_HOST_CAPABLE_BUILD`, `CLOUD_MODE_BASE_PATH` constants fed from
+  `import.meta.env.VITE_V3_CLOUD_MODE`.
+- `apps/web/src/v3/cloudMode.ts` — `useIsCloudMode` / `isCloudBrowser`
+  helpers for downstream consumers.
+- `apps/web/src/v3/ui/CloudSignInBootstrap.tsx` — one-shot component
+  mounted in `__root.tsx` that consumes the post-callback cookies left
+  by `/api/auth/google/callback` and forwards the Drive access token
+  into `captureDriveAppDataSnapshot`.
+- `apps/web/src/components/cloudMode/{GitHubRepoBrowser.tsx,githubApi.ts,githubApi.test.ts,githubTokenStore.ts,githubTokenStore.test.ts,index.ts}` —
+  GitHub repo picker used when cloud-mode users need to supply a
+  working directory without a local filesystem.
+- `apps/server/src/identity/browserGoogleOAuth.ts` (+ `.test.ts`) —
+  PKCE + HMAC-signed envelope utilities for the browser OAuth flow,
+  plus `buildGoogleAuthorizeUrl` / `exchangeAuthorizationCode` /
+  `sanitizeReturnTo` helpers.
+- `deploy/cloudflare-pages/{README.md,wrangler.toml}` — Cloudflare
+  Pages deploy template for the cloud-mode bundle.
+- `scripts/build-web-cloud.ts` — cross-platform helper that sets
+  `VITE_V3_CLOUD_MODE=1` and runs `vite build --outDir dist-cloud`.
+- `apps/web/public/_redirects` — SPA fallback rules for
+  Cloudflare Pages / Netlify. Static content so no rebase risk.
+
+**Modified upstream files (each needs MESH_CHANGES review on rebase):**
+
+### `apps/web/vite.config.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Teach the bundler about the `VITE_V3_CLOUD_MODE` flag so
+  `apps/web/src/build-flags.ts` can dead-code-eliminate Electron-only
+  branches, and set `base` to `/app/` when the flag is on so the
+  assets render correctly under the server-node's `/app/*` route.
+- **What changed**:
+  - Added: `cloudModeRaw` / `isCloudMode` / `cloudModeBase` /
+    `baseForBuild` at the top of the module.
+  - Added: `"import.meta.env.VITE_V3_CLOUD_MODE"` +
+    `"import.meta.env.VITE_V3_CLOUD_MODE_BASE"` entries under
+    `define`.
+  - Added: top-level `base: baseForBuild`.
+- **Conflict risk on rebase**: low — additions are at module top and
+  inside the existing `define`/config objects. Upstream keeps vite
+  config mostly static.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/package.json`
+
+- **Modified**: 2026-04-20 (P7) — no change. (The `build:cloud` script
+  lives at the monorepo root as `build:web-cloud` so upstream's
+  `apps/web/package.json` is left alone; rebase risk stays at zero.)
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/vite-env.d.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Type the new `VITE_V3_CLOUD_MODE` env var so TS consumers
+  of `import.meta.env.VITE_V3_CLOUD_MODE` compile cleanly.
+- **What changed**:
+  - Added: `readonly VITE_V3_CLOUD_MODE: string;` on
+    `ImportMetaEnv`.
+- **Conflict risk on rebase**: low — interface member addition.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/main.tsx`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Strip the `/app` base prefix from `window.location`
+  before TanStack Router reads it, so deep-link refreshes on a cloud
+  bundle land on the right route. The router itself never sees the
+  base path — the static server route returns `index.html` for SPA
+  fallbacks under `/app/*`.
+- **What changed**:
+  - Added: import of `CLOUD_MODE_BASE_PATH` + `IS_CLOUD_MODE` from
+    `./build-flags`.
+  - Added: pre-router URL rewrite block that calls
+    `window.history.replaceState` when the path starts with
+    `CLOUD_MODE_BASE_PATH`.
+  - Modified: comment on the `history` constant to describe the new
+    browser-history path in cloud mode.
+- **Conflict risk on rebase**: low — additive block above the existing
+  `history` constant.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/routes/__root.tsx`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Mount the new `V3CloudSignInBootstrap` so browser
+  sessions pick up the cookies that `/api/auth/google/callback` drops
+  on redirect-back.
+- **What changed**:
+  - Added: `import { V3CloudSignInBootstrap } from "../v3/ui/CloudSignInBootstrap";`
+  - Added: `<V3CloudSignInBootstrap />` inside the authenticated
+    layout alongside `V3StartupSignInNudge`.
+- **Conflict risk on rebase**: low — one import + one tag.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/routes/pair.tsx`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Loopback pairing is a single-device flow; in cloud mode
+  the user must sign in via Google, so we redirect `/pair` → `/` so
+  the `V3SignInButton` + nudge surface drives the flow instead.
+- **What changed**:
+  - Added: `import { IS_CLOUD_MODE } from "../build-flags";`
+  - Added: `if (IS_CLOUD_MODE) throw redirect({ to: "/", replace: true });`
+    inside `beforeLoad`.
+- **Conflict risk on rebase**: low — additive `if` branch.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/web/src/v3/auth/googleSignIn.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Add the browser (cloud-mode) sign-in path. `startV3GoogleSignIn`
+  now branches on `IS_CLOUD_MODE` and navigates the browser to the
+  server-hosted `/api/auth/google/authorize` redirect. Adds
+  `startV3GoogleSignInBrowser`, `consumeBrowserSignInCookies`, and
+  `consumeBrowserDriveAccessToken` helpers.
+- **What changed**:
+  - Added: `IS_CLOUD_MODE` import.
+  - Added: cloud-mode branch at the top of `startV3GoogleSignIn`.
+  - Added: `startV3GoogleSignInBrowser`, `consumeBrowserSignInCookies`,
+    `consumeBrowserDriveAccessToken`, and helper cookie accessors.
+  - Modified: top-of-file comment to document the browser flow.
+- **Conflict risk on rebase**: low — V3-owned module; P1d already
+  introduced this file.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/config.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Add `googleClientSecret`, `serverPublicUrl`, and
+  `cloudModeStaticDir` fields on `ServerConfigShape` so the browser
+  OAuth flow + `/app/*` static route have the data they need. Add a
+  `resolveCloudModeStaticDir` Effect that mirrors `resolveStaticDir`
+  for the new bundle.
+- **What changed**:
+  - Added: three new fields on `ServerConfigShape`.
+  - Added: three `undefined` defaults in `ServerConfig.layerTest`.
+  - Added: exported `resolveCloudModeStaticDir` Effect.
+- **Conflict risk on rebase**: medium — `ServerConfigShape` is a
+  hotspot. Upstream additions in the same shape need to be merged
+  around these three fields.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/cli.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Wire the three new config fields through the CLI's
+  env-var + TOML precedence resolver so both desktop-mode and
+  server-node operators can enable browser sign-in / cloud hosting.
+- **What changed**:
+  - Added: `resolveCloudModeStaticDir` import from `./config.ts`.
+  - Added: `googleClientSecret`, `serverPublicUrl`, and
+    `cloudModeStaticDir` entries in `EnvServerConfig`.
+  - Added: `resolvedCloudStaticDir` branch inside `resolveServerConfig`
+    that prefers the env override and falls back to the resolver.
+  - Added: `googleClientSecret`, `serverPublicUrl`, and
+    `cloudModeStaticDir` into the returned `ServerConfigShape`.
+- **Conflict risk on rebase**: medium — the Env/Config assembly block
+  gets touched by upstream regularly, but the additions are purely
+  additive.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/http.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Serve the cloud-mode bundle at `/app/*` with SPA fallback
+  to `index.html`, separate from the legacy `staticAndDevRouteLayer`
+  at `*`. Cache-controls tune TTLs for hashed assets vs `index.html`
+  so a redeploy propagates immediately.
+- **What changed**:
+  - Added: `cloudModeStaticRouteLayer` exported alongside the existing
+    static routes.
+  - Added: internal `CLOUD_MODE_PATH_PREFIX` + `decodeCloudModeRelativePath`
+    helpers.
+- **Conflict risk on rebase**: medium — upstream static/dev route is
+  in the same file but the new layer is additive and registered
+  _before_ the `*` catch-all in `server.ts`.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/server.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Register the two new OAuth routes and the
+  `cloudModeStaticRouteLayer` in `makeRoutesLayer`.
+- **What changed**:
+  - Added: `cloudModeStaticRouteLayer` import from `./http.ts`.
+  - Added: `googleAuthorizeRouteLayer` + `googleCallbackRouteLayer`
+    imports from `./identity/http.ts`.
+  - Added: all three layers into `Layer.mergeAll(...)`.
+- **Conflict risk on rebase**: low — additive imports + list
+  extension.
+- **Last rebase verified**: 2026-04-20
+
+### `apps/server/src/identity/http.ts`
+
+- **Modified**: 2026-04-20 (P7)
+- **V3 phase**: Phase 7 — web app cloud mode
+- **Reason**: Add the two browser-mode Google sign-in routes:
+  `GET /api/auth/google/authorize` + `GET /api/auth/google/callback`.
+  Both share the existing `DeviceApprovalService` / `UserRepository` /
+  `SessionCredentialService` machinery so the resulting session looks
+  identical to the desktop bootstrap.
+- **What changed**:
+  - Added: imports for `DeviceCapability`, `DeviceId`, `DeviceKind`,
+    `DevicePlatform`, `ServerSecretStore`, and every helper from
+    `./browserGoogleOAuth.ts`.
+  - Added: constants for the short-lived OAuth flow secret and the
+    user-input length caps.
+  - Added: `pickRequestOrigin`, `extractQueryParam`, `decodeList`,
+    `truncate`, `flowVerificationToAuthError`,
+    `googleTokenExchangeToAuthError` helpers.
+  - Added: `googleAuthorizeRouteLayer` and `googleCallbackRouteLayer`
+    exported at the bottom of the module.
+- **Conflict risk on rebase**: low — V3-owned file; appended at EOF.
+- **Last rebase verified**: 2026-04-20
+
+## Phase 7 — known gaps / deferred
+
+- **Runtime TLS bridging on the redirect URI.** The cloud flow
+  computes `redirectUri` from `serverPublicUrl` (with request origin
+  fallback). The operator must keep the Google Cloud Console's
+  registered redirect URI in sync; the wizard surfaces this as a
+  callout in P2d.
+- **GitHub App flow.** `GitHubRepoBrowser` currently uses a PAT stored
+  in `localStorage`. P8 replaces it with the server-node-mediated
+  installation-token flow (D8), at which point the PAT path in
+  `githubTokenStore.ts` can be deleted.
+- **Drive App Data refresh.** The browser consumes a one-time Drive
+  access token delivered on the callback cookie. Refreshing the token
+  in long-lived cloud-mode sessions is deferred to P7.1 (out of
+  scope). Users who lose the token just see the "configure server"
+  banner reappear on next sign-in.
+
+## Phase 6 follow-up — Cross-device fork lineage (2026-04-20)
+
+Landed in commit `8d81ce76` on top of the original P6 fork-chat
+shipped earlier. Closes the "fork to another device" gap in spec
+§6.6.
+
+**New files (V3-owned):**
+
+- `apps/server/src/persistence/Migrations/029_ProjectionThreadsForkLineage.ts`
+  - Postgres mirror — adds `parent_chat_id`, `parent_device_id`,
+    `forked_from_stream_version`, `forked_at` columns + index.
+- `apps/web/src/components/chat/ForkAcceptDialog.tsx` — target-side
+  banner inviting the user to pick a local folder via
+  `localApi.dialogs.pickFolder`.
+
+**Modified upstream / V3-shared files:**
+
+- `packages/contracts/src/orchestration.ts` — `OrchestrationThread` +
+  `OrchestrationThreadShell` gain `forkLineage?`; `ChatForkCommand`
+  gains optional `targetDeviceId`.
+- `packages/contracts/src/mesh/chat.ts` — `MeshPromptStreamItem`
+  becomes a discriminated union with a new `fork_ready` variant.
+  `MeshForkChatResult` now carries real `copiedEventCount`,
+  `forkedFromStreamVersion`, `hostedOnDeviceId`.
+- `apps/server/src/mesh/meshWsHandlers.ts` — post-commit reads the
+  forked event stream, pushes a `fork_ready` stream item to the
+  target session's outbox when the target is another device.
+- `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts`
+  — new `listThreadForkLineageRows` + `getThreadForkLineageRowById`
+  queries joined into snapshot / shell / detail paths.
+- `apps/web/src/hooks/useThreadActions.ts` — `forkThread` accepts
+  `targetDeviceId` and routes through `mesh.forkChat`; non-local
+  targets toast instead of navigating.
+- `apps/web/src/components/chat/ForkChatButton.tsx` — target-device
+  picker sorted current → online → name.
+- `apps/web/src/environments/runtime/service.ts`,
+  `apps/web/src/rpc/wsRpcClient.ts`,
+  `apps/web/src/environmentApi.ts` — `mesh.forkChat` RPC wiring +
+  `fork_ready` handler that renders a "Open chat" toast.
+- `apps/web/src/store.ts`, `apps/web/src/types.ts`,
+  `packages/contracts/src/ipc.ts` —
+  `ThreadForkLineage` mirrored into client state.
+
+## Phase 1e — GitHub identity (2026-04-20)
+
+Closes the "GitHub connect" exit gate on master-plan P1 (§6) that
+shipped only Google in P1a–P1d. Required by P8 for GitHub App
+installation tokens on Cloud env containers; also replaces the
+browser-stored PAT path in the P7 GitHubRepoBrowser.
+
+**New files (V3-owned):**
+
+- `packages/contracts/src/identity.ts` — adds `GitHubOAuthScope`,
+  `GitHubUserSummary`, `GitHubClientPublicConfig`,
+  `GitHubConnectionStatus`, `GitHubDisconnectResult`.
+- `apps/server/src/identity/browserGitHubOAuth.ts` (+ `.test.ts`)
+  — HMAC-signed flow envelope + authorize-URL builder +
+  redirect-uri / return-to sanitisers. 17 tests.
+- `apps/server/src/identity/Services/GitHubIdentityService.ts` +
+  `apps/server/src/identity/Layers/GitHubIdentityService.ts`
+  (+ `.test.ts`) — `exchangeCode` + `fetchUser`, plus a
+  `not-configured` stub Live layer. 8 tests.
+- `apps/server/src/persistence/Migrations/030_V3UserGitHubScopes.ts`
+  - Postgres mirror — adds `github_scopes` + `github_connected_at`
+    columns to `v3_users` (token + iv + auth_tag + username columns
+    already existed from migration 026).
+- `apps/web/src/v3/auth/connectGitHub.ts` — renderer-side helpers
+  (`fetchGitHubClientConfig`, `fetchGitHubConnectionStatus`,
+  `startConnectGitHub`, `disconnectGitHub`).
+- `apps/web/src/v3/ui/ConnectGitHubButton.tsx` — three-state
+  affordance rendered in Settings → Devices → Integrations.
+
+**Modified upstream / V3-shared files:**
+
+- `apps/server/src/identity/Errors.ts` — adds `GitHubIdentityError`
+  with reasons `not-configured | invalid-state | token-exchange |
+profile-fetch | user-cancelled | unknown`.
+- `apps/server/src/identity/Services/UserRepository.ts` +
+  `Layers/UserRepository.ts` — adds `setGitHubToken`,
+  `clearGitHubToken`, `getGitHubToken` (encrypted at rest via the
+  existing `tokenEncryption.ts` AES-256-GCM helpers; ciphertext +
+  authTag packed together so the existing two-BLOB-column storage
+  holds everything).
+- `apps/server/src/identity/http.ts` — five routes: `/config`,
+  `/status`, `/authorize`, `/callback`, `/disconnect`.
+- `apps/server/src/config.ts` — `githubClientId`,
+  `githubClientSecret`, `githubOauthScopes` (default
+  `"read:user repo"`) fields.
+- `apps/server/src/cli.ts` — env-var + TOML wiring for the three
+  new config fields.
+- `apps/server/src/server.ts` — `V3IdentityLayerLive` merges
+  `GitHubIdentityServiceLive`; `makeRoutesLayer` picks up the five
+  GitHub routes.
+- `apps/server/src/persistence/Migrations.ts` +
+  `persistence/PostgresMigrations.ts` +
+  `PostgresMigrations.test.ts` — migration 030 registration and
+  test fixture update.
+- `apps/web/src/components/settings/DevicesSettingsPanel.tsx` —
+  new "Integrations" section hosting `<V3ConnectGitHubButton />`.
+
+**Config / test fixtures:**
+
+`cli.test.ts`, `cli-config.test.ts`, `server.test.ts`,
+`environment/Layers/ServerEnvironment.test.ts`,
+`persistence/Layers/Postgres.test.ts` — all extended with the three
+new `ServerConfigShape` fields.
+
+## Phase 2e — Deploy templates (2026-04-20)
+
+Adds the Fly.io + Railway templates master plan §10.2 queued. Kept
+alongside the P7 Cloudflare Pages template.
+
+**New files (V3-owned):**
+
+- `deploy/flyio/{README.md,fly.toml,Dockerfile}` — server-node on
+  Fly with managed Postgres attached. Bun-based multi-stage image,
+  WebSocket-aware health check at `/.well-known/t3/environment`.
+- `deploy/railway/{README.md,railway.json,Dockerfile}` — Railway
+  mirror, minus Docker-in-Docker (so P8 Cloud env chats require a
+  separate Docker host).
+
+No upstream files touched.
+
+## Phase 2g — Admin panel (2026-04-20)
+
+Master plan §10.5 admin panel finally ships. Read-only in P2g; the
+destructive actions (kill container, rotate secrets, pg_dump
+backup) land in P8 + P11.
+
+**New files (V3-owned):**
+
+- `packages/contracts/src/admin.ts` — `AdminServerInfo`,
+  `AdminActiveSession`, `AdminEventLogRow`, `AdminLogsResponse`,
+  `AdminContainerInfo`, `AdminSummaryResponse`.
+- `apps/server/src/admin/http.ts` — five `GET /api/v3/admin/*`
+  routes backed by the existing `SessionCredentialService`,
+  `DeviceRepository`, `UserRepository`, and orchestration event
+  store. Every route requires `mode === "server-node"` + an
+  authenticated + approved V3 device.
+- `apps/web/src/routes/admin.tsx` — four-tab SPA (Overview,
+  Sessions, Event log, Containers, Logs) with refresh buttons +
+  graceful 403 / 404 handling so non-server-node operators see a
+  friendly banner instead of a broken page.
+
+**Modified upstream files:**
+
+- `packages/contracts/src/index.ts` — re-exports `./admin.ts`.
+- `apps/server/src/server.ts` — imports + mergeAll for the five
+  admin route layers.
+- `apps/web/src/routeTree.gen.ts` — regenerated by the TanStack
+  Router plugin to include `/admin` (no hand-edits).
+
+## Phase 9 — Android app + FCM (2026-04-22)
+
+Master plan §6 P9 — Capacitor 6 wrap of the cloud-mode web bundle
+targeting Android via Play Store internal testing. Includes the
+server-side FCM dispatch infrastructure (token registry, service
+account storage, admin upload endpoint) so mobile notifications
+can fire without a third-party push proxy.
+
+**New files (V3-owned, zero rebase risk):**
+
+- `apps/mobile/package.json`, `tsconfig.json`, `turbo.jsonc`,
+  `capacitor.config.ts`, `.gitignore` — Capacitor 6 project at the
+  monorepo root. Uses `webDir: "webview-bundle"` so the bundle
+  staging script is the only path that feeds assets to Android.
+- `apps/mobile/scripts/build-webview-bundle.mjs` — zero-dep Node
+  script that consumes `apps/web/dist-cloud/` (producing it via
+  `bun run build:web-cloud` if missing) and emits
+  `apps/mobile/webview-bundle/v3-mobile-config.json` plus the SPA
+  assets for `bunx cap sync android` to pick up.
+- `apps/mobile/src/{platform,preferencesStorage,backgroundStrategy,pushTokens,main}.ts`
+  (+ `.test.ts`) — Capacitor-side runtime: platform detection,
+  Capacitor Preferences → Storage adapter, pure-function
+  background / foreground policy matrix, FCM token bridge, and the
+  boot entrypoint that stages `window.v3MobileRuntime` for the web
+  bundle.
+- `apps/mobile/android/` — Gradle project skeleton (build.gradle
+  files, AndroidManifest, MainActivity, V3StreamingForegroundService,
+  V3MessagingService, styles / colors / drawables). Capacitor fills
+  in the auto-generated Gradle files on first `bunx cap sync android`.
+- `packages/contracts/src/mesh/push.ts` — `PushRegistrationPayload`,
+  `PushProvider`, `FcmNotificationEnvelope`,
+  `MESH_PUSH_WS_METHODS`, `MeshPushRpcSchemas`.
+- `apps/server/src/persistence/Migrations/031_V3PushTokensAndFcmConfig.ts`
+  — adds `v3_device_push_tokens` and `v3_fcm_config` tables. Tokens
+  soft-delete via `removed_at`, same pattern as `v3_devices`.
+- `apps/server/src/identity/Services/DevicePushTokenRepository.ts`
+  - `Layers/DevicePushTokenRepository.ts` — upsert / remove /
+    markInvalid / listActiveForDevices / countActiveForUser.
+- `apps/server/src/identity/Services/FcmPushConfigRepository.ts`
+  - `Layers/FcmPushConfigRepository.ts` — single-row service
+    account store. `private_key` is AES-GCM encrypted at rest via
+    the existing `v3-token-enc-key` secret.
+- `apps/server/src/mesh/Services/FcmPushService.ts`
+  - `Layers/FcmPushService.ts` — FCM v1 HTTP dispatcher. Mints
+    OAuth tokens from the service account JWT using `node:crypto`
+    (no `firebase-admin` dep; keeps the bundle tight). Soft-deletes
+    tokens that FCM rejects with 404 / 410.
+- `apps/server/src/admin/fcmPushHttp.ts` — GET / POST / DELETE
+  `/api/v3/admin/fcm-config` for the admin panel's Mobile Push
+  tab. `POST` validates the uploaded service account JSON before
+  encrypting and storing it.
+- `apps/web/src/v3/mobile/{mobilePlatform,mobilePreferencesStorage,fcmTokenBridge}.ts`
+  (+ `.test.ts`) — web-side bridge that consumes
+  `window.v3MobileRuntime` to detect Android, prefer Capacitor
+  Preferences over localStorage, and forward FCM tokens to the
+  `mesh.registerPushToken` RPC.
+- `.github/workflows/release-mobile.yml` — AAB build + Play Store
+  internal upload. Takes `track` as a workflow input so promoting
+  `internal → closed → open` is one manual dispatch.
+
+**Modified upstream-adjacent files:**
+
+### `packages/contracts/src/index.ts`
+
+- **Modified**: 2026-04-22 (P9)
+- **V3 phase**: Phase 9 — Android + FCM
+- **Reason**: Re-export the new `mesh/push` module alongside the
+  existing `mesh/chat` + `mesh/device` surfaces.
+- **What changed**:
+  - Added: `export * from "./mesh/push.ts";` after the
+    `mesh/device` re-export.
+- **Conflict risk on rebase**: low — append-only.
+- **Last rebase verified**: 2026-04-22
+
+### `packages/contracts/src/rpc.ts`
+
+- **Modified**: 2026-04-22 (P9)
+- **V3 phase**: Phase 9 — Android + FCM
+- **Reason**: Register `mesh.registerPushToken` +
+  `mesh.unregisterPushToken` in `WsRpcGroup`.
+- **What changed**:
+  - Added imports from `./mesh/push.ts`.
+  - Added `WsMeshRegisterPushTokenRpc` and
+    `WsMeshUnregisterPushTokenRpc` bindings.
+  - Added both to the `WsRpcGroup.make(...)` argument list.
+- **Conflict risk on rebase**: low — additive.
+- **Last rebase verified**: 2026-04-22
+
+### `packages/contracts/src/admin.ts`
+
+- **Modified**: 2026-04-22 (P9)
+- **V3 phase**: Phase 9 — Android + FCM
+- **Reason**: New `AdminFcmConfigStatus`, `AdminFcmConfigUploadRequest`,
+  `AdminFcmConfigUploadResult` schemas for the admin Mobile Push tab.
+- **What changed**:
+  - Appended three new `Schema.Struct`s to the end of the file.
+- **Conflict risk on rebase**: low — append-only.
+- **Last rebase verified**: 2026-04-22
+
+### `apps/server/src/persistence/Migrations.ts`
+
+- **Modified**: 2026-04-22 (P9)
+- **V3 phase**: Phase 9 — Android + FCM
+- **Reason**: Register migration 031 alongside the existing 030.
+- **What changed**:
+  - Added: `import Migration0031 from "./Migrations/031_V3PushTokensAndFcmConfig.ts";`.
+  - Appended: `[31, "V3PushTokensAndFcmConfig", Migration0031],` to
+    `migrationEntries`.
+- **Conflict risk on rebase**: medium — upstream may add a 031 of
+  its own; if so, V3 renumbers to the next free id.
+- **Last rebase verified**: 2026-04-22
+
+### `apps/server/src/identity/Errors.ts`
+
+- **Modified**: 2026-04-22 (P9)
+- **V3 phase**: Phase 9 — Android + FCM
+- **Reason**: Add `DevicePushTokenRepositoryError`,
+  `FcmPushConfigRepositoryError`, and `FcmPushError`.
+- **What changed**:
+  - Two new type aliases (`DevicePushTokenRepositoryError`,
+    `FcmPushConfigRepositoryError`).
+  - New `FcmPushError` tagged error with six reason literals.
+- **Conflict risk on rebase**: low — V3-owned subtree.
+- **Last rebase verified**: 2026-04-22
+
+### `apps/server/src/mesh/meshWsHandlers.ts`
+
+- **Modified**: 2026-04-22 (P9)
+- **V3 phase**: Phase 9 — Android + FCM
+- **Reason**: Serve the two new push RPCs.
+- **What changed**:
+  - Added imports: `MESH_PUSH_WS_METHODS`,
+    `PushRegistrationPayload`, `PushUnregistrationPayload`,
+    `DevicePushTokenRepository`, `DateTime`, `Crypto`.
+  - Added `pushTokens = yield* DevicePushTokenRepository` in the
+    Effect generator.
+  - Appended two RPC handlers
+    (`MESH_PUSH_WS_METHODS.registerPushToken` +
+    `MESH_PUSH_WS_METHODS.unregisterPushToken`) to the returned
+    object.
+- **Conflict risk on rebase**: medium — `meshWsHandlers.ts` is
+  hot territory for V3; keep the new handlers at the bottom of
+  the returned object so upstream merges stay clean.
+- **Last rebase verified**: 2026-04-22
+
+### `apps/server/src/server.ts`
+
+- **Modified**: 2026-04-22 (P9)
+- **V3 phase**: Phase 9 — Android + FCM
+- **Reason**: Provide the new repositories + FCM service layers and
+  register the admin FCM routes.
+- **What changed**:
+  - Imports: `DevicePushTokenRepositoryLive`,
+    `FcmPushConfigRepositoryLive`, `FcmPushServiceLive`, and the
+    three admin FCM route layers from `./admin/fcmPushHttp.ts`.
+  - `V3IdentityLayerLive` merges the two new identity repository
+    live layers.
+  - `MeshLayerLive` merges `FcmPushServiceLive` and pulls
+    `V3IdentityLayerLive` in via `provideMerge`.
+  - The admin route layer list gains the three FCM routes.
+- **Conflict risk on rebase**: medium — `server.ts` `Layer.mergeAll`
+  is shared with upstream; re-apply V3 merges at the end of the
+  identity / mesh sub-trees.
+- **Last rebase verified**: 2026-04-22
+
+## Phase 10 — Subagent UI + preview pane (2026-04-22)
+
+Ships the master-plan §10.6 / §10.7 deliverables:
+
+- Inline `SubagentCard` in the chat timeline with Devin-style live
+  status + Cline-style per-subagent stats.
+- Kilo-style `AgentsTab` inside `RightPanelSheet` for power-user
+  inspection.
+- Four new `subagent.*` events on `ProviderRuntimeEvent` feeding the
+  derivation.
+- Path-based `PreviewPane` iframe with `ElementInspector` overlay
+  that serialises clicked DOM via `postMessage` (companion script at
+  `apps/web/public/preview-inspector-client.js`).
+- Server-side `portSniffer` Effect service that parses provider
+  stdout and `netstat` / `ss` / `lsof` output into `PortHint`
+  events.
+
+**New files (V3-owned, zero rebase risk):**
+
+- `apps/web/src/components/chat/subagent/subagentDerivation.ts`
+  (+ `.test.ts`) — pure state machine that folds the activity feed
+  into a `SubagentNode` forest (running / completed / failed), plus
+  `flattenSubagentTree` and `aggregateSubagents`.
+- `apps/web/src/components/chat/subagent/{SubagentCard,SubagentInlineStatus,SubagentSummaryChip,SubagentTree}.tsx`
+  — presentational components.
+- `apps/web/src/components/RightPanelSheet/AgentsTab.tsx` — two-
+  column flat list + detail view.
+- `apps/web/src/components/chat/preview/{PreviewPane,ElementInspector}.tsx`
+  - `previewUrl.ts` + `elementSerialization.ts` (each pure module
+    has its own `.test.ts`).
+- `apps/web/public/preview-inspector-client.js` — drop-in companion
+  script the previewed app can include for rich DOM inspection.
+- `apps/server/src/preview/portSniffer.ts` (+ `.test.ts`) — pure
+  `parseStdoutHints` + `parseListeningPorts` + `deduplicateHints`
+  helpers plus the `PortSnifferLive` Effect layer exposing a
+  `Stream<PortHint>`.
+
+**Modified upstream-adjacent files:**
+
+### `packages/contracts/src/providerRuntime.ts`
+
+- **Modified**: 2026-04-22 (P10)
+- **V3 phase**: Phase 10 — Subagent UI + preview
+- **Reason**: Represent the four subagent lifecycle events so the
+  client can render `SubagentCard` without re-deriving state from
+  tool_use payloads.
+- **What changed**:
+  - Added `"subagent.started"`, `"subagent.progress"`,
+    `"subagent.completed"`, `"subagent.failed"` to the
+    `ProviderRuntimeEventType` literal union (inserted between the
+    task and hook blocks).
+  - Added matching literal type aliases, payload structs
+    (`SubagentStartedPayload`, `SubagentProgressPayload`,
+    `SubagentCompletedPayload`, `SubagentFailedPayload`), and event
+    variants.
+  - Added all four variants to the `ProviderRuntimeEventV2` union.
+- **Conflict risk on rebase**: medium — upstream owns the same
+  literal union and may rearrange it. V3 additions stay contiguous
+  between the task and hook blocks so the merge tooling recognises
+  them as one hunk.
+- **Upstream signals to watch**: new `task.*` events inserted after
+  `task.completed`; V3 subagent block must stay immediately after
+  task and before hook.
+- **Last rebase verified**: 2026-04-22
+
+### `packages/contracts/src/providerRuntime.test.ts`
+
+- **Modified**: 2026-04-22 (P10)
+- **V3 phase**: Phase 10 — Subagent UI + preview
+- **Reason**: Guard against regressions in the new subagent event
+  variants.
+- **What changed**:
+  - Appended one `it("decodes subagent.started / progress / completed / failed variants", …)`
+    case that decodes all four variants through the unified event
+    schema.
+- **Conflict risk on rebase**: low — new tests appended at the end.
+- **Last rebase verified**: 2026-04-22

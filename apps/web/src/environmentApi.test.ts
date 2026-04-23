@@ -1,3 +1,4 @@
+import { DeviceId, ProjectId, ThreadId } from "@v3tools/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { createEnvironmentApi } from "./environmentApi";
@@ -91,9 +92,22 @@ function createRpcClientStub(): WsRpcClient {
     mesh: {
       publishEvent: vi.fn(async () => ({ sequence: 42 })),
       sendPrompt: vi.fn(async () => ({ sequence: 24 })),
+      forkChat: vi.fn(async () => ({
+        targetThreadId: ThreadId.make("thread-2"),
+        copiedEventCount: 3,
+        forkedFromStreamVersion: 3,
+        hostedOnDeviceId: DeviceId.make("device-2"),
+        targetProjectId: ProjectId.make("project-1"),
+      })),
       subscribeChat: vi.fn(() => () => undefined),
+      subscribeDeviceApprovals: vi.fn(() => () => undefined),
       subscribePresence: vi.fn(() => () => undefined),
       subscribePrompts: vi.fn(() => () => undefined),
+      registerPushToken: vi.fn(async () => ({
+        registered_at: "2026-04-22T00:00:00.000Z",
+        rotated: false,
+      })),
+      unregisterPushToken: vi.fn(async () => ({ acknowledged: true })),
     },
     orchestration: {
       dispatchCommand: vi.fn(async () => ({ sequence: 7 })),
@@ -148,6 +162,31 @@ describe("createEnvironmentApi", () => {
       sequence: 24,
     });
     expect(rpcClient.mesh.sendPrompt).toHaveBeenCalledWith({ command });
+    expect(rpcClient.mesh.publishEvent).not.toHaveBeenCalled();
+    expect(rpcClient.orchestration.dispatchCommand).not.toHaveBeenCalled();
+  });
+
+  it("routes chat.fork through mesh.forkChat", async () => {
+    const rpcClient = createRpcClientStub();
+    const api = createEnvironmentApi(rpcClient);
+    const command = {
+      type: "chat.fork" as const,
+      commandId: "command-1" as never,
+      sourceThreadId: "thread-1" as never,
+      targetThreadId: "thread-2" as never,
+      targetDeviceId: "device-2" as never,
+      targetWorktreePath: null,
+      createdAt: "2026-04-20T00:00:00.000Z",
+    };
+
+    await expect(api.orchestration.forkChat(command)).resolves.toEqual({
+      targetThreadId: ThreadId.make("thread-2"),
+      copiedEventCount: 3,
+      forkedFromStreamVersion: 3,
+      hostedOnDeviceId: DeviceId.make("device-2"),
+      targetProjectId: ProjectId.make("project-1"),
+    });
+    expect(rpcClient.mesh.forkChat).toHaveBeenCalledWith({ command });
     expect(rpcClient.mesh.publishEvent).not.toHaveBeenCalled();
     expect(rpcClient.orchestration.dispatchCommand).not.toHaveBeenCalled();
   });

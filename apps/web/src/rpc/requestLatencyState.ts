@@ -36,7 +36,14 @@ function getSlowRpcAckRequestsValue(): ReadonlyArray<SlowRpcAckRequest> {
 }
 
 function shouldTrackRpcAck(tag: string): boolean {
-  return !tag.startsWith("subscribe");
+  // Exclude long-lived subscription RPCs. They don't ACK in the same
+  // request-response sense — they open a server stream that stays
+  // pending until the client unsubscribes. Before this guard,
+  // `mesh.subscribePrompts` and `mesh.subscribeDeviceApprovals` always
+  // tripped the 15 s slow-request threshold within seconds of sign-in.
+  if (tag.startsWith("subscribe")) return false;
+  if (tag.includes(".subscribe")) return false;
+  return true;
 }
 
 export function getSlowRpcAckRequests(): ReadonlyArray<SlowRpcAckRequest> {
