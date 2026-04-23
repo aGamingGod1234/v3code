@@ -14,6 +14,7 @@ const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const GET_APP_BRANDING_CHANNEL = "desktop:get-app-branding";
+const GET_HOSTNAME_CHANNEL = "desktop:get-hostname";
 const GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL = "desktop:get-local-environment-bootstrap";
 const GET_CLIENT_SETTINGS_CHANNEL = "desktop:get-client-settings";
 const SET_CLIENT_SETTINGS_CHANNEL = "desktop:set-client-settings";
@@ -29,6 +30,8 @@ const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
 const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 // V3 Phase 1d — main-process Google sign-in.
 const V3_OPEN_GOOGLE_SIGNIN_CHANNEL = "desktop:v3-open-google-signin";
+// V3 — main-process GitHub sign-in (loopback OAuth in external browser).
+const V3_OPEN_GITHUB_SIGNIN_CHANNEL = "desktop:v3-open-github-signin";
 // V3 Phase 2d — setup wizard channels. Matches V3_WIZARD_CHANNELS in
 // apps/desktop/src/v3SetupWizard.ts; kept flat here because preload has
 // no access to shared runtime modules.
@@ -47,6 +50,13 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       return null;
     }
     return result as ReturnType<DesktopBridge["getAppBranding"]>;
+  },
+  getHostname: () => {
+    const result = ipcRenderer.sendSync(GET_HOSTNAME_CHANNEL);
+    if (typeof result !== "string" || result.length === 0) {
+      return null;
+    }
+    return result;
   },
   getLocalEnvironmentBootstrap: () => {
     const result = ipcRenderer.sendSync(GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL);
@@ -104,6 +114,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     };
   },
   openV3GoogleSignIn: (input) => ipcRenderer.invoke(V3_OPEN_GOOGLE_SIGNIN_CHANNEL, input),
+  openV3GitHubSignIn: (input) => ipcRenderer.invoke(V3_OPEN_GITHUB_SIGNIN_CHANNEL, input),
   v3Wizard: {
     probeDocker: () => ipcRenderer.invoke(V3_WIZARD_PROBE_DOCKER_CHANNEL),
     probePort: (port) => ipcRenderer.invoke(V3_WIZARD_PROBE_PORT_CHANNEL, port),

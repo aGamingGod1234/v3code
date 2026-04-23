@@ -280,6 +280,7 @@ const createDesktopBridgeStub = (overrides?: {
 
   return {
     getAppBranding: vi.fn().mockReturnValue(null),
+    getHostname: vi.fn().mockReturnValue(null),
     getLocalEnvironmentBootstrap: () => ({
       label: "Local environment",
       httpBaseUrl: "http://127.0.0.1:3773",
@@ -338,6 +339,11 @@ const createDesktopBridgeStub = (overrides?: {
       expiresAt: "2036-04-07T01:00:00.000Z",
       scope: "openid email profile",
       tokenType: "Bearer",
+    }),
+    openV3GitHubSignIn: vi.fn().mockResolvedValue({
+      accessToken: "mock-gh-access-token",
+      scopes: [],
+      tokenType: "bearer",
     }),
     v3Wizard: {
       probeDocker: vi.fn().mockResolvedValue({ status: "ok", version: "27.0.0", message: null }),
@@ -699,7 +705,7 @@ describe("GeneralSettingsPanel observability", () => {
     await networkAccessToggle.click();
     await expect.element(page.getByText("Enable network access?")).toBeInTheDocument();
     await expect
-      .element(page.getByText("T3 Code will restart to expose this environment over the network."))
+      .element(page.getByText("V3 Code will restart to expose this environment over the network."))
       .toBeInTheDocument();
     await page.getByRole("button", { name: "Restart and enable", exact: true }).click();
     await vi.waitFor(() => {

@@ -72,7 +72,7 @@ export const UserInfo = Schema.Struct({
   displayName: Schema.NullOr(Schema.String),
   avatarUrl: Schema.NullOr(Schema.String),
   githubUsername: Schema.NullOr(Schema.String),
-  createdAt: Schema.DateTimeUtc,
+  createdAt: Schema.DateTimeUtcFromString,
 });
 export type UserInfo = typeof UserInfo.Type;
 
@@ -89,8 +89,8 @@ export const DeviceInfo = Schema.Struct({
   capabilities: Schema.Array(DeviceCapability),
   approved: Schema.Boolean,
   online: Schema.Boolean,
-  firstSeenAt: Schema.DateTimeUtc,
-  lastSeenAt: Schema.NullOr(Schema.DateTimeUtc),
+  firstSeenAt: Schema.DateTimeUtcFromString,
+  lastSeenAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 });
 export type DeviceInfo = typeof DeviceInfo.Type;
 
@@ -279,7 +279,7 @@ export const GitHubConnectionStatus = Schema.Struct({
   connected: Schema.Boolean,
   username: Schema.NullOr(TrimmedNonEmptyString),
   scopes: Schema.Array(GitHubOAuthScope),
-  connectedAt: Schema.NullOr(Schema.DateTimeUtc),
+  connectedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   needsReconnect: Schema.Boolean,
   reconnectReason: Schema.NullOr(Schema.String),
 });
@@ -289,3 +289,30 @@ export const GitHubDisconnectResult = Schema.Struct({
   disconnected: Schema.Boolean,
 });
 export type GitHubDisconnectResult = typeof GitHubDisconnectResult.Type;
+
+// Desktop (Electron) returns this after the loopback OAuth flow
+// completes. The access token is handed to the server via
+// `POST /api/auth/github/bootstrap`, which fetches the user profile,
+// encrypts the token at rest, and associates it with the signed-in V3
+// user. The renderer never stores the token itself.
+export const GitHubTokenBundle = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  scopes: Schema.Array(GitHubOAuthScope),
+  tokenType: Schema.NullOr(Schema.String),
+});
+export type GitHubTokenBundle = typeof GitHubTokenBundle.Type;
+
+// Input for the desktop-driven `POST /api/auth/github/bootstrap` route.
+// The server still fetches /user itself so it can verify the token and
+// record the canonical GitHub login rather than trust the renderer.
+export const GitHubBootstrapInput = Schema.Struct({
+  accessToken: TrimmedNonEmptyString,
+  scopes: Schema.Array(GitHubOAuthScope),
+});
+export type GitHubBootstrapInput = typeof GitHubBootstrapInput.Type;
+
+export const GitHubBootstrapResult = Schema.Struct({
+  connected: Schema.Boolean,
+  username: TrimmedNonEmptyString,
+});
+export type GitHubBootstrapResult = typeof GitHubBootstrapResult.Type;

@@ -70,6 +70,7 @@ import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import {
   approveDeviceRouteLayer,
   githubAuthorizeRouteLayer,
+  githubBootstrapRouteLayer,
   githubCallbackRouteLayer,
   githubConfigRouteLayer,
   githubDisconnectRouteLayer,
@@ -394,6 +395,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   adminFcmConfigDeleteRouteLayer,
   approveDeviceRouteLayer,
   githubAuthorizeRouteLayer,
+  githubBootstrapRouteLayer,
   githubCallbackRouteLayer,
   githubConfigRouteLayer,
   githubDisconnectRouteLayer,
