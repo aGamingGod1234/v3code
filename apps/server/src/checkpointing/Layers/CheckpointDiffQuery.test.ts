@@ -92,6 +92,7 @@ describe("CheckpointDiffQueryLive", () => {
           getThreadShellById: () => Effect.succeed(Option.none()),
           getThreadDetailById: () => Effect.succeed(Option.none()),
           getThreadMeshSnapshot: () => Effect.succeed(Option.none()),
+          getThreadForkLineage: () => Effect.succeed(Option.none()),
         }),
       ),
     );
@@ -152,6 +153,7 @@ describe("CheckpointDiffQueryLive", () => {
           getThreadShellById: () => Effect.succeed(Option.none()),
           getThreadDetailById: () => Effect.succeed(Option.none()),
           getThreadMeshSnapshot: () => Effect.succeed(Option.none()),
+          getThreadForkLineage: () => Effect.succeed(Option.none()),
         }),
       ),
     );

@@ -271,17 +271,21 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
           MESH_WS_METHODS.forkChat,
           Effect.gen(function* () {
             const command = input.command;
-            // Stamp the source device id from the authenticated session so the
-            // server is the source of truth for "which device kicked off the
-            // fork" — clients can suggest it but cannot spoof it.
-            const stampedCommand: ChatForkCommand = {
-              ...command,
-              ...(context.deviceId !== null && command.sourceDeviceId === undefined
-                ? { sourceDeviceId: context.deviceId }
-                : {}),
-            };
+            // Always stamp the source device id from the authenticated
+            // session — the server is the only source of truth for "which
+            // device kicked off this fork". If the client supplied a
+            // different `sourceDeviceId`, it is discarded. When the caller
+            // has no authenticated device (pre-V3 pairing-only session) we
+            // strip the field entirely rather than let the client fill it.
+            const stampedCommand: ChatForkCommand =
+              context.deviceId !== null
+                ? { ...command, sourceDeviceId: context.deviceId }
+                : (() => {
+                    const { sourceDeviceId: _discarded, ...commandWithoutSourceDevice } = command;
+                    return commandWithoutSourceDevice;
+                  })();
 
-            const dispatchResult = yield* orchestrationEngine
+            yield* orchestrationEngine
               .dispatch(stampedCommand)
               .pipe(
                 Effect.mapError((cause) =>
@@ -289,24 +293,35 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
                 ),
               );
 
-            // Read back the projected target thread shell to populate the
-            // result payload (mainly for the source UI to know which projectId
-            // and host device the new chat ended up on after defaults were
-            // resolved server-side).
-            const targetShellOpt = yield* projectionSnapshotQuery
-              .getThreadShellById(stampedCommand.targetThreadId)
-              .pipe(
-                Effect.mapError((cause) =>
-                  toMeshRpcError("Failed to read forked chat shell.", cause),
-                ),
-              );
+            // Read back the projected target thread shell + fork lineage to
+            // populate a truthful result payload. The fork-lineage row is
+            // written by the `thread.forked` projection handler, so its
+            // `forkedFromStreamVersion` matches exactly what the event store
+            // used as the cursor when copying the source stream.
+            const [targetShellOpt, forkLineageOpt] = yield* Effect.all(
+              [
+                projectionSnapshotQuery.getThreadShellById(stampedCommand.targetThreadId),
+                projectionSnapshotQuery.getThreadForkLineage(stampedCommand.targetThreadId),
+              ],
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.mapError((cause) =>
+                toMeshRpcError("Failed to read forked chat metadata.", cause),
+              ),
+            );
 
             const targetShell = Option.isSome(targetShellOpt) ? targetShellOpt.value : null;
+            const forkedFromStreamVersion = Option.isSome(forkLineageOpt)
+              ? forkLineageOpt.value.forkedFromStreamVersion
+              : 0;
+            // Source had events at stream_version 0..N where N is
+            // `forkedFromStreamVersion`, so the fork copied N+1 events.
+            const copiedEventCount = forkedFromStreamVersion + 1;
 
             return {
               targetThreadId: stampedCommand.targetThreadId,
-              copiedEventCount: 0,
-              forkedFromStreamVersion: dispatchResult.sequence,
+              copiedEventCount,
+              forkedFromStreamVersion,
               hostedOnDeviceId: targetShell?.hostDeviceId ?? null,
               targetProjectId: (targetShell?.projectId ?? command.targetProjectId) as ProjectId,
             } as const;

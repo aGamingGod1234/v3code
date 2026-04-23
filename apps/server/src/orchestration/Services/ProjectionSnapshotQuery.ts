@@ -22,6 +22,7 @@ import type { Option } from "effect";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
+import type { ProjectionThreadForkLineage } from "../../persistence/Services/ProjectionThreads.ts";
 
 export interface ProjectionSnapshotCounts {
   readonly projectCount: number;
@@ -118,6 +119,15 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadMeshSnapshot: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<ProjectionThreadMeshSnapshot>, ProjectionRepositoryError>;
+
+  /**
+   * Read the fork lineage (parent chat id, parent device id,
+   * source stream version, fork timestamp) for a thread that was
+   * populated by a `chat.fork` command, if any.
+   */
+  readonly getThreadForkLineage: (
+    threadId: ThreadId,
+  ) => Effect.Effect<Option.Option<ProjectionThreadForkLineage>, ProjectionRepositoryError>;
 }
 
 /**

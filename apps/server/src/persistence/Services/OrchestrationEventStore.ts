@@ -11,8 +11,11 @@
  */
 import {
   OrchestrationEvent,
+  TrimmedNonEmptyString,
   type CommandId,
   type DeviceId,
+  type IsoDateTime,
+  type ProjectId,
   type ThreadId,
 } from "@v3tools/contracts";
 import { Context } from "effect";
@@ -32,12 +35,12 @@ import type { OrchestrationEventStoreError } from "../Errors.ts";
 export interface ForkThreadEventsInput {
   readonly sourceThreadId: ThreadId;
   readonly targetThreadId: ThreadId;
-  readonly newProjectId?: string | undefined;
-  readonly newTitle?: string | undefined;
-  readonly newBranch?: string | null | undefined;
-  readonly newWorktreePath?: string | null | undefined;
+  readonly newProjectId?: ProjectId | undefined;
+  readonly newTitle?: typeof TrimmedNonEmptyString.Type | undefined;
+  readonly newBranch?: typeof TrimmedNonEmptyString.Type | null | undefined;
+  readonly newWorktreePath?: typeof TrimmedNonEmptyString.Type | null | undefined;
   readonly newHostDeviceId?: DeviceId | null | undefined;
-  readonly forkOccurredAt: string;
+  readonly forkOccurredAt: IsoDateTime;
   readonly forkCommandId: CommandId;
   readonly parentDeviceId: DeviceId | null;
 }
@@ -85,6 +88,18 @@ export interface OrchestrationEventStoreShape {
     threadId: string,
     streamVersionExclusive: number,
     limit?: number,
+  ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
+
+  /**
+   * Replay all events for a single thread from the start of the stream.
+   *
+   * Unlike `readThreadStream`, the initial cursor is inclusive — the event at
+   * `stream_version 0` (typically `thread.created`) is returned. Used by fork
+   * replay paths that need the full seeded history of a freshly forked
+   * thread.
+   */
+  readonly readThreadStreamAll: (
+    threadId: string,
   ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
 
   /**
