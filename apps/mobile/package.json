@@ -1,6 +1,6 @@
 {
   "name": "@v3tools/mobile",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "private": true,
   "description": "V3 Code Android app — Capacitor 6 wrap of the cloud-mode web bundle.",
   "type": "module",
