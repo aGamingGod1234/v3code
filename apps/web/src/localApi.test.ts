@@ -222,6 +222,10 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       writeServerNodeConfig: async () => ({ path: "/tmp/config.toml", bytesWritten: 0 }),
       generateEncryptionKey: async () => "mock-encryption-key",
     },
+    chatImport: {
+      listLocalTranscripts: async () => ({ entries: [] }),
+      readTranscript: async () => ({ path: "", content: "" }),
+    },
     getUpdateState: async () => {
       throw new Error("getUpdateState not implemented in test");
     },

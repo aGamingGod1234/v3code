@@ -358,6 +358,10 @@ const createDesktopBridgeStub = (overrides?: {
         .mockResolvedValue({ path: "/tmp/config.toml", bytesWritten: 0 }),
       generateEncryptionKey: vi.fn().mockResolvedValue("mock-encryption-key"),
     },
+    chatImport: {
+      listLocalTranscripts: vi.fn().mockResolvedValue({ entries: [] }),
+      readTranscript: vi.fn().mockResolvedValue({ path: "", content: "" }),
+    },
   };
 };
 
