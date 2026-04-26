@@ -1129,6 +1129,7 @@ export function GeneralSettingsPanel() {
         />
       </SettingsSection>
 
+      <div id="providers-section" data-tour-id="providers-section" className="scroll-mt-6">
       <SettingsSection
         title="Providers"
         headerAction={
@@ -1585,6 +1586,7 @@ export function GeneralSettingsPanel() {
           );
         })}
       </SettingsSection>
+      </div>
 
       <SettingsSection title="Advanced">
         <SettingsRow

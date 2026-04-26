@@ -1,5 +1,12 @@
 import type { ComponentType } from "react";
-import { ArchiveIcon, ArrowLeftIcon, Link2Icon, MonitorIcon, Settings2Icon } from "lucide-react";
+import {
+  ArchiveIcon,
+  ArrowLeftIcon,
+  Link2Icon,
+  MonitorIcon,
+  PlugIcon,
+  Settings2Icon,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useAccountState } from "../../hooks/useAccountState";
@@ -17,6 +24,7 @@ import { V3SignInButton } from "../../v3/ui/SignInButton";
 
 export type SettingsSectionPath =
   | "/settings/general"
+  | "/settings/providers"
   | "/settings/connections"
   | "/settings/devices"
   | "/settings/archived";
@@ -27,6 +35,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   icon: ComponentType<{ className?: string }>;
 }> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
+  { label: "Providers", to: "/settings/providers", icon: PlugIcon },
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },
   { label: "Devices", to: "/settings/devices", icon: MonitorIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
