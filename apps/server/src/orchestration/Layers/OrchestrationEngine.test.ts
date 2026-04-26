@@ -1118,16 +1118,18 @@ describe("OrchestrationEngine", () => {
 
     const messageEvents = importEvents.filter((event) => event.type === "thread.message-sent");
     expect(messageEvents).toHaveLength(3);
-    if (messageEvents[0].type === "thread.message-sent") {
-      expect(messageEvents[0].payload.text).toBe("hello");
-      expect(messageEvents[0].payload.role).toBe("user");
-      expect(messageEvents[0].payload.turnId).toBeNull();
-      expect(messageEvents[0].payload.streaming).toBe(false);
+    const firstMessage = messageEvents[0];
+    const lastMessage = messageEvents[2];
+    if (firstMessage?.type === "thread.message-sent") {
+      expect(firstMessage.payload.text).toBe("hello");
+      expect(firstMessage.payload.role).toBe("user");
+      expect(firstMessage.payload.turnId).toBeNull();
+      expect(firstMessage.payload.streaming).toBe(false);
     }
-    if (messageEvents[2].type === "thread.message-sent") {
+    if (lastMessage?.type === "thread.message-sent") {
       // Tool messages are folded into assistant role with a [tool: ...] prefix.
-      expect(messageEvents[2].payload.role).toBe("assistant");
-      expect(messageEvents[2].payload.text).toBe("[tool: ls]\nran ls");
+      expect(lastMessage.payload.role).toBe("assistant");
+      expect(lastMessage.payload.text).toBe("[tool: ls]\nran ls");
     }
 
     const readModel = await system.run(engine.getReadModel());
