@@ -82,12 +82,13 @@ import { resolveDesktopAppBranding } from "./appBranding.ts";
 import { getSharedV3GitHubAuthFlow } from "./v3GitHubAuthFlow.ts";
 import { getSharedV3GoogleAuthFlow } from "./v3GoogleAuthFlow.ts";
 import { registerV3SetupWizardIpc } from "./v3SetupWizard.ts";
+import { registerV3ChatImportIpc } from "./v3ChatImport.ts";
 import {
   EMBEDDED_GITHUB_CLIENT_ID,
   EMBEDDED_GITHUB_CLIENT_SECRET,
   EMBEDDED_GOOGLE_CLIENT_ID,
   EMBEDDED_GOOGLE_CLIENT_SECRET,
-} from "./embeddedAuthConfig.ts";
+} from "./embeddedAuthConfig.example.ts";
 
 syncShellEnvironment();
 
@@ -1842,6 +1843,8 @@ function registerIpcHandlers(): void {
       return result.filePaths[0] ?? null;
     },
   });
+
+  registerV3ChatImportIpc();
 
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
   ipcMain.handle(PICK_FOLDER_CHANNEL, async (_event, rawOptions: unknown) => {

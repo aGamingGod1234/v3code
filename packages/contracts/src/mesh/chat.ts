@@ -1,6 +1,11 @@
 import { Schema } from "effect";
 
 import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "../baseSchemas.ts";
+import {
+  ChatImportCommand,
+  ChatImportMcpResolution,
+  ChatImportSkillResolution,
+} from "../chatImport.ts";
 import { DeviceApprovalStreamEvent, DeviceId } from "../identity.ts";
 import {
   ChatForkCommand,
@@ -17,6 +22,7 @@ export const MESH_WS_METHODS = {
   publishEvent: "mesh.publishEvent",
   sendPrompt: "mesh.sendPrompt",
   forkChat: "mesh.forkChat",
+  importChat: "mesh.importChat",
   subscribePresence: "mesh.subscribePresence",
   subscribePrompts: "mesh.subscribePrompts",
   subscribeDeviceApprovals: "mesh.subscribeDeviceApprovals",
@@ -70,6 +76,22 @@ export const MeshForkChatResult = Schema.Struct({
   targetProjectId: ProjectId,
 });
 export type MeshForkChatResult = typeof MeshForkChatResult.Type;
+
+export const MeshImportChatInput = Schema.Struct({
+  command: ChatImportCommand,
+  targetProjectId: Schema.NullOr(ProjectId),
+});
+export type MeshImportChatInput = typeof MeshImportChatInput.Type;
+
+export const MeshImportChatResult = Schema.Struct({
+  targetThreadId: ThreadId,
+  importedMessageCount: NonNegativeInt,
+  hostedOnDeviceId: Schema.NullOr(DeviceId),
+  targetProjectId: ProjectId,
+  skills: Schema.Array(ChatImportSkillResolution),
+  mcpServers: Schema.Array(ChatImportMcpResolution),
+});
+export type MeshImportChatResult = typeof MeshImportChatResult.Type;
 
 export const MeshPresenceSnapshot = Schema.Struct({
   devices: Schema.Array(PresenceUpdatePayload),
@@ -125,6 +147,10 @@ export const MeshRpcSchemas = {
   forkChat: {
     input: MeshForkChatInput,
     output: MeshForkChatResult,
+  },
+  importChat: {
+    input: MeshImportChatInput,
+    output: MeshImportChatResult,
   },
   subscribePresence: {
     input: Schema.Struct({}),

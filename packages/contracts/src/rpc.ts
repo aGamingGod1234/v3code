@@ -53,6 +53,8 @@ import {
   MeshChatStreamItem,
   MeshForkChatInput,
   MeshForkChatResult,
+  MeshImportChatInput,
+  MeshImportChatResult,
   MeshDeviceApprovalStreamItem,
   MeshPublishEventInput,
   MeshPresenceStreamItem,
@@ -399,6 +401,12 @@ export const WsMeshForkChatRpc = Rpc.make(MESH_WS_METHODS.forkChat, {
   error: MeshRpcError,
 });
 
+export const WsMeshImportChatRpc = Rpc.make(MESH_WS_METHODS.importChat, {
+  payload: MeshImportChatInput,
+  success: MeshImportChatResult,
+  error: MeshRpcError,
+});
+
 export const WsMeshSubscribePresenceRpc = Rpc.make(MESH_WS_METHODS.subscribePresence, {
   payload: Schema.Struct({}),
   success: MeshPresenceStreamItem,
@@ -471,6 +479,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsMeshPublishEventRpc,
   WsMeshSendPromptRpc,
   WsMeshForkChatRpc,
+  WsMeshImportChatRpc,
   WsMeshSubscribePresenceRpc,
   WsMeshSubscribePromptsRpc,
   WsMeshSubscribeDeviceApprovalsRpc,

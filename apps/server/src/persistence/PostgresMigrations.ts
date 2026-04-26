@@ -57,6 +57,7 @@ import Migration0028 from "./PostgresMigrations/028_ProjectionThreadMessageSourc
 import Migration0029 from "./PostgresMigrations/029_ProjectionThreadsForkLineage.ts";
 import Migration0030 from "./PostgresMigrations/030_V3UserGitHubScopes.ts";
 import Migration0031 from "./PostgresMigrations/031_PostgresCanonicalizeModelSelections.ts";
+import Migration0032 from "./PostgresMigrations/032_ProjectionThreadsForkLineageRecencyIndex.ts";
 
 export const postgresMigrationEntries = [
   [1, "V3IdentityBaseline", Migration0001],
@@ -90,6 +91,7 @@ export const postgresMigrationEntries = [
   [29, "ProjectionThreadsForkLineage", Migration0029],
   [30, "V3UserGitHubScopes", Migration0030],
   [31, "PostgresCanonicalizeModelSelections", Migration0031],
+  [32, "ProjectionThreadsForkLineageRecencyIndex", Migration0032],
 ] as const;
 
 export const makePostgresMigrationLoader = (throughId?: number) =>

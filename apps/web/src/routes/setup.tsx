@@ -18,7 +18,9 @@ import {
   CircleDashedIcon,
   ExternalLinkIcon,
   LoaderIcon,
+  PencilIcon,
   ShieldCheckIcon,
+  XIcon,
   XCircleIcon,
 } from "lucide-react";
 
@@ -78,13 +80,56 @@ function V3SetupWizardPage() {
 
   return (
     <div className="mx-auto flex h-dvh w-full max-w-3xl flex-col gap-6 p-6 text-foreground">
-      <header className="flex items-center justify-between border-b border-border pb-4">
-        <div>
-          <h1 className="text-xl font-semibold">Set up server node</h1>
-          <p className="text-sm text-muted-foreground">
-            Step {stepIndex + 1} of {STEP_ORDER.length} — {STEP_TITLES[state.step]}
-          </p>
+      <header className="space-y-3 border-b border-border pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold">Set up server node</h1>
+            <p className="text-sm text-muted-foreground">
+              Step {stepIndex + 1} of {STEP_ORDER.length} — {STEP_TITLES[state.step]}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Exit setup"
+            title="Exit setup — your progress is not saved"
+            onClick={() => {
+              if (
+                state.step === "done" ||
+                window.confirm("Exit setup? Progress on this wizard is not saved.")
+              ) {
+                window.location.href = "/";
+              }
+            }}
+          >
+            <XIcon className="size-4" />
+          </Button>
         </div>
+        <ol
+          aria-label="Setup progress"
+          className="flex items-center gap-1.5"
+          data-tour-id="setup-progress"
+        >
+          {STEP_ORDER.map((step, index) => {
+            const isCurrent = index === stepIndex;
+            const isComplete = index < stepIndex;
+            return (
+              <li
+                key={step}
+                aria-current={isCurrent ? "step" : undefined}
+                aria-label={`${STEP_TITLES[step]} (${index + 1} of ${STEP_ORDER.length})${isCurrent ? ", current step" : isComplete ? ", complete" : ""}`}
+                title={STEP_TITLES[step]}
+                className={
+                  isCurrent
+                    ? "h-1.5 w-6 rounded-full bg-foreground"
+                    : isComplete
+                      ? "h-1.5 w-3 rounded-full bg-foreground/60"
+                      : "h-1.5 w-3 rounded-full bg-muted-foreground/20"
+                }
+              />
+            );
+          })}
+        </ol>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-5">
@@ -156,17 +201,21 @@ function OverviewScreen({ dispatch }: { dispatch: WizardDispatch }) {
     <section className="space-y-4">
       <h2 className="text-base font-semibold">This machine becomes your V3 server node.</h2>
       <p className="text-sm text-muted-foreground">
-        The wizard checks prerequisites, asks for a public URL and authentication details, writes{" "}
-        <code>~/.v3-code-server/config.toml</code>, and hands you instructions for restarting V3 in
-        server-node mode. Your existing V3 install keeps working as a client &mdash; only a separate
-        server-node process changes behaviour.
+        Once it's set up, your other devices connect to this machine to share chats, sync state, and
+        keep one source of truth. Your current V3 install keeps working as a client — only a small
+        separate server process changes behaviour.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        This wizard takes about five minutes. It checks prerequisites, captures a public URL and
+        sign-in details, then writes <code>~/.v3-code-server/config.toml</code>. You can re-run it
+        any time from Settings → General.
       </p>
       <Alert>
         <AlertTitle>Before you begin</AlertTitle>
         <AlertDescription>
-          You&rsquo;ll need Docker Desktop (or Docker Engine on Linux) and a free port for the
-          server to bind to. If you plan to expose the server through Cloudflare Tunnel, install{" "}
-          <code>cloudflared</code> first &mdash; the wizard will check for it.
+          Install Docker Desktop (or Docker Engine on Linux) and keep port 8080 free. If you plan to
+          expose the server over the internet via Cloudflare Tunnel, also install{" "}
+          <code>cloudflared</code> first — the wizard will check for it.
         </AlertDescription>
       </Alert>
       <StepNav
@@ -264,6 +313,16 @@ function PreflightScreen({
   const paths = state.preflight.paths;
   const ready = isPreflightReady(state);
 
+  const blockingReason = useMemo(() => {
+    const reasons: string[] = [];
+    if (docker === "unchecked") reasons.push("Docker hasn't been checked yet.");
+    else if (docker.status !== "ok") reasons.push(`Docker: ${docker.message ?? docker.status}.`);
+    if (port === "unchecked")
+      reasons.push(`Port ${state.exposure.bindPort} hasn't been checked yet.`);
+    else if (!port.available) reasons.push(`Port ${port.port}: ${port.message ?? "in use"}.`);
+    if (paths === "unchecked") reasons.push("Config paths still resolving…");
+    return reasons;
+  }, [docker, port, paths, state.exposure.bindPort]);
   const [runningDocker, setRunningDocker] = useState(false);
   const [runningPort, setRunningPort] = useState(false);
   const [runningCloudflared, setRunningCloudflared] = useState(false);
@@ -394,6 +453,18 @@ function PreflightScreen({
         />
         <PreflightRow label="Config path" value={pathsLine} status="unchecked" />
       </div>
+      {!ready && blockingReason.length > 0 ? (
+        <Alert variant="warning">
+          <AlertTitle>Can't continue yet</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {blockingReason.map((reason, index) => (
+                <li key={index}>{reason}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <StepNav
         canContinue={ready}
         onBack={() => dispatch({ _tag: "go-to", step: "overview" })}
@@ -566,6 +637,15 @@ function AuthScreen({
         operator's Google Cloud Console project, plus the list of Google-account emails allowed to
         sign in.
       </p>
+      <Alert>
+        <AlertTitle>Why Google?</AlertTitle>
+        <AlertDescription>
+          Google Sign-In is the only built-in identity provider for the server node — it's used to
+          gate who can pair a device against this server. The allow-list below is the single source
+          of truth; anyone whose email isn't on it cannot sign in, even if they have the URL. You
+          can edit this list later by hand-editing <code>~/.v3-code-server/config.toml</code>.
+        </AlertDescription>
+      </Alert>
       <div className="space-y-2">
         <Label htmlFor="google-client-id">Google OAuth client id</Label>
         <Input
@@ -663,9 +743,41 @@ function ReviewScreen({
             ? "~/.v3-code-server/config.toml"
             : state.preflight.paths.configPath}
         </code>
-        . You can hand-edit later.
+        . Everything below is editable by hand later — nothing here is encrypted.
       </p>
-      <pre className="max-h-64 overflow-y-auto rounded-md border border-border bg-background p-3 text-xs">
+      <p className="text-xs text-muted-foreground">
+        Skim for typos in the public URL and authorized-emails list. The encryption key won't be
+        printed back to you after this step, so save it somewhere safe if you want to migrate the
+        server elsewhere.
+      </p>
+      <div className="flex flex-wrap gap-2 text-xs">
+        <span className="text-muted-foreground">Edit:</span>
+        <button
+          type="button"
+          onClick={() => dispatch({ _tag: "go-to", step: "exposure" })}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+        >
+          <PencilIcon className="size-3" /> Public URL
+        </button>
+        <button
+          type="button"
+          onClick={() => dispatch({ _tag: "go-to", step: "data-dir" })}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+        >
+          <PencilIcon className="size-3" /> Data directory
+        </button>
+        <button
+          type="button"
+          onClick={() => dispatch({ _tag: "go-to", step: "auth" })}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+        >
+          <PencilIcon className="size-3" /> Auth + encryption
+        </button>
+      </div>
+      <pre
+        aria-label="Generated config.toml"
+        className="max-h-64 overflow-y-auto rounded-md border border-border bg-background p-3 text-xs"
+      >
         {toml}
       </pre>
       {writeStatus._tag === "error" ? (

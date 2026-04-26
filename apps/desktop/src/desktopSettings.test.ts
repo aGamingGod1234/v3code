@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   DEFAULT_DESKTOP_SETTINGS,
+  markDesktopOnboardingCompleted,
+  markDesktopTourCompleted,
   readDesktopSettings,
   resolveDefaultDesktopSettings,
   setDesktopServerExposurePreference,
@@ -37,6 +39,8 @@ describe("desktopSettings", () => {
       serverExposureMode: "local-only",
       updateChannel: "nightly",
       updateChannelConfiguredByUser: false,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
   });
 
@@ -47,12 +51,16 @@ describe("desktopSettings", () => {
       serverExposureMode: "network-accessible",
       updateChannel: "latest",
       updateChannelConfiguredByUser: true,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
 
     expect(readDesktopSettings(settingsPath, "0.0.17")).toEqual({
       serverExposureMode: "network-accessible",
       updateChannel: "latest",
       updateChannelConfiguredByUser: true,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
   });
 
@@ -63,6 +71,8 @@ describe("desktopSettings", () => {
           serverExposureMode: "local-only",
           updateChannel: "latest",
           updateChannelConfiguredByUser: false,
+          onboardingCompleted: false,
+          tourCompleted: false,
         },
         "network-accessible",
       ),
@@ -70,6 +80,8 @@ describe("desktopSettings", () => {
       serverExposureMode: "network-accessible",
       updateChannel: "latest",
       updateChannelConfiguredByUser: false,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
   });
 
@@ -80,6 +92,8 @@ describe("desktopSettings", () => {
           serverExposureMode: "local-only",
           updateChannel: "latest",
           updateChannelConfiguredByUser: false,
+          onboardingCompleted: false,
+          tourCompleted: false,
         },
         "nightly",
       ),
@@ -87,6 +101,8 @@ describe("desktopSettings", () => {
       serverExposureMode: "local-only",
       updateChannel: "nightly",
       updateChannelConfiguredByUser: true,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
   });
 
@@ -105,6 +121,8 @@ describe("desktopSettings", () => {
       serverExposureMode: "local-only",
       updateChannel: "nightly",
       updateChannelConfiguredByUser: false,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
   });
 
@@ -123,6 +141,8 @@ describe("desktopSettings", () => {
       serverExposureMode: "local-only",
       updateChannel: "nightly",
       updateChannelConfiguredByUser: false,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
   });
 
@@ -142,6 +162,59 @@ describe("desktopSettings", () => {
       serverExposureMode: "local-only",
       updateChannel: "latest",
       updateChannelConfiguredByUser: true,
+      onboardingCompleted: false,
+      tourCompleted: false,
     });
+  });
+
+  it("persists onboarding and tour completion flags across read/write", () => {
+    const settingsPath = makeSettingsPath();
+
+    writeDesktopSettings(settingsPath, {
+      serverExposureMode: "local-only",
+      updateChannel: "latest",
+      updateChannelConfiguredByUser: false,
+      onboardingCompleted: true,
+      tourCompleted: true,
+    });
+
+    expect(readDesktopSettings(settingsPath, "0.0.17")).toEqual({
+      serverExposureMode: "local-only",
+      updateChannel: "latest",
+      updateChannelConfiguredByUser: false,
+      onboardingCompleted: true,
+      tourCompleted: true,
+    });
+  });
+
+  it("treats legacy settings without onboarding/tour fields as not yet completed", () => {
+    const settingsPath = makeSettingsPath();
+    fs.writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        serverExposureMode: "local-only",
+        updateChannel: "latest",
+        updateChannelConfiguredByUser: true,
+      }),
+      "utf8",
+    );
+
+    const settings = readDesktopSettings(settingsPath, "0.0.17");
+    expect(settings.onboardingCompleted).toBe(false);
+    expect(settings.tourCompleted).toBe(false);
+  });
+
+  it("idempotently marks onboarding and tour completion", () => {
+    const base = DEFAULT_DESKTOP_SETTINGS;
+    const completed = markDesktopOnboardingCompleted(base);
+    expect(completed.onboardingCompleted).toBe(true);
+    expect(markDesktopOnboardingCompleted(completed)).toBe(completed);
+
+    const tourDone = markDesktopTourCompleted(base, true);
+    expect(tourDone.tourCompleted).toBe(true);
+    expect(markDesktopTourCompleted(tourDone, true)).toBe(tourDone);
+
+    const tourReset = markDesktopTourCompleted(tourDone, false);
+    expect(tourReset.tourCompleted).toBe(false);
   });
 });

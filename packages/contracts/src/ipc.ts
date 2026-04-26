@@ -275,6 +275,32 @@ export interface DesktopBridge {
     ) => Promise<V3WizardWriteConfigResult>;
     readonly generateEncryptionKey: () => Promise<string>;
   };
+  // Chat-import IPC: scan well-known transcript directories
+  // (~/.codex/sessions, ~/.claude/projects/<slug>/sessions) and read
+  // individual transcript files into the renderer for parsing. The
+  // parser itself is pure and lives in @v3tools/shared/chatImport, so
+  // file reads happen on the renderer side once the path is known.
+  chatImport: {
+    readonly listLocalTranscripts: () => Promise<DesktopTranscriptListing>;
+    readonly readTranscript: (path: string) => Promise<DesktopTranscriptFile>;
+  };
+}
+
+export interface DesktopTranscriptEntry {
+  readonly path: string;
+  readonly format: "codex" | "claude";
+  readonly modifiedAt: string;
+  readonly bytes: number;
+  readonly preview: string | null;
+}
+
+export interface DesktopTranscriptListing {
+  readonly entries: ReadonlyArray<DesktopTranscriptEntry>;
+}
+
+export interface DesktopTranscriptFile {
+  readonly path: string;
+  readonly content: string;
 }
 
 /**

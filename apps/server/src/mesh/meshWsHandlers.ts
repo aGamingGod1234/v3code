@@ -1,19 +1,23 @@
 import {
   type AuthSessionId,
   type ChatForkCommand,
+  type ChatImportCommand,
   type ClientThreadTurnStartCommand,
   DeviceId,
   MESH_PUSH_WS_METHODS,
   MESH_WS_METHODS,
   MeshRpcError,
   type PresenceUpdatePayload,
+  ProjectId,
+  ThreadId,
   type PushRegistrationPayload,
   type PushUnregistrationPayload,
-  type ProjectId,
   type UserId,
 } from "@v3tools/contracts";
 import * as Crypto from "node:crypto";
 import { DateTime, Effect, Option, Schema, Stream } from "effect";
+
+import { readInstalledSnapshot, resolveReferences } from "../chatImport/InstalledRegistry.ts";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 
@@ -416,6 +420,55 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
               Schema.is(MeshRpcError)(cause)
                 ? cause
                 : toMeshRpcError("Failed to fork chat.", cause),
+            ),
+          ),
+          { "rpc.aggregate": "mesh" },
+        ),
+      [MESH_WS_METHODS.importChat]: (input: {
+        command: ChatImportCommand;
+        targetProjectId: ProjectId | null;
+      }) =>
+        observeRpcEffect(
+          MESH_WS_METHODS.importChat,
+          Effect.gen(function* () {
+            // Resolution-only RPC for now: scan the host CLI registries on
+            // disk for skills + MCP servers that the imported transcript
+            // references, mark them enabled vs missing, and echo back a
+            // synthetic preview thread id. Persistence as a real
+            // orchestration thread is a follow-up that needs careful
+            // event-store integration alongside the existing fork flow.
+            const parsed = input.command.parsed;
+
+            const snapshot = yield* Effect.tryPromise({
+              try: () => readInstalledSnapshot(),
+              catch: (cause) =>
+                toMeshRpcError("Failed to scan host-CLI registries for installed skills.", cause),
+            });
+
+            const resolution = resolveReferences(
+              {
+                skillIds: parsed.references.skillIds.slice(),
+                mcpServerIds: parsed.references.mcpServerIds.slice(),
+              },
+              snapshot,
+            );
+
+            const previewThreadId = ThreadId.make(crypto.randomUUID());
+            const targetProjectId = input.targetProjectId ?? ProjectId.make(crypto.randomUUID());
+
+            return {
+              targetThreadId: previewThreadId,
+              importedMessageCount: parsed.messages.length,
+              hostedOnDeviceId: context.deviceId,
+              targetProjectId,
+              skills: resolution.skills,
+              mcpServers: resolution.mcpServers,
+            } as const;
+          }).pipe(
+            Effect.mapError((cause) =>
+              Schema.is(MeshRpcError)(cause)
+                ? cause
+                : toMeshRpcError("Failed to import chat.", cause),
             ),
           ),
           { "rpc.aggregate": "mesh" },

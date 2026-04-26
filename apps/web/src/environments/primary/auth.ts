@@ -144,7 +144,14 @@ async function waitForAuthenticatedSessionAfterBootstrap(): Promise<AuthSessionS
     }
 
     if (Date.now() - startedAt >= AUTH_SESSION_ESTABLISH_TIMEOUT_MS) {
-      throw new Error("Timed out waiting for authenticated session after bootstrap.");
+      throw new Error(
+        [
+          "Could not establish a server-node session.",
+          "The server accepted the bootstrap token, but the session cookie never came back.",
+          "Common causes: the configured server URL points at the wrong host, a proxy is stripping cookies, or the server is up but stuck mid-boot.",
+          "Try: open Settings → Connections, re-check the server URL, then quit and restart V3.",
+        ].join("\n"),
+      );
     }
 
     await waitForBootstrapRetry(AUTH_SESSION_ESTABLISH_STEP_MS);

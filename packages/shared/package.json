@@ -75,6 +75,10 @@
     "./googleTokens": {
       "types": "./src/googleTokens.ts",
       "import": "./src/googleTokens.ts"
+    },
+    "./chatImport": {
+      "types": "./src/chatImport/index.ts",
+      "import": "./src/chatImport/index.ts"
     }
   },
   "scripts": {

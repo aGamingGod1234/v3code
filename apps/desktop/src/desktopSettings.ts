@@ -8,12 +8,16 @@ export interface DesktopSettings {
   readonly serverExposureMode: DesktopServerExposureMode;
   readonly updateChannel: DesktopUpdateChannel;
   readonly updateChannelConfiguredByUser: boolean;
+  readonly onboardingCompleted: boolean;
+  readonly tourCompleted: boolean;
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   serverExposureMode: "local-only",
   updateChannel: "latest",
   updateChannelConfiguredByUser: false,
+  onboardingCompleted: false,
+  tourCompleted: false,
 };
 
 export function resolveDefaultDesktopSettings(appVersion: string): DesktopSettings {
@@ -46,6 +50,19 @@ export function setDesktopUpdateChannelPreference(
   };
 }
 
+export function markDesktopOnboardingCompleted(settings: DesktopSettings): DesktopSettings {
+  return settings.onboardingCompleted ? settings : { ...settings, onboardingCompleted: true };
+}
+
+export function markDesktopTourCompleted(
+  settings: DesktopSettings,
+  completed: boolean,
+): DesktopSettings {
+  return settings.tourCompleted === completed
+    ? settings
+    : { ...settings, tourCompleted: completed };
+}
+
 export function readDesktopSettings(settingsPath: string, appVersion: string): DesktopSettings {
   const defaultSettings = resolveDefaultDesktopSettings(appVersion);
 
@@ -59,6 +76,8 @@ export function readDesktopSettings(settingsPath: string, appVersion: string): D
       readonly serverExposureMode?: unknown;
       readonly updateChannel?: unknown;
       readonly updateChannelConfiguredByUser?: unknown;
+      readonly onboardingCompleted?: unknown;
+      readonly tourCompleted?: unknown;
     };
     const parsedUpdateChannel =
       parsed.updateChannel === "nightly" || parsed.updateChannel === "latest"
@@ -77,6 +96,8 @@ export function readDesktopSettings(settingsPath: string, appVersion: string): D
           ? parsedUpdateChannel
           : defaultSettings.updateChannel,
       updateChannelConfiguredByUser,
+      onboardingCompleted: parsed.onboardingCompleted === true,
+      tourCompleted: parsed.tourCompleted === true,
     };
   } catch {
     return defaultSettings;

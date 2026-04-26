@@ -11,6 +11,13 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
 export function PairingPendingSurface() {
+  const slowState = useSlowOperationState({ slowAtMs: 5_000, stuckAtMs: 15_000 });
+  const message =
+    slowState === "stuck"
+      ? "This is taking longer than usual. Reload the app, then check that the server is reachable from this device."
+      : slowState === "slow"
+        ? "Still validating — networks vary. Hang tight."
+        : "Validating the pairing link and preparing your session.";
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
       <div className="pointer-events-none absolute inset-0 opacity-80">
@@ -26,12 +33,43 @@ export function PairingPendingSurface() {
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
           Pairing with this environment
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Validating the pairing link and preparing your session.
-        </p>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{message}</p>
+        {slowState === "stuck" ? (
+          <div className="mt-5">
+            <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+              Reload app
+            </Button>
+          </div>
+        ) : null}
       </section>
     </div>
   );
+}
+
+function useSlowOperationState({
+  slowAtMs,
+  stuckAtMs,
+  active = true,
+}: {
+  readonly slowAtMs: number;
+  readonly stuckAtMs: number;
+  readonly active?: boolean;
+}): "fresh" | "slow" | "stuck" {
+  const [phase, setPhase] = useState<"fresh" | "slow" | "stuck">("fresh");
+  useEffect(() => {
+    if (!active) {
+      setPhase("fresh");
+      return;
+    }
+    setPhase("fresh");
+    const slowTimer = window.setTimeout(() => setPhase("slow"), slowAtMs);
+    const stuckTimer = window.setTimeout(() => setPhase("stuck"), stuckAtMs);
+    return () => {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(stuckTimer);
+    };
+  }, [active, slowAtMs, stuckAtMs]);
+  return phase;
 }
 
 export function PairingRouteSurface({
@@ -48,6 +86,11 @@ export function PairingRouteSurface({
   const [errorMessage, setErrorMessage] = useState(initialErrorMessage ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const autoSubmitAttemptedRef = useRef(false);
+  const submitSlowState = useSlowOperationState({
+    slowAtMs: 6_000,
+    stuckAtMs: 15_000,
+    active: isSubmitting,
+  });
 
   const submitCredential = useCallback(
     async (nextCredential: string) => {
@@ -133,6 +176,18 @@ export function PairingRouteSurface({
           {errorMessage ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/6 px-3 py-2 text-sm text-destructive">
               {errorMessage}
+            </div>
+          ) : null}
+
+          {isSubmitting && submitSlowState !== "fresh" ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+            >
+              {submitSlowState === "stuck"
+                ? "Still trying — the server isn't responding. The token may be expired or the server URL might be wrong. Try Reload app, then check Settings → Connections."
+                : "Still pairing — networks vary. Hang tight."}
             </div>
           ) : null}
 

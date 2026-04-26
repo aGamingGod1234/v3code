@@ -54,6 +54,7 @@ import {
 import { V3StartupSignInNudge } from "../v3/ui/StartupSignInNudge";
 import { V3DeviceApprovalToast } from "../v3/ui/DeviceApprovalToast";
 import { V3CloudSignInBootstrap } from "../v3/ui/CloudSignInBootstrap";
+import { TourMount } from "../components/tour/TourMount";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -115,6 +116,7 @@ function RootRouteView() {
         <V3StartupSignInNudge />
         <V3DeviceApprovalToast />
         <V3CloudSignInBootstrap />
+        <TourMount />
       </AnchoredToastProvider>
     </ToastProvider>
   );
@@ -136,9 +138,12 @@ function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
           {APP_DISPLAY_NAME}
         </p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          Something went wrong.
+          {classifyErrorTitle(error)}
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{message}</p>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground/80">
+          {classifyErrorHint(error)}
+        </p>
 
         <div className="mt-5 flex flex-wrap gap-2">
           <Button size="sm" onClick={() => reset()}>
@@ -146,6 +151,15 @@ function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
           </Button>
           <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
             Reload app
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              void navigator.clipboard?.writeText(errorDetails(error));
+            }}
+          >
+            Copy details
           </Button>
         </div>
 
@@ -189,6 +203,47 @@ function errorDetails(error: unknown): string {
   } catch {
     return "No additional error details are available.";
   }
+}
+
+// Heuristic classifier: gives the user a more useful title than the
+// generic "Something went wrong." A short list of common boundary
+// errors get tailored copy; everything else falls through to the
+// generic title.
+function classifyErrorTitle(error: unknown): string {
+  const message = errorMessage(error).toLowerCase();
+  if (message.includes("websocket") || message.includes("socket")) {
+    return "Lost connection to the server.";
+  }
+  if (message.includes("timed out") || message.includes("timeout")) {
+    return "The server didn't respond in time.";
+  }
+  if (message.includes("bootstrap")) {
+    return "Could not establish a server-node session.";
+  }
+  if (message.includes("auth") || message.includes("session") || message.includes("401")) {
+    return "Your session expired or was rejected.";
+  }
+  if (message.includes("network")) {
+    return "Network error.";
+  }
+  return "Something unexpected happened.";
+}
+
+function classifyErrorHint(error: unknown): string {
+  const message = errorMessage(error).toLowerCase();
+  if (message.includes("websocket") || message.includes("socket")) {
+    return "Check that the server node is running and that no proxy is blocking WebSocket upgrades. Reload to reconnect.";
+  }
+  if (message.includes("bootstrap")) {
+    return "Settings → Connections → re-check the server URL, then quit and restart V3.";
+  }
+  if (message.includes("auth") || message.includes("session") || message.includes("401")) {
+    return "Sign in again from the launcher. If it keeps failing, the server's allow-list may not include your account.";
+  }
+  if (message.includes("timed out") || message.includes("timeout")) {
+    return "The server is up but slow to respond. Try again; if it persists, check server logs.";
+  }
+  return "If this keeps happening, copy the details below and share them with whoever set up your server node.";
 }
 
 function ServerStateBootstrap() {
