@@ -77,9 +77,9 @@ export function TourProvider({ active }: { readonly active: boolean }) {
       }
       attempts += 1;
       if (attempts > 20) {
-        // eslint-disable-next-line no-console
         console.warn(`Tour: target [data-tour-id="${targetSelector}"] not found after retries.`);
         setTarget(null);
+        setStepIndex((index) => Math.min(index + 1, TOUR_STEPS.length - 1));
         return;
       }
       window.setTimeout(tryFind, 50);

@@ -297,9 +297,27 @@ function ResolutionPanel({
 
   const copyMissing = (items: ReadonlyArray<{ readonly id: string }>) => {
     const text = items.map((i) => i.id).join("\n");
-    void navigator.clipboard.writeText(text).then(() => {
-      toastManager.add({ type: "success", title: "Copied", description: `${items.length} ids` });
-    });
+    const writeText = navigator.clipboard?.writeText;
+    if (!writeText) {
+      toastManager.add({
+        type: "error",
+        title: "Clipboard unavailable",
+        description: "Copy isn't supported in this browser context.",
+      });
+      return;
+    }
+    void writeText
+      .call(navigator.clipboard, text)
+      .then(() => {
+        toastManager.add({ type: "success", title: "Copied", description: `${items.length} ids` });
+      })
+      .catch(() => {
+        toastManager.add({
+          type: "error",
+          title: "Copy failed",
+          description: "Couldn't write to clipboard. Copy manually from the list.",
+        });
+      });
   };
 
   return (

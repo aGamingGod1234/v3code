@@ -32,6 +32,7 @@ const MCP_TOOL_NAME_PATTERN = /mcp__([a-zA-Z0-9_-]+)__[a-zA-Z0-9_-]+/g;
 
 const extractSkillIdsFromContent = (content: string): ReadonlyArray<string> => {
   const out: string[] = [];
+  SKILL_ARG_PATTERN.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = SKILL_ARG_PATTERN.exec(content)) !== null) {
     if (match[1]) out.push(match[1]);
@@ -41,6 +42,7 @@ const extractSkillIdsFromContent = (content: string): ReadonlyArray<string> => {
 
 const extractMcpServerIdsFromContent = (content: string): ReadonlyArray<string> => {
   const out: string[] = [];
+  MCP_TOOL_NAME_PATTERN.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = MCP_TOOL_NAME_PATTERN.exec(content)) !== null) {
     if (match[1]) out.push(match[1]);

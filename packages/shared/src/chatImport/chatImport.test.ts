@@ -115,6 +115,15 @@ describe("parseCodexSession", () => {
     const parsed = parseCodexSession(`${codexFixture}\nnot-json\n${"{}"}\n`);
     expect(parsed.messages.length).toBeGreaterThan(0);
   });
+
+  it("extracts references consistently across repeated parses", () => {
+    const first = parseCodexSession(codexFixture);
+    const second = parseCodexSession(codexFixture);
+    expect(first.references.skillIds).toContain("smart_search");
+    expect(second.references.skillIds).toContain("smart_search");
+    expect(first.references.mcpServerIds).toContain("plugin_claude-mem_mcp-search");
+    expect(second.references.mcpServerIds).toContain("plugin_claude-mem_mcp-search");
+  });
 });
 
 describe("parseClaudeSession", () => {

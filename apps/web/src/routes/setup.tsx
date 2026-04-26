@@ -117,6 +117,7 @@ function V3SetupWizardPage() {
               <li
                 key={step}
                 aria-current={isCurrent ? "step" : undefined}
+                aria-label={`${STEP_TITLES[step]} (${index + 1} of ${STEP_ORDER.length})${isCurrent ? ", current step" : isComplete ? ", complete" : ""}`}
                 title={STEP_TITLES[step]}
                 className={
                   isCurrent
