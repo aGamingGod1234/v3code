@@ -81,6 +81,7 @@ import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runti
 import { resolveDesktopAppBranding } from "./appBranding.ts";
 import { getSharedV3GoogleAuthFlow } from "./v3GoogleAuthFlow.ts";
 import { registerV3SetupWizardIpc } from "./v3SetupWizard.ts";
+import { registerV3ChatImportIpc } from "./v3ChatImport.ts";
 
 syncShellEnvironment();
 
@@ -1776,6 +1777,8 @@ function registerIpcHandlers(): void {
       return result.filePaths[0] ?? null;
     },
   });
+
+  registerV3ChatImportIpc();
 
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
   ipcMain.handle(PICK_FOLDER_CHANNEL, async (_event, rawOptions: unknown) => {

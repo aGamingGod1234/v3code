@@ -39,6 +39,8 @@ const V3_WIZARD_PROBE_PATHS_CHANNEL = "desktop:v3-wizard-probe-paths";
 const V3_WIZARD_PICK_DATA_DIRECTORY_CHANNEL = "desktop:v3-wizard-pick-data-directory";
 const V3_WIZARD_WRITE_CONFIG_CHANNEL = "desktop:v3-wizard-write-config";
 const V3_WIZARD_GENERATE_KEY_CHANNEL = "desktop:v3-wizard-generate-key";
+const V3_CHAT_IMPORT_LIST_TRANSCRIPTS_CHANNEL = "desktop:v3-chat-import-list-transcripts";
+const V3_CHAT_IMPORT_READ_TRANSCRIPT_CHANNEL = "desktop:v3-chat-import-read-transcript";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getAppBranding: () => {
@@ -113,5 +115,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(V3_WIZARD_PICK_DATA_DIRECTORY_CHANNEL, options),
     writeServerNodeConfig: (input) => ipcRenderer.invoke(V3_WIZARD_WRITE_CONFIG_CHANNEL, input),
     generateEncryptionKey: () => ipcRenderer.invoke(V3_WIZARD_GENERATE_KEY_CHANNEL),
+  },
+  chatImport: {
+    listLocalTranscripts: () => ipcRenderer.invoke(V3_CHAT_IMPORT_LIST_TRANSCRIPTS_CHANNEL),
+    readTranscript: (path) => ipcRenderer.invoke(V3_CHAT_IMPORT_READ_TRANSCRIPT_CHANNEL, path),
   },
 } satisfies DesktopBridge);
