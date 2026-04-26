@@ -1202,8 +1202,8 @@ export function ConnectionsSettings() {
                         </AlertDialogTitle>
                         <AlertDialogDescription>
                           {pendingDesktopServerExposureMode === "network-accessible"
-                            ? "T3 Code will restart to expose this environment over the network."
-                            : "T3 Code will restart and limit this environment back to this machine."}
+                            ? "V3 Code will restart to expose this environment over the network."
+                            : "V3 Code will restart and limit this environment back to this machine."}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -1330,7 +1330,7 @@ export function ConnectionsSettings() {
         />
         <SettingsRow
           title="Server node URL override"
-          description="Manual override wins over Drive discovery, desktop bootstrap, and env defaults when choosing the primary server target."
+          description="Force this client to talk to a specific V3 server node instead of the one auto-discovered from Drive App Data, the desktop bootstrap, or env defaults. Useful when testing a staging server or routing through a custom hostname; leave blank to let V3 pick automatically."
           status={
             <div className="space-y-1 text-xs text-muted-foreground">
               {driveDiscoveredServerUrl ? (

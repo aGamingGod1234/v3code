@@ -557,10 +557,15 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     Request: Schema.Void,
     Result: ProjectionCountsRowSchema,
     execute: () =>
+      // Postgres returns COUNT(*) as bigint which the `pg` driver
+      // surfaces as a JS string; SQLite returns a plain JS number.
+      // `CAST(... AS INTEGER)` produces a JS-safe number on both
+      // engines so the Schema.Number decoder at
+      // `ProjectionCountsRowSchema` doesn't explode on Postgres.
       sql`
         SELECT
-          (SELECT COUNT(*) FROM projection_projects) AS "projectCount",
-          (SELECT COUNT(*) FROM projection_threads) AS "threadCount"
+          (SELECT CAST(COUNT(*) AS INTEGER) FROM projection_projects) AS "projectCount",
+          (SELECT CAST(COUNT(*) AS INTEGER) FROM projection_threads) AS "threadCount"
       `,
   });
 
@@ -1631,6 +1636,49 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       });
     });
 
+  const ThreadForkLineageRowSchema = Schema.Struct({
+    parentChatId: ThreadId,
+    parentDeviceId: Schema.NullOr(Schema.String),
+    forkedFromStreamVersion: NonNegativeInt,
+    forkedAt: IsoDateTime,
+  });
+
+  const getThreadForkLineageRow = SqlSchema.findOneOption({
+    Request: ThreadIdLookupInput,
+    Result: ThreadForkLineageRowSchema,
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          parent_chat_id AS "parentChatId",
+          parent_device_id AS "parentDeviceId",
+          forked_from_stream_version AS "forkedFromStreamVersion",
+          forked_at AS "forkedAt"
+        FROM projection_threads
+        WHERE thread_id = ${threadId}
+          AND parent_chat_id IS NOT NULL
+          AND forked_at IS NOT NULL
+          AND forked_from_stream_version IS NOT NULL
+      `,
+  });
+
+  const getThreadForkLineage: ProjectionSnapshotQueryShape["getThreadForkLineage"] = (threadId) =>
+    getThreadForkLineageRow({ threadId }).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.getThreadForkLineage:query",
+          "ProjectionSnapshotQuery.getThreadForkLineage:decodeRow",
+        ),
+      ),
+      Effect.map((opt) =>
+        Option.map(opt, (row) => ({
+          parentChatId: row.parentChatId,
+          parentDeviceId: row.parentDeviceId as never,
+          forkedFromStreamVersion: row.forkedFromStreamVersion,
+          forkedAt: row.forkedAt,
+        })),
+      ),
+    );
+
   return {
     getSnapshot,
     getShellSnapshot,
@@ -1642,6 +1690,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getThreadShellById,
     getThreadDetailById,
     getThreadMeshSnapshot,
+    getThreadForkLineage,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

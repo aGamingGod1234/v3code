@@ -61,6 +61,11 @@ path = "/.well-known/t3/environment"
 protocol = "http"
 
 [[vm]]
+# Spec §7.2 caps a single Cloud env container at 4 GB RAM. The server
+# node process + Postgres + at least one concurrent container needs
+# ~8 GB of headroom, so we size the Machine at 8 GB by default.
+# Operators who don't enable cloud_env can shrink this via
+# `fly scale memory 2048`.
 cpu_kind = "shared"
-cpus = 2
-memory_mb = 2048
+cpus = 4
+memory_mb = 8192

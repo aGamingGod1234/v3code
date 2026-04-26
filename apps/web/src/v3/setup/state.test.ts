@@ -6,6 +6,7 @@ import {
   isExposureReady,
   isPreflightReady,
   reduceV3SetupWizard,
+  STEP_TITLES,
 } from "./state";
 
 describe("reduceV3SetupWizard", () => {
@@ -119,6 +120,12 @@ describe("isExposureReady", () => {
       mode: "tailnet",
     });
     expect(isExposureReady(tailnet)).toBe(true);
+  });
+});
+
+describe("STEP_TITLES", () => {
+  it("labels the preflight step 'System checks'", () => {
+    expect(STEP_TITLES.preflight).toBe("System checks");
   });
 });
 

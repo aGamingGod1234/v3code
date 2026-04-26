@@ -13,6 +13,10 @@ const jsonResponse = (status: number, body: unknown): Response =>
     headers: { "Content-Type": "application/json" },
   });
 
+const throwingFetch: typeof fetch = async () => {
+  throw new Error("offline");
+};
+
 describe("parseRepoSpec", () => {
   it("parses owner/repo shorthand", () => {
     expect(parseRepoSpec("aGamingGod1234/v3code")).toEqual({
@@ -132,10 +136,9 @@ describe("listAuthenticatedUserRepos", () => {
   });
 
   it("raises GitHubApiError(network) when fetch throws", async () => {
-    const fetchImpl: typeof fetch = async () => {
-      throw new Error("offline");
-    };
-    await expect(listAuthenticatedUserRepos({ token: "x", fetchImpl })).rejects.toMatchObject({
+    await expect(
+      listAuthenticatedUserRepos({ token: "x", fetchImpl: throwingFetch }),
+    ).rejects.toMatchObject({
       kind: "network",
     });
   });

@@ -1,10 +1,16 @@
+import * as Fs from "node:fs/promises";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { NodeHttpServer } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import { Data, Effect, FileSystem, Layer, Path } from "effect";
 import { HttpClient, HttpRouter } from "effect/unstable/http";
 
 import { makeMockUpdateRouteLayer } from "./mock-update-server.ts";
+
+class SymlinkSetupError extends Data.TaggedError("SymlinkSetupError")<{
+  readonly cause: unknown;
+}> {}
 
 const withMockUpdateServer = <A, E, R>(rootRealPath: string, effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -83,17 +89,28 @@ it.layer(NodeServices.layer)("mock-update-server", (it) => {
       const rootRealPath = yield* fileSystem.realPath(root);
       const outsideFile = path.join(outside, "outside.yml");
       const linksDir = path.join(root, "links");
-      const symlinkPath = path.join(linksDir, "outside.yml");
+      const symlinkPath =
+        process.platform === "win32"
+          ? path.join(root, "outside-link")
+          : path.join(linksDir, "outside.yml");
 
       yield* fileSystem.writeFileString(outsideFile, "version: outside\n");
       yield* fileSystem.makeDirectory(linksDir, { recursive: true });
-      yield* fileSystem.symlink(outsideFile, symlinkPath);
+      yield* Effect.tryPromise({
+        try: () =>
+          process.platform === "win32"
+            ? Fs.symlink(outside, symlinkPath, "junction")
+            : Fs.symlink(outsideFile, symlinkPath, "file"),
+        catch: (cause) => new SymlinkSetupError({ cause }),
+      });
 
       yield* withMockUpdateServer(
         rootRealPath,
         Effect.gen(function* () {
           const client = yield* HttpClient.HttpClient;
-          const response = yield* client.get("/links/outside.yml");
+          const response = yield* client.get(
+            process.platform === "win32" ? "/outside-link/outside.yml" : "/links/outside.yml",
+          );
 
           assert.equal(response.status, 404);
           assert.equal(yield* response.text, "Not Found");

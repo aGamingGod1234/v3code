@@ -68,7 +68,10 @@ export function detectChatImportFormat(text: string): DetectionResult | null {
 
   // Claude Code: envelopes have `type: "user" | "assistant" | "tool_use" | ...`
   // at the top level, plus a `message` field for user/assistant.
-  if (typeof env.type === "string" && ["user", "assistant", "summary", "system"].includes(env.type)) {
+  if (
+    typeof env.type === "string" &&
+    ["user", "assistant", "summary", "system"].includes(env.type)
+  ) {
     return {
       format: "claude",
       confidence: "high",

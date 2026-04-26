@@ -67,12 +67,7 @@ export function TourSpotlight({ target }: { readonly target: Element | null }) {
           ) : null}
         </mask>
       </defs>
-      <rect
-        width="100%"
-        height="100%"
-        fill="rgba(0, 0, 0, 0.55)"
-        mask="url(#tour-cutout)"
-      />
+      <rect width="100%" height="100%" fill="rgba(0, 0, 0, 0.55)" mask="url(#tour-cutout)" />
       {rect ? (
         <rect
           x={Math.max(0, rect.left)}

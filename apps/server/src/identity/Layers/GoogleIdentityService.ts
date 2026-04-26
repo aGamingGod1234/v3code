@@ -105,7 +105,7 @@ export const makeGoogleIdentityServiceWith = (opts: {
 // When unset, the service exists but every verify call fails fast with a
 // "not-configured" error — this keeps the layer composable in
 // environments that haven't enabled Google sign-in yet (Phase 1 bootstrap).
-export const makeGoogleIdentityService = Effect.gen(function* () {
+export const makeGoogleIdentityService = Effect.sync(() => {
   const clientId = process.env.V3CODE_GOOGLE_CLIENT_ID;
   if (clientId === undefined || clientId.length === 0) {
     const notConfigured: GoogleIdentityServiceShape = {

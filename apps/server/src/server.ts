@@ -70,6 +70,7 @@ import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import {
   approveDeviceRouteLayer,
   githubAuthorizeRouteLayer,
+  githubBootstrapRouteLayer,
   githubCallbackRouteLayer,
   githubConfigRouteLayer,
   githubDisconnectRouteLayer,
@@ -90,9 +91,16 @@ import {
   adminSessionsRouteLayer,
   adminSummaryRouteLayer,
 } from "./admin/http.ts";
+import {
+  adminFcmConfigDeleteRouteLayer,
+  adminFcmConfigGetRouteLayer,
+  adminFcmConfigUploadRouteLayer,
+} from "./admin/fcmPushHttp.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
+import { DevicePushTokenRepositoryLive } from "./identity/Layers/DevicePushTokenRepository.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { FcmPushConfigRepositoryLive } from "./identity/Layers/FcmPushConfigRepository.ts";
 import { GitHubIdentityServiceLive } from "./identity/Layers/GitHubIdentityService.ts";
 import { GoogleTokenHandoffStoreLive } from "./identity/Layers/GoogleTokenHandoffStore.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
@@ -110,6 +118,7 @@ import { cloudPreviewProxyRouteLayer } from "./cloud/previewProxy.ts";
 import { CloudLifecycleLive } from "./cloud/Layers/CloudLifecycle.ts";
 import { ChatSubscriptionManagerLive } from "./mesh/Layers/ChatSubscriptionManager.ts";
 import { DeviceRegistryLive } from "./mesh/Layers/DeviceRegistry.ts";
+import { FcmPushServiceLive } from "./mesh/Layers/FcmPushService.ts";
 import { MeshPublisherLive } from "./mesh/Layers/MeshPublisher.ts";
 import { PromptRouterLive } from "./mesh/Layers/PromptRouter.ts";
 import { PresenceBroadcasterLive } from "./mesh/Layers/PresenceBroadcaster.ts";
@@ -284,6 +293,11 @@ const V3IdentityLayerLive = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
   DeviceSessionRepositoryLive,
+  // V3 Phase 9 — mobile push tokens + FCM service account config live
+  // alongside the other V3 identity repositories so the mesh handlers
+  // and admin routes share a single source of truth.
+  DevicePushTokenRepositoryLive,
+  FcmPushConfigRepositoryLive,
   GoogleIdentityServiceLive,
   GoogleTokenHandoffStoreLive,
   // V3 Phase 1e — GitHub identity for "Connect GitHub" in settings and
@@ -306,7 +320,15 @@ const MeshLayerLive = Layer.mergeAll(
   PromptRouterLive,
   MeshEventIngestionLive,
   MeshPublisherLive.pipe(Layer.provide(ChatSubscriptionManagerLive)),
-).pipe(Layer.provideMerge(OrchestrationLayerLive), Layer.provideMerge(WorkspacePathsLive));
+  // V3 Phase 9 — FCM dispatch depends on the V3 identity repositories
+  // (push token repo + config repo). `V3IdentityLayerLive` is provided
+  // below via `provideMerge`, so the FCM layer inherits both.
+  FcmPushServiceLive,
+).pipe(
+  Layer.provideMerge(OrchestrationLayerLive),
+  Layer.provideMerge(V3IdentityLayerLive),
+  Layer.provideMerge(WorkspacePathsLive),
+);
 
 const DeviceApprovalLayerLive = DeviceApprovalServiceLive.pipe(
   Layer.provideMerge(V3IdentityLayerLive),
@@ -366,8 +388,14 @@ export const makeRoutesLayer = Layer.mergeAll(
   adminLogsRouteLayer,
   adminSessionsRouteLayer,
   adminSummaryRouteLayer,
+  // V3 Phase 9 — FCM service account management endpoints for the
+  // admin panel's "Mobile Push" tab.
+  adminFcmConfigGetRouteLayer,
+  adminFcmConfigUploadRouteLayer,
+  adminFcmConfigDeleteRouteLayer,
   approveDeviceRouteLayer,
   githubAuthorizeRouteLayer,
+  githubBootstrapRouteLayer,
   githubCallbackRouteLayer,
   githubConfigRouteLayer,
   githubDisconnectRouteLayer,

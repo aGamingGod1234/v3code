@@ -31,7 +31,8 @@ export function parseChatImport(
     return { ok: false, error: { _tag: "parse-error", message: "Transcript is empty." } };
   }
 
-  const resolvedFormat: ChatImportFormat | null = format ?? detectChatImportFormat(text)?.format ?? null;
+  const resolvedFormat: ChatImportFormat | null =
+    format ?? detectChatImportFormat(text)?.format ?? null;
   if (resolvedFormat === null) {
     return {
       ok: false,

@@ -68,7 +68,9 @@ const readPreview = async (path: string): Promise<string | null> => {
   }
 };
 
-const collectInRoot = async (root: CandidateRoot): Promise<ReadonlyArray<DesktopTranscriptEntry>> => {
+const collectInRoot = async (
+  root: CandidateRoot,
+): Promise<ReadonlyArray<DesktopTranscriptEntry>> => {
   const out: DesktopTranscriptEntry[] = [];
 
   if (root.recurseOneLevel) {

@@ -218,6 +218,17 @@ describe("captureDriveAppDataSnapshot", () => {
   it("logs and ignores Drive read failures so sign-in can continue", async () => {
     const warnings: string[] = [];
 
+    await captureDriveAppDataSnapshot({
+      accessToken: "token",
+      thisDevice: LAPTOP,
+      now: () => new Date("2026-04-18T23:59:00.000Z"),
+      logger: silentLogger,
+      client: makeStubClient({
+        read: async () => CONFIG_WITH_SERVER,
+        write: async () => undefined,
+      }),
+    });
+
     const snapshot = await captureDriveAppDataSnapshot({
       accessToken: "token",
       thisDevice: LAPTOP,
@@ -235,14 +246,47 @@ describe("captureDriveAppDataSnapshot", () => {
     });
 
     expect(snapshot).toEqual({
-      serverUrl: null,
-      devices: [],
-      blobExists: false,
+      serverUrl: "https://v3.agaminggod.com",
+      devices: [DESKTOP, LAPTOP],
+      blobExists: true,
       capturedAt: FROZEN_ISO,
       error: "unauthorized",
     });
     expect(warnings[0]).toContain("unauthorized");
     expect(getV3DriveAppDataSnapshot()).toEqual(snapshot);
+  });
+
+  it("preserves the last good snapshot when no fresh Google access token is available", async () => {
+    await captureDriveAppDataSnapshot({
+      accessToken: "token",
+      thisDevice: LAPTOP,
+      now: () => new Date("2026-04-18T23:59:00.000Z"),
+      logger: silentLogger,
+      client: makeStubClient({
+        read: async () => CONFIG_WITH_SERVER,
+        write: async () => undefined,
+      }),
+    });
+
+    const snapshot = await captureDriveAppDataSnapshot({
+      accessToken: "",
+      thisDevice: LAPTOP,
+      now: FROZEN_NOW,
+      logger: silentLogger,
+      client: makeStubClient({
+        read: async () => {
+          throw new Error("read should not be called when accessToken is absent");
+        },
+      }),
+    });
+
+    expect(snapshot).toEqual({
+      serverUrl: "https://v3.agaminggod.com",
+      devices: [DESKTOP, LAPTOP],
+      blobExists: true,
+      capturedAt: FROZEN_ISO,
+      error: "unauthorized",
+    });
   });
 
   it("keeps the last good snapshot when Drive writes fail", async () => {

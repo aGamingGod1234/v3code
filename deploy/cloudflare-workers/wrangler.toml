@@ -1,0 +1,87 @@
+# V3 Code — Cloudflare Workers deploy template.
+#
+# Spec §10.2c. This template hosts a server-node on Cloudflare's
+# serverless stack. Cloud env chats require the Containers public
+# beta (2026) and are considered experimental — see README.md for
+# what works today vs what's pending the beta surface going GA.
+
+name = "v3-code"
+main = "./entrypoint.ts"
+compatibility_date = "2026-03-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+V3CODE_MODE = "server-node"
+V3CODE_CLOUDFLARE_DEPLOYMENT = "1"
+V3CODE_STARTUP_PRESENTATION = "headless"
+V3CODE_NO_BROWSER = "1"
+V3CODE_GITHUB_OAUTH_SCOPES = "read:user repo"
+
+# ---------------------------------------------------------------------
+# Durable Objects — per-session mesh state.
+# ---------------------------------------------------------------------
+# Each signed-in device pins to a single DO instance keyed by its
+# session cookie. The DO holds the WebSocket, the subscription PubSub,
+# and the presence timer. Durable Objects outlive Worker invocations,
+# which is what lets chat streams survive regional Worker restarts.
+[[durable_objects.bindings]]
+name = "V3_MESH_SESSION"
+class_name = "MeshSessionDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["MeshSessionDurableObject"]
+
+# ---------------------------------------------------------------------
+# D1 — SQLite-compatible database. V3's persistence layer's SQLite
+# migration series applies to D1 as-is.
+# ---------------------------------------------------------------------
+[[d1_databases]]
+binding = "V3_DB"
+database_name = "v3-server"
+# `database_id` is filled in by `scripts/deploy.sh` on first create.
+database_id = ""
+migrations_dir = "./migrations"
+
+# ---------------------------------------------------------------------
+# R2 — attachment + worktree blob storage.
+# ---------------------------------------------------------------------
+[[r2_buckets]]
+binding = "V3_ATTACHMENTS"
+bucket_name = "v3-attachments"
+
+# ---------------------------------------------------------------------
+# Containers — Cloud env per-chat sandboxes. Public beta 2026.
+# ---------------------------------------------------------------------
+# Requires `cloud-env` image published to a registry Cloudflare can
+# pull from. `.github/workflows/publish-cloud-env.yml` pushes this
+# to GHCR on every tagged release.
+[[containers]]
+name = "v3_cloud_env"
+image = "ghcr.io/v3-code/cloud-env:latest"
+instances = 0 # lazy-start: spin up per chat, kill on end.
+max_instances = 10 # spec §7.2 default; raise via wrangler deploy.
+
+# Resource limits (spec §7.2 defaults). Cloudflare's Containers beta
+# accepts MB for memory and millicores for CPU.
+[containers.limits]
+cpu = 2000
+memory_mb = 4096
+disk_mb = 20480
+max_runtime_hours = 720
+
+# ---------------------------------------------------------------------
+# Observability
+# ---------------------------------------------------------------------
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
+# ---------------------------------------------------------------------
+# Triggers
+# ---------------------------------------------------------------------
+# Health check cron: pokes the container-monitor loop every minute so
+# §7.4 container reaping stays aligned with the self-host default.
+[triggers]
+crons = ["*/1 * * * *"]

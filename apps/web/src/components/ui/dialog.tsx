@@ -24,7 +24,11 @@ function DialogBackdrop({ className, ...props }: DialogPrimitive.Backdrop.Props)
   return (
     <DialogPrimitive.Backdrop
       className={cn(
-        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
+        // Bumped from z-50 to z-[60] so settings-shell rows (which use z-50
+        // for sticky headers) can never paint above the modal backdrop.
+        // Backdrop opacity raised so the dialog reads as clearly modal
+        // instead of looking like an inline panel stacked on the page.
+        "fixed inset-0 z-[60] bg-black/55 backdrop-blur-sm transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
         className,
       )}
       data-slot="dialog-backdrop"
@@ -37,7 +41,8 @@ function DialogViewport({ className, ...props }: DialogPrimitive.Viewport.Props)
   return (
     <DialogPrimitive.Viewport
       className={cn(
-        "fixed inset-0 z-50 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4",
+        // Must sit above DialogBackdrop (z-[60]).
+        "fixed inset-0 z-[61] grid grid-rows-[1fr_auto_3fr] justify-items-center p-4",
         className,
       )}
       data-slot="dialog-viewport"

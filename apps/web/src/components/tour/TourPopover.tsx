@@ -22,8 +22,7 @@ const placementFor = (target: Element | null): Position => {
   const rect = target.getBoundingClientRect();
   const spaceBelow = window.innerHeight - rect.bottom;
   const placement = spaceBelow >= 220 ? "bottom" : "top";
-  const top =
-    placement === "bottom" ? rect.bottom + POPOVER_GAP : rect.top - POPOVER_GAP - 220;
+  const top = placement === "bottom" ? rect.bottom + POPOVER_GAP : rect.top - POPOVER_GAP - 220;
   const desiredLeft = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
   const left = Math.max(
     VIEWPORT_PADDING,
@@ -83,10 +82,7 @@ export function TourPopover({
       className="fixed z-[60] rounded-lg border border-border bg-background p-4 shadow-xl"
       style={style}
     >
-      <h2
-        id="tour-popover-title"
-        className="mb-1 text-sm font-semibold text-foreground"
-      >
+      <h2 id="tour-popover-title" className="mb-1 text-sm font-semibold text-foreground">
         {title}
       </h2>
       <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{body}</p>

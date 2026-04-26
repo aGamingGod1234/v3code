@@ -710,10 +710,33 @@ const makeEventStore = Effect.gen(function* () {
       ),
     );
 
+  const readThreadStreamAll: OrchestrationEventStoreShape["readThreadStreamAll"] = (threadId) =>
+    Stream.unwrap(
+      readThreadAllRowsForFork({ threadId: ThreadId.make(threadId) }).pipe(
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "OrchestrationEventStore.readThreadStreamAll:query",
+            "OrchestrationEventStore.readThreadStreamAll:decodeRows",
+          ),
+        ),
+        Effect.flatMap((rows) =>
+          Effect.forEach(rows, (row) =>
+            decodeEvent(row).pipe(
+              Effect.mapError(
+                toPersistenceDecodeError("OrchestrationEventStore.readThreadStreamAll:rowToEvent"),
+              ),
+            ),
+          ),
+        ),
+        Effect.map((events) => Stream.fromIterable(events)),
+      ),
+    );
+
   return {
     append,
     readFromSequence,
     readThreadStream,
+    readThreadStreamAll,
     getLatestThreadStreamVersion,
     readAll: () => readFromSequence(0, Number.MAX_SAFE_INTEGER),
     forkThreadEvents,

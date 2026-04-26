@@ -62,7 +62,10 @@ describe("listLocalTranscripts", () => {
       "ignored",
     );
     const result = await __testing.listLocalTranscripts(home);
-    expect(result.entries.map((e) => Path.basename(e.path)).sort()).toEqual(["s1.jsonl", "s2.jsonl"]);
+    expect(result.entries.map((e) => Path.basename(e.path)).sort()).toEqual([
+      "s1.jsonl",
+      "s2.jsonl",
+    ]);
     expect(result.entries.every((e) => e.format === "claude")).toBe(true);
   });
 

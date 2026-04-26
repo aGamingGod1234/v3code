@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-// Postgres mirror of SQLite migration 031: composite index over
+// Postgres mirror of SQLite migration 032: composite index over
 // (parent_chat_id, forked_at DESC) on projection_threads for the
 // lineage-by-recency query in ProjectionThreads.ts:192. The
 // standalone parent_chat_id index from migration 029 is retained —

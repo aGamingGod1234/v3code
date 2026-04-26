@@ -6,9 +6,12 @@ import { appAtomRegistry } from "./atomRegistry";
 export type WsConnectionUiState = "connected" | "connecting" | "error" | "offline" | "reconnecting";
 export type WsReconnectPhase = "attempting" | "exhausted" | "idle" | "waiting";
 
+// Spec §5.1 prescribes the reconnect curve 1s, 2s, 4s, 8s, 16s, 30s max.
+// The 30s cap keeps users from hanging in minute-long silences when a
+// server node briefly drops (common with Cloudflare Tunnel restarts).
 export const WS_RECONNECT_INITIAL_DELAY_MS = 1_000;
 export const WS_RECONNECT_BACKOFF_FACTOR = 2;
-export const WS_RECONNECT_MAX_DELAY_MS = 64_000;
+export const WS_RECONNECT_MAX_DELAY_MS = 30_000;
 export const WS_RECONNECT_MAX_RETRIES = 7;
 export const WS_RECONNECT_MAX_ATTEMPTS = WS_RECONNECT_MAX_RETRIES + 1;
 

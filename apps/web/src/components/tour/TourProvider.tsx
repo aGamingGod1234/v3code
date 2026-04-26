@@ -34,8 +34,7 @@ const writeTourCompleted = (value: boolean): void => {
   }
 };
 
-export const isTourCompleted = (): boolean =>
-  typeof window !== "undefined" && readTourCompleted();
+export const isTourCompleted = (): boolean => typeof window !== "undefined" && readTourCompleted();
 
 export const resetTour = (): void => {
   if (typeof window !== "undefined") writeTourCompleted(false);
