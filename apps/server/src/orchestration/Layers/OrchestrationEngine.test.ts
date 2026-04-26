@@ -1052,4 +1052,90 @@ describe("OrchestrationEngine", () => {
 
     await system.dispose();
   });
+
+  it("persists an imported chat as thread.created + thread.message-sent events", async () => {
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+    const createdAt = now();
+    const projectId = asProjectId("project-import");
+    const targetThreadId = ThreadId.make("thread-import-target");
+
+    await system.run(
+      engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.make("cmd-project-import-create"),
+        projectId,
+        title: "Project Import",
+        workspaceRoot: "/tmp/project-import",
+        defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+        createdAt,
+      }),
+    );
+
+    await system.run(
+      engine.dispatch({
+        type: "chat.import",
+        commandId: CommandId.make("cmd-chat-import-1"),
+        targetThreadId,
+        targetProjectId: projectId,
+        targetTitle: "Imported transcript",
+        parsed: {
+          format: "codex",
+          title: "Imported transcript",
+          sourceProvider: "codex",
+          sourceModel: "gpt-5-codex",
+          startedAt: null,
+          messages: [
+            { role: "user", content: "hello", toolName: null, toolCallId: null, timestamp: null },
+            { role: "assistant", content: "hi back", toolName: null, toolCallId: null, timestamp: null },
+            { role: "tool", content: "ran ls", toolName: "ls", toolCallId: "call-1", timestamp: null },
+          ],
+          references: { skillIds: [], mcpServerIds: [], modelIds: [] },
+        },
+        createdAt,
+      }),
+    );
+
+    const events = await system.run(
+      Stream.runCollect(engine.readEvents(0)).pipe(
+        Effect.map((chunk): OrchestrationEvent[] => Array.from(chunk)),
+      ),
+    );
+
+    expect(events.map((event) => event.type)).toEqual([
+      "project.created",
+      "thread.created",
+      "thread.message-sent",
+      "thread.message-sent",
+      "thread.message-sent",
+    ]);
+
+    const importEvents = events.filter((event) => event.aggregateId === targetThreadId);
+    expect(importEvents).toHaveLength(4);
+    for (const event of importEvents) {
+      expect(event.metadata.importedFromFormat).toBe("codex");
+    }
+
+    const messageEvents = importEvents.filter((event) => event.type === "thread.message-sent");
+    expect(messageEvents).toHaveLength(3);
+    if (messageEvents[0].type === "thread.message-sent") {
+      expect(messageEvents[0].payload.text).toBe("hello");
+      expect(messageEvents[0].payload.role).toBe("user");
+      expect(messageEvents[0].payload.turnId).toBeNull();
+      expect(messageEvents[0].payload.streaming).toBe(false);
+    }
+    if (messageEvents[2].type === "thread.message-sent") {
+      // Tool messages are folded into assistant role with a [tool: ...] prefix.
+      expect(messageEvents[2].payload.role).toBe("assistant");
+      expect(messageEvents[2].payload.text).toBe("[tool: ls]\nran ls");
+    }
+
+    const readModel = await system.run(engine.getReadModel());
+    const importedThread = readModel.threads.find((thread) => thread.id === targetThreadId);
+    expect(importedThread).toBeDefined();
+    expect(importedThread?.title).toBe("Imported transcript");
+    expect(importedThread?.messages).toHaveLength(3);
+
+    await system.dispose();
+  });
 });
