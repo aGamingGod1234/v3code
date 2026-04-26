@@ -1617,6 +1617,25 @@ export function GeneralSettingsPanel() {
         />
       </SettingsSection>
 
+      <SettingsSection title="Onboarding">
+        <SettingsRow
+          title="Re-run server-node setup"
+          description="Walk through the wizard again to re-write ~/.v3-code-server/config.toml. Use this if the server URL changed, the encryption key was lost, or the allow-list needs broader edits than a quick TOML hand-edit."
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              data-tour-id="rerun-setup-button"
+              onClick={() => {
+                window.location.href = "/setup";
+              }}
+            >
+              Re-run wizard
+            </Button>
+          }
+        />
+      </SettingsSection>
+
       <SettingsSection title="About">
         {isElectron ? (
           <AboutVersionSection />
@@ -1708,6 +1727,10 @@ export function ArchivedThreadsPanel() {
 
   return (
     <SettingsPageContainer>
+      <p className="px-1 pb-2 text-xs text-muted-foreground">
+        Threads you've archived from any project. Archived threads stay synced across devices and
+        can be unarchived at any time. Right-click a thread for more actions.
+      </p>
       {archivedGroups.length === 0 ? (
         <SettingsSection title="Archived threads">
           <Empty className="min-h-88">
