@@ -15,9 +15,9 @@ import { Route as PairRouteImport } from './routes/pair'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
+import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsDevicesRouteImport } from './routes/settings.devices'
-import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
@@ -52,6 +52,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ChatRoute,
 } as any)
+const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
   id: '/general',
   path: '/general',
@@ -60,11 +65,6 @@ const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
 const SettingsDevicesRoute = SettingsDevicesRouteImport.update({
   id: '/devices',
   path: '/devices',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
-  id: '/providers',
-  path: '/providers',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
@@ -231,6 +231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/settings/providers': {
+      id: '/settings/providers'
+      path: '/providers'
+      fullPath: '/settings/providers'
+      preLoaderRoute: typeof SettingsProvidersRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/general': {
       id: '/settings/general'
       path: '/general'
@@ -250,13 +257,6 @@ declare module '@tanstack/react-router' {
       path: '/connections'
       fullPath: '/settings/connections'
       preLoaderRoute: typeof SettingsConnectionsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/providers': {
-      id: '/settings/providers'
-      path: '/providers'
-      fullPath: '/settings/providers'
-      preLoaderRoute: typeof SettingsProvidersRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/archived': {

@@ -9,6 +9,7 @@
     "prepare": "effect-language-service patch",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "routes:generate": "bun x --bun @tanstack/router-cli generate",
     "test": "vitest run --passWithNoTests",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:browser:install": "playwright install --with-deps chromium"
