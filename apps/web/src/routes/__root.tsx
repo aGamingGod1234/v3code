@@ -54,6 +54,7 @@ import {
 import { V3StartupSignInNudge } from "../v3/ui/StartupSignInNudge";
 import { V3DeviceApprovalToast } from "../v3/ui/DeviceApprovalToast";
 import { V3CloudSignInBootstrap } from "../v3/ui/CloudSignInBootstrap";
+import { TourMount } from "../components/tour/TourMount";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -115,6 +116,7 @@ function RootRouteView() {
         <V3StartupSignInNudge />
         <V3DeviceApprovalToast />
         <V3CloudSignInBootstrap />
+        <TourMount />
       </AnchoredToastProvider>
     </ToastProvider>
   );

@@ -1634,6 +1634,23 @@ export function GeneralSettingsPanel() {
             </Button>
           }
         />
+        <SettingsRow
+          title="Re-take guided tour"
+          description="Replay the first-boot walkthrough that highlights providers, chat import, and the setup re-run shortcut."
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => {
+                void import("../tour/TourProvider").then(({ triggerTourRetake }) => {
+                  triggerTourRetake();
+                });
+              }}
+            >
+              Start tour
+            </Button>
+          }
+        />
       </SettingsSection>
 
       <SettingsSection title="About">
