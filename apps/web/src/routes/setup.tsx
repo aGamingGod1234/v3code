@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ExternalLinkIcon, LoaderIcon, ShieldCheckIcon } from "lucide-react";
+import { ExternalLinkIcon, LoaderIcon, ShieldCheckIcon, XIcon, PencilIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -88,6 +88,22 @@ function V3SetupWizardPage() {
               Step {stepIndex + 1} of {STEP_ORDER.length} — {STEP_TITLES[state.step]}
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Exit setup"
+            title="Exit setup — your progress is not saved"
+            onClick={() => {
+              if (
+                state.step === "done" ||
+                window.confirm("Exit setup? Progress on this wizard is not saved.")
+              ) {
+                window.location.href = "/";
+              }
+            }}
+          >
+            <XIcon className="size-4" />
+          </Button>
         </div>
         <ol
           aria-label="Setup progress"
@@ -249,6 +265,18 @@ function PreflightScreen({
   const paths = state.preflight.paths;
   const ready = isPreflightReady(state);
 
+  const blockingReason = useMemo(() => {
+    const reasons: string[] = [];
+    if (docker === "unchecked") reasons.push("Docker hasn't been checked yet.");
+    else if (docker.status !== "ok")
+      reasons.push(`Docker: ${docker.message ?? docker.status}.`);
+    if (port === "unchecked") reasons.push(`Port ${state.exposure.bindPort} hasn't been checked yet.`);
+    else if (!port.available)
+      reasons.push(`Port ${port.port}: ${port.message ?? "in use"}.`);
+    if (paths === "unchecked") reasons.push("Config paths still resolving…");
+    return reasons;
+  }, [docker, port, paths, state.exposure.bindPort]);
+
   const runDocker = useCallback(() => {
     void bridge.probeDocker().then((result) => {
       dispatch({ _tag: "preflight-docker", value: result });
@@ -312,6 +340,18 @@ function PreflightScreen({
         />
         <PreflightRow label="Config path" value={pathsLine} />
       </div>
+      {!ready && blockingReason.length > 0 ? (
+        <Alert variant="warning">
+          <AlertTitle>Can't continue yet</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {blockingReason.map((reason, index) => (
+                <li key={index}>{reason}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <StepNav
         canContinue={ready}
         onBack={() => dispatch({ _tag: "go-to", step: "overview" })}
@@ -597,6 +637,30 @@ function ReviewScreen({
         printed back to you after this step, so save it somewhere safe if you want to migrate the
         server elsewhere.
       </p>
+      <div className="flex flex-wrap gap-2 text-xs">
+        <span className="text-muted-foreground">Edit:</span>
+        <button
+          type="button"
+          onClick={() => dispatch({ _tag: "go-to", step: "exposure" })}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+        >
+          <PencilIcon className="size-3" /> Public URL
+        </button>
+        <button
+          type="button"
+          onClick={() => dispatch({ _tag: "go-to", step: "data-dir" })}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+        >
+          <PencilIcon className="size-3" /> Data directory
+        </button>
+        <button
+          type="button"
+          onClick={() => dispatch({ _tag: "go-to", step: "auth" })}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+        >
+          <PencilIcon className="size-3" /> Auth + encryption
+        </button>
+      </div>
       <pre
         aria-label="Generated config.toml"
         className="max-h-64 overflow-y-auto rounded-md border border-border bg-background p-3 text-xs"

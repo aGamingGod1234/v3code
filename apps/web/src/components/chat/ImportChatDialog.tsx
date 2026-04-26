@@ -110,6 +110,7 @@ function ScanLocalTab({
   const bridge = window.desktopBridge?.chatImport;
   const [entries, setEntries] = useState<ReadonlyArray<DesktopTranscriptEntry> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [readingPath, setReadingPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -167,8 +168,10 @@ function ScanLocalTab({
               <li key={entry.path}>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs hover:bg-muted"
+                  disabled={readingPath !== null}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs hover:bg-muted disabled:cursor-wait disabled:opacity-60"
                   onClick={async () => {
+                    setReadingPath(entry.path);
                     try {
                       const file = await bridge.readTranscript(entry.path);
                       onPicked(entry, file.content);
@@ -178,6 +181,8 @@ function ScanLocalTab({
                         title: "Could not read transcript",
                         description: cause instanceof Error ? cause.message : String(cause),
                       });
+                    } finally {
+                      setReadingPath(null);
                     }
                   }}
                 >
@@ -190,6 +195,9 @@ function ScanLocalTab({
                       {new Date(entry.modifiedAt).toLocaleString()}
                     </div>
                   </div>
+                  {readingPath === entry.path ? (
+                    <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                  ) : null}
                 </button>
               </li>
             ))}
