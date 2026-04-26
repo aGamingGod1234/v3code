@@ -63,6 +63,7 @@ function commandToAggregateRef(command: OrchestrationCommand): {
         aggregateId: command.projectId,
       };
     case "chat.fork":
+    case "chat.import":
       return {
         aggregateKind: "thread",
         aggregateId: command.targetThreadId,

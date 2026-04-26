@@ -24,11 +24,13 @@ import {
   LoaderIcon,
   UploadCloudIcon,
 } from "lucide-react";
-import type {
-  ChatImportFormat,
-  DesktopTranscriptEntry,
-  MeshImportChatResult,
-  ParsedChat,
+import {
+  CommandId,
+  ThreadId,
+  type ChatImportFormat,
+  type DesktopTranscriptEntry,
+  type MeshImportChatResult,
+  type ParsedChat,
 } from "@v3tools/contracts";
 import { parseChatImport } from "@v3tools/shared/chatImport";
 
@@ -451,8 +453,13 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
     try {
       const connection = getPrimaryEnvironmentConnection();
       const response = await connection.client.mesh.importChat({
-        command: { parsed: pending.parsed },
-        targetProjectId: null,
+        command: {
+          type: "chat.import" as const,
+          commandId: CommandId.make(crypto.randomUUID()),
+          targetThreadId: ThreadId.make(crypto.randomUUID()),
+          parsed: pending.parsed,
+          createdAt: new Date().toISOString(),
+        },
       });
       setResult(response);
     } catch (cause) {
