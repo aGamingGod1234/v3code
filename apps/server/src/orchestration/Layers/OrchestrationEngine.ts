@@ -1,10 +1,19 @@
 import type {
+  ChatImportFormat,
+  ModelSelection,
   OrchestrationEvent,
+  OrchestrationMessageRole,
   OrchestrationReadModel,
+  ParsedChat,
   ProjectId,
   ThreadId,
 } from "@v3tools/contracts";
-import { OrchestrationCommand } from "@v3tools/contracts";
+import {
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_RUNTIME_MODE,
+  MessageId,
+  OrchestrationCommand,
+} from "@v3tools/contracts";
 import {
   Cause,
   Deferred,
@@ -35,7 +44,11 @@ import {
   OrchestrationCommandPreviouslyRejectedError,
   type OrchestrationDispatchError,
 } from "../Errors.ts";
-import { decideOrchestrationCommand, validateChatForkCommand } from "../decider.ts";
+import {
+  decideOrchestrationCommand,
+  validateChatForkCommand,
+  validateChatImportCommand,
+} from "../decider.ts";
 import { createEmptyReadModel, projectEvent } from "../projector.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
@@ -74,6 +87,48 @@ function commandToAggregateRef(command: OrchestrationCommand): {
         aggregateId: command.threadId,
       };
   }
+}
+
+function defaultModelForImportedChat(parsed: ParsedChat): ModelSelection {
+  // Imported transcripts only commit to a *format* (codex/claude/anthropic-console).
+  // The user can change models after import — these defaults exist purely so the
+  // thread.created payload satisfies the ModelSelection schema.
+  switch (parsed.format) {
+    case "codex":
+      return { provider: "codex", model: "gpt-5-codex" };
+    case "claude":
+    case "anthropic-console":
+      return { provider: "claudeAgent", model: "claude-opus-4-7" };
+  }
+}
+
+function resolveImportedTitle(
+  command: Extract<OrchestrationCommand, { type: "chat.import" }>,
+  parsed: ParsedChat,
+): string {
+  if (command.targetTitle !== undefined) return command.targetTitle;
+  if (parsed.title !== null) return parsed.title;
+  const fallbacks: Record<ChatImportFormat, string> = {
+    codex: "Imported chat (Codex)",
+    claude: "Imported chat (Claude Code)",
+    "anthropic-console": "Imported chat (Anthropic Console)",
+  };
+  return fallbacks[parsed.format];
+}
+
+function mapImportedRole(role: ParsedChat["messages"][number]["role"]): OrchestrationMessageRole {
+  // ParsedMessageRole has "tool" but OrchestrationMessageRole does not. Tool
+  // messages are folded into the assistant role with an inline `[tool: <name>]`
+  // prefix on the text, mirroring how a real assistant turn surfaces tool
+  // results to the user.
+  return role === "tool" ? "assistant" : role;
+}
+
+function renderImportedMessageText(message: ParsedChat["messages"][number]): string {
+  if (message.role === "tool" && message.toolName !== null) {
+    return `[tool: ${message.toolName}]\n${message.content}`;
+  }
+  return message.content;
 }
 
 const makeOrchestrationEngine = Effect.gen(function* () {
@@ -241,6 +296,122 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       return result;
     });
 
+  const processImportEnvelope = (
+    command: Extract<OrchestrationCommand, { type: "chat.import" }>,
+  ) =>
+    Effect.gen(function* () {
+      // Validate against the live in-memory read model before opening the
+      // transaction so invariant errors don't trigger SQL rollback noise.
+      const validation = yield* validateChatImportCommand({ command, readModel });
+
+      const result = yield* sql
+        .withTransaction(
+          Effect.gen(function* () {
+            const importedAt = command.createdAt;
+            const baseMetadata: OrchestrationEvent["metadata"] = {
+              importedFromFormat: command.parsed.format,
+            };
+
+            const threadCreatedEvent: Omit<OrchestrationEvent, "sequence"> = {
+              eventId: crypto.randomUUID() as OrchestrationEvent["eventId"],
+              aggregateKind: "thread",
+              aggregateId: command.targetThreadId,
+              type: "thread.created",
+              occurredAt: importedAt,
+              commandId: command.commandId,
+              causationEventId: null,
+              correlationId: command.commandId,
+              metadata: baseMetadata,
+              payload: {
+                threadId: command.targetThreadId,
+                projectId: validation.targetProjectId,
+                title: resolveImportedTitle(command, command.parsed),
+                modelSelection: defaultModelForImportedChat(command.parsed),
+                runtimeMode: DEFAULT_RUNTIME_MODE,
+                interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+                branch: null,
+                worktreePath: null,
+                createdAt: importedAt,
+                updatedAt: importedAt,
+                ...(command.targetDeviceId !== undefined
+                  ? { hostDeviceId: command.targetDeviceId }
+                  : {}),
+              },
+            };
+            const savedThreadCreated = yield* eventStore.append(threadCreatedEvent);
+
+            const savedMessageEvents: OrchestrationEvent[] = [];
+            for (const parsedMessage of command.parsed.messages) {
+              const messageId = MessageId.make(crypto.randomUUID());
+              const messageEvent: Omit<OrchestrationEvent, "sequence"> = {
+                eventId: crypto.randomUUID() as OrchestrationEvent["eventId"],
+                aggregateKind: "thread",
+                aggregateId: command.targetThreadId,
+                type: "thread.message-sent",
+                occurredAt: parsedMessage.timestamp ?? importedAt,
+                commandId: command.commandId,
+                causationEventId: savedThreadCreated.eventId,
+                correlationId: command.commandId,
+                metadata: baseMetadata,
+                payload: {
+                  threadId: command.targetThreadId,
+                  messageId,
+                  role: mapImportedRole(parsedMessage.role),
+                  text: renderImportedMessageText(parsedMessage),
+                  attachments: [],
+                  turnId: null,
+                  streaming: false,
+                  createdAt: parsedMessage.timestamp ?? importedAt,
+                  updatedAt: parsedMessage.timestamp ?? importedAt,
+                },
+              };
+              const savedMessage = yield* eventStore.append(messageEvent);
+              savedMessageEvents.push(savedMessage);
+            }
+
+            const allEvents = [savedThreadCreated, ...savedMessageEvents];
+
+            // Project the new thread's events into the in-memory read model
+            // and projection pipeline so all consumers (sidebar, mesh
+            // subscribers) see the imported chat in the same shape they'd
+            // see a freshly-created one.
+            let nextReadModel = readModel;
+            for (const event of allEvents) {
+              nextReadModel = yield* projectEvent(nextReadModel, event);
+              yield* projectionPipeline.projectEvent(event);
+            }
+
+            const lastEvent = allEvents.at(-1) ?? savedThreadCreated;
+
+            yield* commandReceiptRepository.upsert({
+              commandId: command.commandId,
+              aggregateKind: "thread",
+              aggregateId: command.targetThreadId,
+              acceptedAt: importedAt,
+              resultSequence: lastEvent.sequence,
+              status: "accepted",
+              error: null,
+            });
+
+            return {
+              committedEvents: allEvents,
+              lastSequence: lastEvent.sequence,
+              nextReadModel,
+            } satisfies CommittedCommandResult;
+          }),
+        )
+        .pipe(
+          Effect.catchTag("SqlError", (sqlError) =>
+            Effect.fail(
+              toPersistenceSqlError("OrchestrationEngine.processImportEnvelope:transaction")(
+                sqlError,
+              ),
+            ),
+          ),
+        );
+      return result;
+    });
+
   const processEnvelope = (envelope: CommandEnvelope): Effect.Effect<void> => {
     const dispatchStartSequence = readModel.snapshotSequence;
     const processingStartedAtMs = Date.now();
@@ -295,7 +466,9 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         const committedCommand =
           envelope.command.type === "chat.fork"
             ? yield* processForkEnvelope(envelope.command)
-            : yield* processStandardEnvelope(envelope.command);
+            : envelope.command.type === "chat.import"
+              ? yield* processImportEnvelope(envelope.command)
+              : yield* processStandardEnvelope(envelope.command);
 
         readModel = committedCommand.nextReadModel;
         for (const [index, event] of committedCommand.committedEvents.entries()) {
