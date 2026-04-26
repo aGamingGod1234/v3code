@@ -2,13 +2,13 @@ import { Schema } from "effect";
 
 import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "../baseSchemas.ts";
 import {
-  ChatImportCommand,
   ChatImportMcpResolution,
   ChatImportSkillResolution,
 } from "../chatImport.ts";
 import { DeviceApprovalStreamEvent, DeviceId } from "../identity.ts";
 import {
   ChatForkCommand,
+  ChatImportCommand,
   ClientOrchestrationCommand,
   ClientThreadTurnStartCommand,
   DispatchResult,
@@ -79,7 +79,6 @@ export type MeshForkChatResult = typeof MeshForkChatResult.Type;
 
 export const MeshImportChatInput = Schema.Struct({
   command: ChatImportCommand,
-  targetProjectId: Schema.NullOr(ProjectId),
 });
 export type MeshImportChatInput = typeof MeshImportChatInput.Type;
 

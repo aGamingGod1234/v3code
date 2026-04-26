@@ -20,6 +20,7 @@ import {
   TrimmedNonEmptyString,
   TurnId,
 } from "./baseSchemas.ts";
+import { ChatImportFormat, ParsedChat } from "./chatImport.ts";
 import { DeviceId } from "./identity.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
@@ -648,6 +649,19 @@ export const ChatForkCommand = Schema.Struct({
 });
 export type ChatForkCommand = typeof ChatForkCommand.Type;
 
+export const ChatImportCommand = Schema.Struct({
+  type: Schema.Literal("chat.import"),
+  commandId: CommandId,
+  targetThreadId: ThreadId,
+  targetProjectId: Schema.optional(ProjectId),
+  targetDeviceId: Schema.optional(Schema.NullOr(DeviceId)),
+  sourceDeviceId: Schema.optionalKey(DeviceId),
+  targetTitle: Schema.optional(TrimmedNonEmptyString),
+  parsed: ParsedChat,
+  createdAt: IsoDateTime,
+});
+export type ChatImportCommand = typeof ChatImportCommand.Type;
+
 const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -666,6 +680,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
   ChatForkCommand,
+  ChatImportCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -688,6 +703,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
   ChatForkCommand,
+  ChatImportCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -989,6 +1005,7 @@ export const OrchestrationEventMetadata = Schema.Struct({
   adapterKey: Schema.optional(TrimmedNonEmptyString),
   requestId: Schema.optional(ApprovalRequestId),
   ingestedAt: Schema.optional(IsoDateTime),
+  importedFromFormat: Schema.optional(ChatImportFormat),
 });
 export type OrchestrationEventMetadata = typeof OrchestrationEventMetadata.Type;
 

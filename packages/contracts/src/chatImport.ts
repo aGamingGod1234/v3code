@@ -60,13 +60,11 @@ export const ParsedChat = Schema.Struct({
 export type ParsedChat = typeof ParsedChat.Type;
 
 // ---------------------------------------------------------------------------
-// RPC: mesh.importChat
+// RPC: mesh.importChat — resolution result types
+//
+// The full orchestration command (ChatImportCommand) lives in orchestration.ts
+// next to ChatForkCommand and is what the mesh.importChat RPC actually carries.
 // ---------------------------------------------------------------------------
-
-export const ChatImportCommand = Schema.Struct({
-  parsed: ParsedChat,
-});
-export type ChatImportCommand = typeof ChatImportCommand.Type;
 
 export const ChatImportSkillResolution = Schema.Struct({
   id: Schema.String,

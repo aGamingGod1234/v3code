@@ -731,6 +731,18 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
     }
 
+    case "chat.import": {
+      // Import commands take a separate execution path inside the engine
+      // (mirrors chat.fork): the thread-created + N message-sent events
+      // must commit in one transaction, which doesn't fit the decider's
+      // "produce planned events from a read-model snapshot" contract.
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail:
+          "chat.import must be handled directly by OrchestrationEngine.processEnvelope, not the decider.",
+      });
+    }
+
     case "thread.activity.append": {
       yield* requireThread({
         readModel,

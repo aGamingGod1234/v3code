@@ -380,10 +380,7 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
           ),
           { "rpc.aggregate": "mesh" },
         ),
-      [MESH_WS_METHODS.importChat]: (input: {
-        command: ChatImportCommand;
-        targetProjectId: ProjectId | null;
-      }) =>
+      [MESH_WS_METHODS.importChat]: (input: { command: ChatImportCommand }) =>
         observeRpcEffect(
           MESH_WS_METHODS.importChat,
           Effect.gen(function* () {
@@ -411,7 +408,7 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
 
             const previewThreadId = ThreadId.make(crypto.randomUUID());
             const targetProjectId =
-              input.targetProjectId ?? ProjectId.make(crypto.randomUUID());
+              input.command.targetProjectId ?? ProjectId.make(crypto.randomUUID());
 
             return {
               targetThreadId: previewThreadId,
