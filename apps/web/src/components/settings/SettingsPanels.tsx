@@ -505,9 +505,15 @@ export function useSettingsRestore(onRestored?: () => void) {
     );
     if (!confirmed) return;
 
+    const resetLabels = changedSettingLabels.slice();
     setTheme("system");
     resetSettings();
     onRestored?.();
+    toastManager.add({
+      type: "success",
+      title: "Settings restored",
+      description: `Reset ${resetLabels.length} setting${resetLabels.length === 1 ? "" : "s"}: ${resetLabels.join(", ")}.`,
+    });
   }, [changedSettingLabels, onRestored, resetSettings, setTheme]);
 
   return {
