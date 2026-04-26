@@ -20,6 +20,7 @@ import {
   SettingsSection,
   useRelativeTimeTick,
 } from "./settingsLayout";
+import { ImportChatDialog } from "../chat/ImportChatDialog";
 import { Input } from "../ui/input";
 import {
   Dialog,
@@ -1534,6 +1535,22 @@ export function ConnectionsSettings() {
             </p>
           </div>
         ) : null}
+      </SettingsSection>
+
+      <SettingsSection title="Chat import">
+        <SettingsRow
+          title="Import existing transcripts"
+          description="Bring chats from Codex CLI, Claude Code, or the Anthropic Console into V3. Skills and MCP servers referenced in the transcript are auto-detected — installed ones are flagged as enabled, missing ones are surfaced for manual install."
+          control={
+            <ImportChatDialog
+              trigger={
+                <Button size="xs" variant="outline" data-tour-id="import-chat-button">
+                  Import chat
+                </Button>
+              }
+            />
+          }
+        />
       </SettingsSection>
     </SettingsPageContainer>
   );
