@@ -5,9 +5,7 @@ import { getProviderModelCapabilities } from "../../providerModels";
 import { type TerminalContextSelection } from "../../lib/terminalContext";
 import { type ChatComposerHandle } from "../chat/ChatComposer";
 
-export function focusComposerHandleAtEnd(
-  composerRef: RefObject<ChatComposerHandle | null>,
-): void {
+export function focusComposerHandleAtEnd(composerRef: RefObject<ChatComposerHandle | null>): void {
   composerRef.current?.focusAtEnd();
 }
 

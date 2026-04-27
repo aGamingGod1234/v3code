@@ -29,11 +29,7 @@ import {
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../../sidebarProjectGrouping";
-import {
-  selectSidebarThreadsForProjectRefs,
-  selectThreadByRef,
-  useStore,
-} from "../../store";
+import { selectSidebarThreadsForProjectRefs, selectThreadByRef, useStore } from "../../store";
 import { useThreadSelectionStore } from "../../threadSelectionStore";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../../threadRoutes";
 import type { SidebarThreadSummary } from "../../types";
@@ -59,13 +55,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import {
-  Select,
-  SelectItem,
-  SelectPopup,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";

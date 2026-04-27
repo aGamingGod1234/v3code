@@ -1,9 +1,4 @@
-import {
-  ArrowUpDownIcon,
-  PlusIcon,
-  SearchIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
+import { ArrowUpDownIcon, PlusIcon, SearchIcon, TriangleAlertIcon } from "lucide-react";
 import React, { memo, useCallback } from "react";
 import {
   type CollisionDetection,
@@ -14,11 +9,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { type SidebarProjectGroupingMode } from "@v3tools/contracts";
 import {
@@ -30,9 +21,7 @@ import { useChatsByDevice } from "../../hooks/useChatsByDevice";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useUpdateSettings } from "../../hooks/useSettings";
-import {
-  type SidebarProjectSnapshot,
-} from "../../sidebarProjectGrouping";
+import { type SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { V3SignInButton } from "../../v3/ui/SignInButton";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";

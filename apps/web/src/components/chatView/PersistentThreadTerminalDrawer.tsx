@@ -9,9 +9,7 @@ import { projectScriptCwd, projectScriptRuntimeEnv } from "@v3tools/shared/proje
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { readEnvironmentApi } from "../../environmentApi";
 import { randomUUID } from "../../lib/utils";
-import {
-  type TerminalContextSelection,
-} from "../../lib/terminalContext";
+import { type TerminalContextSelection } from "../../lib/terminalContext";
 import { useStore } from "../../store";
 import { createProjectSelectorByRef, createThreadSelectorByRef } from "../../storeSelectors";
 import { selectThreadTerminalState, useTerminalStateStore } from "../../terminalStateStore";

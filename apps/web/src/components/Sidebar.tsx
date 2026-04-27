@@ -12,11 +12,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import {
-  type DesktopUpdateState,
-  ProjectId,
-  type ScopedThreadRef,
-} from "@v3tools/contracts";
+import { type DesktopUpdateState, ProjectId, type ScopedThreadRef } from "@v3tools/contracts";
 import {
   parseScopedThreadKey,
   scopedProjectKey,

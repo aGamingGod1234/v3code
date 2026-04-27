@@ -236,7 +236,6 @@ interface ComposerDraftStoreState {
   clearComposerContent: (threadRef: ComposerThreadTarget) => void;
 }
 
-
 /* DEAD_LEGACY_BODY:
   return `${image.mimeType}\u0000${image.sizeBytes}\u0000${image.name}`;
 }

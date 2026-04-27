@@ -1,8 +1,4 @@
-import {
-  EnvironmentId,
-  type ProjectId,
-  type ThreadId,
-} from "@v3tools/contracts";
+import { EnvironmentId, type ProjectId, type ThreadId } from "@v3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@v3tools/contracts/settings";
 import { scopedThreadKey, scopeThreadRef } from "@v3tools/client-runtime";
 import { deriveLogicalProjectKeyFromSettings } from "../../logicalProject";

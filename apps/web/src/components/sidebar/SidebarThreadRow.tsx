@@ -1,11 +1,7 @@
 import { ArchiveIcon, CloudIcon, GitPullRequestIcon, TerminalIcon } from "lucide-react";
 import React, { memo, useCallback, useMemo } from "react";
 import type { ScopedThreadRef } from "@v3tools/contracts";
-import {
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@v3tools/client-runtime";
+import { scopedThreadKey, scopeProjectRef, scopeThreadRef } from "@v3tools/client-runtime";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
 import {
   useSavedEnvironmentRegistryStore,
@@ -18,10 +14,7 @@ import { useThreadSelectionStore } from "../../threadSelectionStore";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import type { SidebarThreadSummary } from "../../types";
 import { useUiStateStore } from "../../uiStateStore";
-import {
-  resolveThreadRowClassName,
-  resolveThreadStatusPill,
-} from "../Sidebar.logic";
+import { resolveThreadRowClassName, resolveThreadStatusPill } from "../Sidebar.logic";
 import {
   prStatusIndicator,
   resolveThreadPr,
