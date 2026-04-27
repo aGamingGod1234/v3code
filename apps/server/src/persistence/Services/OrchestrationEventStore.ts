@@ -88,6 +88,18 @@ export interface OrchestrationEventStoreShape {
   ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
 
   /**
+   * Replay all events for a single thread from the start of the stream.
+   *
+   * Unlike `readThreadStream`, the initial cursor is inclusive — the event at
+   * `stream_version 0` (typically `thread.created`) is returned. Used by fork
+   * replay paths that need the full seeded history of a freshly forked
+   * thread.
+   */
+  readonly readThreadStreamAll: (
+    threadId: string,
+  ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
+
+  /**
    * Return the latest persisted stream version for a thread.
    */
   readonly getLatestThreadStreamVersion: (

@@ -87,6 +87,7 @@ describe("OrchestrationEngine", () => {
         ),
       readFromSequence: () => Stream.empty,
       readThreadStream: () => Stream.empty,
+      readThreadStreamAll: () => Stream.empty,
       getLatestThreadStreamVersion: () => Effect.succeed(0),
       readAll: () =>
         Stream.fail(
@@ -168,6 +169,7 @@ describe("OrchestrationEngine", () => {
           getThreadShellById: () => Effect.succeed(Option.none()),
           getThreadDetailById: () => Effect.succeed(Option.none()),
           getThreadMeshSnapshot: () => Effect.succeed(Option.none()),
+          getThreadForkLineage: () => Effect.succeed(Option.none()),
         }),
       ),
       Layer.provide(
@@ -318,6 +320,91 @@ describe("OrchestrationEngine", () => {
         (thread) => thread.id === "thread-archive",
       )?.archivedAt,
     ).toBeNull();
+
+    await system.dispose();
+  });
+
+  it("forks a chat and replays the full copied stream (including stream_version 0) into the projection + read model", async () => {
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+    const createdAt = now();
+    const sourceThreadId = ThreadId.make("thread-fork-source");
+    const targetThreadId = ThreadId.make("thread-fork-target");
+
+    await system.run(
+      engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.make("cmd-project-fork-create"),
+        projectId: asProjectId("project-fork"),
+        title: "Project Fork",
+        workspaceRoot: "/tmp/project-fork",
+        defaultModelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+        createdAt,
+      }),
+    );
+    await system.run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("cmd-thread-fork-create"),
+        threadId: sourceThreadId,
+        projectId: asProjectId("project-fork"),
+        title: "Fork source",
+        modelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      }),
+    );
+
+    await system.run(
+      engine.dispatch({
+        type: "chat.fork",
+        commandId: CommandId.make("cmd-chat-fork-roundtrip"),
+        sourceThreadId,
+        targetThreadId,
+        targetTitle: "Fork target",
+        createdAt,
+      }),
+    );
+
+    // In-memory read model should have the forked thread with the copied
+    // `thread.created` applied (Comment 4 — the exclusive-cursor replay
+    // previously skipped stream_version 0 and the target thread never
+    // appeared in the projection or read model for threads with no
+    // post-create events).
+    const readModel = await system.run(engine.getReadModel());
+    const targetThread = readModel.threads.find((thread) => thread.id === targetThreadId);
+    expect(targetThread, "target thread must be projected after fork").toBeDefined();
+    expect(targetThread?.projectId).toBe("project-fork");
+    expect(targetThread?.title).toBe("Fork target");
+
+    // Persisted target stream has 2 events (copied `thread.created` at
+    // stream_version 0 and trailing `thread.forked` at stream_version 1).
+    // Replay from global sequence 0 and verify both target events are
+    // present — exercises the post-commit pubsub + event-store path.
+    const allEvents = await system.run(
+      Stream.runCollect(engine.readEvents(0)).pipe(Effect.map((chunk) => Array.from(chunk))),
+    );
+    const targetEvents = allEvents.filter((event) => event.aggregateId === targetThreadId);
+    expect(targetEvents.map((event) => event.type)).toEqual(["thread.created", "thread.forked"]);
+    const threadCreated = targetEvents[0];
+    if (threadCreated?.type === "thread.created") {
+      expect(threadCreated.payload.threadId).toBe(targetThreadId);
+      expect(threadCreated.payload.title).toBe("Fork target");
+    }
+    const threadForked = targetEvents[1];
+    if (threadForked?.type === "thread.forked") {
+      expect(threadForked.payload.sourceThreadId).toBe(sourceThreadId);
+      expect(threadForked.payload.forkedFromStreamVersion).toBe(0);
+    }
 
     await system.dispose();
   });
@@ -631,6 +718,7 @@ describe("OrchestrationEngine", () => {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
       readThreadStream: () => Stream.empty,
+      readThreadStreamAll: () => Stream.empty,
       getLatestThreadStreamVersion: () => Effect.succeed(0),
       readAll() {
         return Stream.fromIterable(events);
@@ -864,6 +952,7 @@ describe("OrchestrationEngine", () => {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
       readThreadStream: () => Stream.empty,
+      readThreadStreamAll: () => Stream.empty,
       getLatestThreadStreamVersion: () => Effect.succeed(0),
       readAll() {
         return Stream.fromIterable(events);
@@ -1087,8 +1176,20 @@ describe("OrchestrationEngine", () => {
           startedAt: null,
           messages: [
             { role: "user", content: "hello", toolName: null, toolCallId: null, timestamp: null },
-            { role: "assistant", content: "hi back", toolName: null, toolCallId: null, timestamp: null },
-            { role: "tool", content: "ran ls", toolName: "ls", toolCallId: "call-1", timestamp: null },
+            {
+              role: "assistant",
+              content: "hi back",
+              toolName: null,
+              toolCallId: null,
+              timestamp: null,
+            },
+            {
+              role: "tool",
+              content: "ran ls",
+              toolName: "ls",
+              toolCallId: "call-1",
+              timestamp: null,
+            },
           ],
           references: { skillIds: [], mcpServerIds: [], modelIds: [] },
         },

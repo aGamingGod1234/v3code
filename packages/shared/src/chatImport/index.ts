@@ -5,8 +5,9 @@
 // - "claude":             Claude Code session JSONL (~/.claude/projects/.../sessions/*.jsonl)
 // - "anthropic-console":  Anthropic Console JSON export (single-file flattened messages)
 //
-// Each parser is intentionally tolerant: unknown fields are ignored, malformed
-// lines surface as structured errors rather than throwing. The detection
+// Each parser is intentionally tolerant: unknown fields are ignored and
+// malformed lines are skipped instead of throwing. The dispatcher returns
+// structured errors for empty input / unparseable transcripts. The detection
 // helper sniffs the first non-empty line to pick a format with a confidence
 // score so the UI can offer a manual override when uncertain.
 

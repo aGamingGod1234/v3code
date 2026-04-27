@@ -1,6 +1,8 @@
 import { type DeviceId, type ScopedThreadRef } from "@v3tools/contracts";
 import { GitForkIcon } from "lucide-react";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+
+import { matchesScopedThreadRef, subscribeForkChatOpenRequests } from "./forkChatOpener";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -90,16 +92,34 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
     [defaultTargetDeviceValue],
   );
 
+  // Spec §9.1: the offline-host "Open on another device" toast fires
+  // `requestOpenForkChatDialog(threadRef)`. Only the button rendered
+  // for the matching thread should react.
+  useEffect(
+    () =>
+      subscribeForkChatOpenRequests((requestedRef) => {
+        if (!matchesScopedThreadRef(requestedRef, threadRef)) return;
+        if (isLive || hasPendingApprovals) return;
+        handleOpenChange(true);
+      }),
+    [handleOpenChange, hasPendingApprovals, isLive, threadRef],
+  );
+
   const handleConfirm = useCallback(async () => {
     setSubmitting(true);
     try {
       const trimmedTitle = title.trim();
-      const result = await forkThread(threadRef, {
-        ...(trimmedTitle.length > 0 ? { title: trimmedTitle } : {}),
-        ...(targetDeviceValue !== UNASSIGNED_DEVICE_VALUE
-          ? { targetDeviceId: targetDeviceValue }
-          : {}),
-      });
+      const forkInput: {
+        title?: string;
+        targetDeviceId?: DeviceId;
+      } = {};
+      if (trimmedTitle.length > 0) {
+        forkInput.title = trimmedTitle;
+      }
+      if (targetDeviceValue !== UNASSIGNED_DEVICE_VALUE) {
+        forkInput.targetDeviceId = targetDeviceValue;
+      }
+      const result = await forkThread(threadRef, forkInput);
       if (result) {
         setOpen(false);
       }

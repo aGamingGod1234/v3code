@@ -6,6 +6,8 @@ import {
   DeviceInfo,
   DeviceKind,
   DevicePlatform,
+  GitHubBootstrapInput,
+  GitHubBootstrapResult,
   GitHubClientPublicConfig,
   GitHubConnectionStatus,
   GitHubDisconnectResult,
@@ -68,7 +70,10 @@ import {
   type GitHubFlowEnvelope,
 } from "./browserGitHubOAuth.ts";
 import { decrypt as decryptToken, encrypt as encryptToken } from "../identity/tokenEncryption.ts";
-import { DeviceApprovalService } from "./Services/DeviceApprovalService.ts";
+import {
+  DeviceApprovalService,
+  DeviceLimitReachedError,
+} from "./Services/DeviceApprovalService.ts";
 import { DeviceRepository } from "./Services/DeviceRepository.ts";
 import { DeviceSessionRepository } from "./Services/DeviceSessionRepository.ts";
 import { GoogleIdentityError, GitHubIdentityError } from "./Errors.ts";
@@ -100,7 +105,17 @@ const googleErrorToAuthError = (error: GoogleIdentityError): AuthError => {
   });
 };
 
-const isEmailAuthorized = (verified: VerifiedGoogleIdentity, allowlist: ReadonlyArray<string>) => {
+const isEmailAuthorized = (
+  verified: VerifiedGoogleIdentity,
+  allowlist: ReadonlyArray<string>,
+  mode: string,
+) => {
+  // Desktop mode runs the embedded V3 server on 127.0.0.1 only and is
+  // single-user by definition — whoever's running the Electron app is
+  // the authorized user. Skipping the allowlist here avoids forcing
+  // desktop users to pre-configure their own email before first
+  // sign-in. Server-node and web modes still enforce the allowlist.
+  if (mode === "desktop") return true;
   if (allowlist.length === 0) return false;
   const normalized = verified.email.trim().toLowerCase();
   return allowlist.includes(normalized);
@@ -342,8 +357,8 @@ export const googleBootstrapRouteLayer = HttpRouter.add(
       .verifyIdToken(payload.idToken)
       .pipe(Effect.mapError(googleErrorToAuthError));
 
-    // 2. Email allowlist
-    if (!isEmailAuthorized(verified, config.authorizedEmails)) {
+    // 2. Email allowlist (bypassed in desktop mode — see isEmailAuthorized)
+    if (!isEmailAuthorized(verified, config.authorizedEmails, config.mode)) {
       return yield* new AuthError({
         message: `This server node is not configured to accept sign-in from ${verified.email}.`,
         status: 403,
@@ -380,7 +395,10 @@ export const googleBootstrapRouteLayer = HttpRouter.add(
         ),
       );
 
-    // 4. Register + approval decision
+    // 4. Register + approval decision. `maxDevices` comes from
+    // spec §10.4 `[limits].max_devices_per_user`; the approval service
+    // rejects with `DeviceLimitReachedError` when a new insert would
+    // push the user past the cap.
     const approvalResult = yield* approvals
       .registerOrResume({
         userId,
@@ -389,17 +407,24 @@ export const googleBootstrapRouteLayer = HttpRouter.add(
         platform: payload.platform,
         kind: payload.kind,
         capabilities: payload.capabilities,
+        maxDevices: config.maxDevicesPerUser,
         now,
       })
       .pipe(
-        Effect.mapError(
-          (cause) =>
-            new AuthError({
-              message: "Failed to register device.",
-              status: 500,
+        Effect.mapError((cause) => {
+          if (Schema.is(DeviceLimitReachedError)(cause)) {
+            return new AuthError({
+              message: `You have already registered ${cause.currentCount} devices (cap: ${cause.limit}). Remove an existing device from Settings → Devices before adding another.`,
+              status: 409,
               cause,
-            }),
-        ),
+            });
+          }
+          return new AuthError({
+            message: "Failed to register device.",
+            status: 500,
+            cause,
+          });
+        }),
       );
 
     // 5. Issue session credential
@@ -1043,7 +1068,7 @@ export const googleCallbackRouteLayer = HttpRouter.add(
       .pipe(Effect.mapError(googleErrorToAuthError));
     const users = yield* UserRepository;
 
-    if (!isEmailAuthorized(verified, config.authorizedEmails)) {
+    if (!isEmailAuthorized(verified, config.authorizedEmails, config.mode)) {
       return yield* new AuthError({
         message: `This server node is not configured to accept sign-in from ${verified.email}.`,
         status: 403,
@@ -1091,17 +1116,24 @@ export const googleCallbackRouteLayer = HttpRouter.add(
         platform: platformForReg,
         kind: kindForReg,
         capabilities: capabilitiesForReg,
+        maxDevices: config.maxDevicesPerUser,
         now,
       })
       .pipe(
-        Effect.mapError(
-          (cause) =>
-            new AuthError({
-              message: "Failed to register device.",
-              status: 500,
+        Effect.mapError((cause) => {
+          if (Schema.is(DeviceLimitReachedError)(cause)) {
+            return new AuthError({
+              message: `You have already registered ${cause.currentCount} devices (cap: ${cause.limit}). Remove an existing device from Settings → Devices before adding another.`,
+              status: 409,
               cause,
-            }),
-        ),
+            });
+          }
+          return new AuthError({
+            message: "Failed to register device.",
+            status: 500,
+            cause,
+          });
+        }),
       );
 
     const sessions = yield* SessionCredentialService;
@@ -1580,6 +1612,78 @@ export const githubCallbackRouteLayer = HttpRouter.add(
           }),
       ),
     );
+  }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
+);
+
+// Desktop loopback GitHub flow hands a pre-obtained access token here
+// instead of bouncing through /api/auth/github/{authorize,callback}.
+// The server still calls GitHub's /user endpoint itself so it can
+// verify the token and record the canonical login (the renderer is
+// untrusted input). Requires an authenticated V3 session so we can
+// bind the token to the signed-in user.
+export const githubBootstrapRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/auth/github/bootstrap",
+  Effect.gen(function* () {
+    const { userId } = yield* resolveV3RequestContext;
+
+    const payload = yield* HttpServerRequest.schemaBodyJson(GitHubBootstrapInput).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Invalid GitHub bootstrap payload.",
+            status: 400,
+            cause,
+          }),
+      ),
+    );
+
+    const githubIdentity = yield* GitHubIdentityService;
+    const profile = yield* githubIdentity
+      .fetchUser({ accessToken: payload.accessToken })
+      .pipe(Effect.mapError(githubIdentityErrorToAuthError));
+
+    const secretStore = yield* ServerSecretStore;
+    const encKey = yield* secretStore
+      .getOrCreateRandom(GITHUB_TOKEN_ENCRYPTION_KEY_NAME, GITHUB_TOKEN_ENCRYPTION_KEY_BYTES)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to access token encryption key.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+    const encrypted = packGitHubEncryptedToken(payload.accessToken, encKey);
+
+    const users = yield* UserRepository;
+    const now = yield* DateTime.now;
+    yield* users
+      .setGitHubToken({
+        userId: userId as UserId,
+        githubUsername: profile.login,
+        githubAccessTokenEnc: encrypted.ciphertext,
+        githubTokenEncIv: encrypted.iv,
+        githubScopes: payload.scopes.join(","),
+        now,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to persist GitHub connection.",
+              status: 500,
+              cause,
+            }),
+        ),
+      );
+
+    const body: GitHubBootstrapResult = { connected: true, username: profile.login };
+    return HttpServerResponse.jsonUnsafe(Schema.encodeSync(GitHubBootstrapResult)(body), {
+      status: 200,
+    });
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );
 

@@ -34,6 +34,8 @@ const UPSTREAM_PORT_NAMES = [
   "ProjectionThreadMessageSourceDevice",
   "ProjectionThreadsForkLineage",
   "V3UserGitHubScopes",
+  "PostgresCanonicalizeModelSelections",
+  "ProjectionThreadsForkLineageRecencyIndex",
 ] as const;
 
 describe("PostgresMigrations", () => {
@@ -54,7 +56,7 @@ describe("PostgresMigrations", () => {
 
   it("produces a monotonically-increasing id sequence with no duplicates", () => {
     const ids = postgresMigrationEntries.map(([id]) => id);
-    const sorted = [...ids].sort((a, b) => a - b);
+    const sorted = ids.toSorted((a, b) => a - b);
     expect(ids).toEqual(sorted);
     expect(new Set(ids).size).toBe(ids.length);
   });

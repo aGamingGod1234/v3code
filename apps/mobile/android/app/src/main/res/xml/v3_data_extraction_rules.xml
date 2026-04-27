@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ data extraction rules (replaces the legacy fullBackupContent). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="sharedpref" path="v3_push.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="sharedpref" path="v3_push.xml" />
+    </device-transfer>
+</data-extraction-rules>

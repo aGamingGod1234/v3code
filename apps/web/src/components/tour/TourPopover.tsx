@@ -16,14 +16,21 @@ interface Position {
 const POPOVER_WIDTH = 360;
 const POPOVER_GAP = 12;
 const VIEWPORT_PADDING = 12;
+const POPOVER_ESTIMATED_HEIGHT = 220;
 
 const placementFor = (target: Element | null): Position => {
   if (!target) return { top: 0, left: 0, placement: "centered" };
   const rect = target.getBoundingClientRect();
   const spaceBelow = window.innerHeight - rect.bottom;
-  const placement = spaceBelow >= 220 ? "bottom" : "top";
-  const top =
-    placement === "bottom" ? rect.bottom + POPOVER_GAP : rect.top - POPOVER_GAP - 220;
+  const placement = spaceBelow >= POPOVER_ESTIMATED_HEIGHT ? "bottom" : "top";
+  const desiredTop =
+    placement === "bottom"
+      ? rect.bottom + POPOVER_GAP
+      : rect.top - POPOVER_GAP - POPOVER_ESTIMATED_HEIGHT;
+  const top = Math.max(
+    VIEWPORT_PADDING,
+    Math.min(desiredTop, window.innerHeight - POPOVER_ESTIMATED_HEIGHT - VIEWPORT_PADDING),
+  );
   const desiredLeft = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
   const left = Math.max(
     VIEWPORT_PADDING,
@@ -83,10 +90,7 @@ export function TourPopover({
       className="fixed z-[60] rounded-lg border border-border bg-background p-4 shadow-xl"
       style={style}
     >
-      <h2
-        id="tour-popover-title"
-        className="mb-1 text-sm font-semibold text-foreground"
-      >
+      <h2 id="tour-popover-title" className="mb-1 text-sm font-semibold text-foreground">
         {title}
       </h2>
       <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{body}</p>

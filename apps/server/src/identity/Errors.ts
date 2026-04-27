@@ -11,6 +11,8 @@ import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence
 
 export type UserRepositoryError = PersistenceSqlError | PersistenceDecodeError;
 export type DeviceRepositoryError = PersistenceSqlError | PersistenceDecodeError;
+export type DevicePushTokenRepositoryError = PersistenceSqlError | PersistenceDecodeError;
+export type FcmPushConfigRepositoryError = PersistenceSqlError | PersistenceDecodeError;
 
 export class GoogleIdentityError extends Schema.TaggedErrorClass<GoogleIdentityError>()(
   "GoogleIdentityError",
@@ -57,3 +59,25 @@ export class GitHubIdentityError extends Schema.TaggedErrorClass<GitHubIdentityE
     cause: Schema.optional(Schema.Defect),
   },
 ) {}
+
+// V3 Phase 9 — FCM push errors.
+//
+// `not-configured`   — operator never uploaded a service account JSON.
+// `invalid-config`   — uploaded JSON didn't match the expected shape.
+// `token-mint`       — FCM service account JWT → OAuth token exchange failed.
+// `dispatch`         — FCM returned 4xx / 5xx on a send attempt.
+// `token-invalid`    — FCM returned NotRegistered / InvalidRegistration for
+//                      a recipient token; caller should remove it.
+// `unknown`          — catch-all.
+export class FcmPushError extends Schema.TaggedErrorClass<FcmPushError>()("FcmPushError", {
+  reason: Schema.Literals([
+    "not-configured",
+    "invalid-config",
+    "token-mint",
+    "dispatch",
+    "token-invalid",
+    "unknown",
+  ]),
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}

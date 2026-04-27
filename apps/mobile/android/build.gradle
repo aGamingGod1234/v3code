@@ -1,0 +1,32 @@
+// V3 Phase 9 — Capacitor Android project-level Gradle build file.
+//
+// Versions are locked to Capacitor 6 defaults. Do not bump without
+// rerunning `bunx cap sync android` across CI + at least one device
+// smoke test — Capacitor's gradle plugin is opinionated about
+// upstream Gradle / AGP version pairs.
+
+buildscript {
+    ext {
+        agp_version = '8.5.2'
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:$agp_version"
+        classpath 'com.google.gms:google-services:4.4.2'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

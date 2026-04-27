@@ -41,6 +41,10 @@ export function V3StartupSignInNudge(): null {
           title: "Sync V3 across your devices",
           description:
             "Sign in with Google to mirror your chats to the V3 web app and any other device you sign in on.",
+          // Action toasts need long enough to read + click. The Base UI default
+          // (5s) was so short users reported the toast vanishing before they
+          // could press "Sign in".
+          timeout: 30_000,
           actionProps: {
             children: "Sign in",
             onClick: () => {

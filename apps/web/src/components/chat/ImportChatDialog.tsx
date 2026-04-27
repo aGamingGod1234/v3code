@@ -91,16 +91,28 @@ function ModeTabs({
   return (
     <div className="flex items-center gap-1 border-b border-border pb-3">
       {hasDesktopBridge ? (
-        <button type="button" className={tabClass(mode === "scan")} onClick={() => onChange("scan")}>
+        <button
+          type="button"
+          className={tabClass(mode === "scan")}
+          onClick={() => onChange("scan")}
+        >
           <FolderSearchIcon className="size-3.5" />
           Scan local
         </button>
       ) : null}
-      <button type="button" className={tabClass(mode === "upload")} onClick={() => onChange("upload")}>
+      <button
+        type="button"
+        className={tabClass(mode === "upload")}
+        onClick={() => onChange("upload")}
+      >
         <UploadCloudIcon className="size-3.5" />
         Upload file
       </button>
-      <button type="button" className={tabClass(mode === "paste")} onClick={() => onChange("paste")}>
+      <button
+        type="button"
+        className={tabClass(mode === "paste")}
+        onClick={() => onChange("paste")}
+      >
         <FileTextIcon className="size-3.5" />
         Paste JSON
       </button>
@@ -149,23 +161,28 @@ function ScanLocalTab({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          Scans <code>~/.codex/sessions</code> and <code>~/.claude/projects/&lt;slug&gt;/sessions</code>.
+          Scans <code>~/.codex/sessions</code> and{" "}
+          <code>~/.claude/projects/&lt;slug&gt;/sessions</code>.
         </p>
         <Button size="xs" variant="outline" onClick={() => void refresh()} disabled={loading}>
           {loading ? <LoaderIcon className="size-3 animate-spin" /> : null}
           {entries === null ? "Scan now" : "Refresh"}
         </Button>
       </div>
-      {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
+      {error ? (
+        <Alert variant="error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
       {entries !== null ? (
         entries.length === 0 ? (
           <Alert>
             <AlertTitle>No transcripts found</AlertTitle>
             <AlertDescription>
-              Neither <code>~/.codex/sessions</code> nor any <code>~/.claude/projects/*/sessions</code>{" "}
-              folder contained <code>.jsonl</code> files. If you've used Codex or Claude Code, those
-              host CLIs should have created these directories — check that the host is installed
-              and you've signed in at least once.
+              Neither <code>~/.codex/sessions</code> nor any{" "}
+              <code>~/.claude/projects/*/sessions</code> folder contained <code>.jsonl</code> files.
+              If you've used Codex or Claude Code, those host CLIs should have created these
+              directories — check that the host is installed and you've signed in at least once.
             </AlertDescription>
           </Alert>
         ) : (
@@ -214,11 +231,7 @@ function ScanLocalTab({
   );
 }
 
-function UploadTab({
-  onParsed,
-}: {
-  readonly onParsed: (source: string, content: string) => void;
-}) {
+function UploadTab({ onParsed }: { readonly onParsed: (source: string, content: string) => void }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <div className="space-y-3">
@@ -242,16 +255,16 @@ function UploadTab({
         }}
         className="block w-full text-xs file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-foreground hover:file:bg-muted/80"
       />
-      {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
+      {error ? (
+        <Alert variant="error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }
 
-function PasteTab({
-  onParsed,
-}: {
-  readonly onParsed: (source: string, content: string) => void;
-}) {
+function PasteTab({ onParsed }: { readonly onParsed: (source: string, content: string) => void }) {
   const [text, setText] = useState("");
   return (
     <div className="space-y-3">
@@ -290,9 +303,27 @@ function ResolutionPanel({
 
   const copyMissing = (items: ReadonlyArray<{ readonly id: string }>) => {
     const text = items.map((i) => i.id).join("\n");
-    void navigator.clipboard.writeText(text).then(() => {
-      toastManager.add({ type: "success", title: "Copied", description: `${items.length} ids` });
-    });
+    const writeText = navigator.clipboard?.writeText;
+    if (!writeText) {
+      toastManager.add({
+        type: "error",
+        title: "Clipboard unavailable",
+        description: "Copy isn't supported in this browser context.",
+      });
+      return;
+    }
+    void writeText
+      .call(navigator.clipboard, text)
+      .then(() => {
+        toastManager.add({ type: "success", title: "Copied", description: `${items.length} ids` });
+      })
+      .catch(() => {
+        toastManager.add({
+          type: "error",
+          title: "Copy failed",
+          description: "Couldn't write to clipboard. Copy manually from the list.",
+        });
+      });
   };
 
   return (
@@ -331,7 +362,6 @@ function ResolutionPanel({
           onCopy={() => copyMissing(missingMcps)}
         />
       ) : null}
-
     </div>
   );
 }
@@ -493,9 +523,7 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
         <DialogPanel className="space-y-4">
           <ModeTabs mode={mode} onChange={setMode} hasDesktopBridge={hasDesktopBridge} />
           {mode === "scan" ? (
-            <ScanLocalTab
-              onPicked={(entry, content) => handleParsed(entry.path, content)}
-            />
+            <ScanLocalTab onPicked={(entry, content) => handleParsed(entry.path, content)} />
           ) : null}
           {mode === "upload" ? <UploadTab onParsed={handleParsed} /> : null}
           {mode === "paste" ? <PasteTab onParsed={handleParsed} /> : null}
@@ -509,7 +537,9 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
 
           {pending && !result ? (
             <div className="rounded-md border border-border bg-background p-3 text-xs">
-              <div className="font-medium text-foreground">{pending.parsed.title ?? pending.source}</div>
+              <div className="font-medium text-foreground">
+                {pending.parsed.title ?? pending.source}
+              </div>
               <div className="text-muted-foreground">
                 {FORMAT_LABEL[pending.parsed.format]} · {pending.parsed.messages.length} messages ·{" "}
                 {pending.parsed.references.skillIds.length} skills ·{" "}

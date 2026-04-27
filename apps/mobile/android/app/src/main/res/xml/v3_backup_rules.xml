@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- V3 never backs up auth tokens to Google Drive; the server node
+         is the source of truth. We only back up the device-id so
+         rehydrating a new install looks like "returning device" to the
+         server instead of a fresh approval. -->
+    <include domain="sharedpref" path="CapacitorStorage.xml" />
+    <exclude domain="sharedpref" path="v3_push.xml" />
+</full-backup-content>

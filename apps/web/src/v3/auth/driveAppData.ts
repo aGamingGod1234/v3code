@@ -59,26 +59,35 @@ const emptySnapshot = (capturedAt: string): V3DriveAppDataSnapshot => ({
   error: null,
 });
 
-const writeSnapshot = (snapshot: V3DriveAppDataSnapshot): void => {
-  try {
-    window.localStorage.setItem(DRIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
-  } catch {
-    // Quota/disabled storage: ignore. The next successful capture
-    // rehydrates the key.
+const snapshotWithError = (
+  capturedAt: string,
+  error: V3DriveClientErrorReason,
+): V3DriveAppDataSnapshot => {
+  const previous = readSnapshot();
+  if (!previous) {
+    return {
+      ...emptySnapshot(capturedAt),
+      error,
+    };
   }
-  notifyListeners();
+  return {
+    ...previous,
+    capturedAt,
+    error,
+  };
 };
 
-const clearSnapshot = (): void => {
-  try {
-    window.localStorage.removeItem(DRIVE_SNAPSHOT_KEY);
-  } catch {
-    // ignore
-  }
-  notifyListeners();
-};
+// Cached snapshot reference. `getV3DriveAppDataSnapshot` is called by
+// React's `useSyncExternalStore` on every render to compare against the
+// previous value via Object.is. If we returned a fresh `JSON.parse(...)`
+// each time, the reference would always differ and useSyncExternalStore
+// would schedule a re-render every frame — infinite loop (React error
+// #185). Cache the parsed value and only invalidate when
+// writeSnapshot/clearSnapshot/storage-event fires.
+let cachedDriveSnapshot: V3DriveAppDataSnapshot | null = null;
+let cachedDriveSnapshotInitialized = false;
 
-const readSnapshot = (): V3DriveAppDataSnapshot | null => {
+const parseSnapshot = (): V3DriveAppDataSnapshot | null => {
   let raw: string | null;
   try {
     raw = window.localStorage.getItem(DRIVE_SNAPSHOT_KEY);
@@ -92,6 +101,39 @@ const readSnapshot = (): V3DriveAppDataSnapshot | null => {
     return null;
   }
 };
+
+const refreshCachedDriveSnapshot = (): void => {
+  cachedDriveSnapshot = parseSnapshot();
+  cachedDriveSnapshotInitialized = true;
+};
+
+const writeSnapshot = (snapshot: V3DriveAppDataSnapshot): void => {
+  try {
+    window.localStorage.setItem(DRIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Quota/disabled storage: ignore. The next successful capture
+    // rehydrates the key.
+  }
+  cachedDriveSnapshot = snapshot;
+  cachedDriveSnapshotInitialized = true;
+  notifyListeners();
+};
+
+const clearSnapshot = (): void => {
+  try {
+    window.localStorage.removeItem(DRIVE_SNAPSHOT_KEY);
+  } catch {
+    // ignore
+  }
+  cachedDriveSnapshot = null;
+  cachedDriveSnapshotInitialized = true;
+  notifyListeners();
+};
+
+// Kept for write paths (snapshotWithError) that need the current
+// persisted value without using the cache — the cache may be out of
+// date here because we're mid-update.
+const readSnapshot = (): V3DriveAppDataSnapshot | null => parseSnapshot();
 
 const listeners = new Set<() => void>();
 
@@ -180,10 +222,7 @@ export const captureDriveAppDataSnapshot = async (
   const capturedAt = now().toISOString();
   const accessToken = input.accessToken ?? (await getFreshGoogleAccessToken());
   if (!accessToken) {
-    const snapshot: V3DriveAppDataSnapshot = {
-      ...emptySnapshot(capturedAt),
-      error: "unauthorized",
-    };
+    const snapshot = snapshotWithError(capturedAt, "unauthorized");
     writeSnapshot(snapshot);
     return snapshot;
   }
@@ -197,10 +236,7 @@ export const captureDriveAppDataSnapshot = async (
   } catch (cause) {
     if (cause instanceof V3DriveClientError) {
       logger.warn(`[v3] Drive App Data read failed: ${cause.reason}`);
-      const snapshot: V3DriveAppDataSnapshot = {
-        ...emptySnapshot(capturedAt),
-        error: cause.reason,
-      };
+      const snapshot = snapshotWithError(capturedAt, cause.reason);
       writeSnapshot(snapshot);
       return snapshot;
     }
@@ -238,16 +274,37 @@ export const captureDriveAppDataSnapshot = async (
   }
 };
 
-export const getV3DriveAppDataSnapshot = (): V3DriveAppDataSnapshot | null => readSnapshot();
+export const getV3DriveAppDataSnapshot = (): V3DriveAppDataSnapshot | null => {
+  if (!cachedDriveSnapshotInitialized) {
+    refreshCachedDriveSnapshot();
+  }
+  return cachedDriveSnapshot;
+};
 
 export const subscribeV3DriveAppDataSnapshot = (listener: () => void): (() => void) => {
+  if (listeners.size === 0 && typeof window !== "undefined") {
+    // Keep the cache in sync with cross-tab localStorage mutations the
+    // first time anyone starts listening.
+    window.addEventListener("storage", handleStorageEvent);
+  }
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+    if (listeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorageEvent);
+    }
   };
+};
+
+const handleStorageEvent = (event: StorageEvent): void => {
+  if (event.key !== DRIVE_SNAPSHOT_KEY) return;
+  refreshCachedDriveSnapshot();
+  notifyListeners();
 };
 
 // Test seam.
 export const __resetV3DriveAppDataSnapshotForTests = (): void => {
   clearSnapshot();
+  cachedDriveSnapshot = null;
+  cachedDriveSnapshotInitialized = false;
 };

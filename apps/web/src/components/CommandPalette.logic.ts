@@ -150,7 +150,6 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
 
     const leadingContent = input.renderLeadingContent?.(thread);
     const trailingContent = input.renderTrailingContent?.(thread);
-
     return {
       kind: "action",
       value: `thread:${thread.id}`,
@@ -161,12 +160,12 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
         thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
       ),
       icon: input.icon,
-      ...(leadingContent ? { titleLeadingContent: leadingContent } : {}),
-      ...(trailingContent ? { titleTrailingContent: trailingContent } : {}),
+      titleLeadingContent: leadingContent,
+      titleTrailingContent: trailingContent,
       run: async () => {
         await input.runThread(thread);
       },
-    };
+    } satisfies CommandPaletteActionItem;
   });
 }
 

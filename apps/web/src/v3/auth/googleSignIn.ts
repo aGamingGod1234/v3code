@@ -76,13 +76,28 @@ const resolvePlatform = (): "windows" | "macos" | "linux" | "android" | "ios" | 
   return "web";
 };
 
+const PLATFORM_LABEL: Record<ReturnType<typeof resolvePlatform>, string> = {
+  windows: "Windows PC",
+  macos: "Mac",
+  linux: "Linux PC",
+  android: "Android",
+  ios: "iPhone",
+  web: "Browser",
+};
+
 const resolveDeviceName = (
   platform: ReturnType<typeof resolvePlatform>,
   fallback: string,
 ): string => {
-  const branded = isElectron ? (window.desktopBridge?.getAppBranding?.() ?? null) : null;
-  if (branded?.displayName) return `${branded.displayName} (${platform})`;
-  return fallback;
+  // Prefer the real machine hostname (e.g. "DESKTOP-1EJU8UJ") so the
+  // user sees a recognisable label in the device list. Falls through to
+  // a platform-shaped label ("Windows PC" / "Mac" / "iPhone" ...) when
+  // the bridge can't resolve it — this is still strictly better than
+  // "${APP_DISPLAY_NAME} (${platform})" which leaked release channel
+  // parens into the device row ("V3 Code (Alpha) (windows)").
+  const hostname = isElectron ? (window.desktopBridge?.getHostname?.() ?? null) : null;
+  if (hostname && hostname.length > 0) return hostname;
+  return PLATFORM_LABEL[platform] ?? fallback;
 };
 
 const resolveCapabilities = (): readonly DeviceCapability[] =>

@@ -5,6 +5,7 @@ import {
   type GitStatusResult,
   type GitStatusStreamEvent,
   type LocalApi,
+  MESH_PUSH_WS_METHODS,
   MESH_WS_METHODS,
   ORCHESTRATION_WS_METHODS,
   type ServerSettingsPatch,
@@ -124,6 +125,8 @@ export interface WsRpcClient {
     readonly subscribeDeviceApprovals: RpcStreamMethod<
       typeof MESH_WS_METHODS.subscribeDeviceApprovals
     >;
+    readonly registerPushToken: RpcUnaryMethod<typeof MESH_PUSH_WS_METHODS.registerPushToken>;
+    readonly unregisterPushToken: RpcUnaryMethod<typeof MESH_PUSH_WS_METHODS.unregisterPushToken>;
   };
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
@@ -277,6 +280,10 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
           listener,
           options,
         ),
+      registerPushToken: (input) =>
+        transport.request((client) => client[MESH_PUSH_WS_METHODS.registerPushToken](input)),
+      unregisterPushToken: (input) =>
+        transport.request((client) => client[MESH_PUSH_WS_METHODS.unregisterPushToken](input)),
     },
     orchestration: {
       dispatchCommand: (input) =>

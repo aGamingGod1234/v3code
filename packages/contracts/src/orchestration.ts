@@ -1006,6 +1006,9 @@ export const OrchestrationEventMetadata = Schema.Struct({
   requestId: Schema.optional(ApprovalRequestId),
   ingestedAt: Schema.optional(IsoDateTime),
   importedFromFormat: Schema.optional(ChatImportFormat),
+  // Present on events that were copied into a new thread stream by a
+  // `chat.fork` command. Points at the source thread the event originated on.
+  forkedFromChatId: Schema.optional(ThreadId),
 });
 export type OrchestrationEventMetadata = typeof OrchestrationEventMetadata.Type;
 

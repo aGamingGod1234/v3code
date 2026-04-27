@@ -79,9 +79,16 @@ import {
 } from "./updateMachine.ts";
 import { isArm64HostRunningIntelBuild, resolveDesktopRuntimeInfo } from "./runtimeArch.ts";
 import { resolveDesktopAppBranding } from "./appBranding.ts";
+import { getSharedV3GitHubAuthFlow } from "./v3GitHubAuthFlow.ts";
 import { getSharedV3GoogleAuthFlow } from "./v3GoogleAuthFlow.ts";
 import { registerV3SetupWizardIpc } from "./v3SetupWizard.ts";
 import { registerV3ChatImportIpc } from "./v3ChatImport.ts";
+import {
+  EMBEDDED_GITHUB_CLIENT_ID,
+  EMBEDDED_GITHUB_CLIENT_SECRET,
+  EMBEDDED_GOOGLE_CLIENT_ID,
+  EMBEDDED_GOOGLE_CLIENT_SECRET,
+} from "./embeddedAuthConfig.example.ts";
 
 syncShellEnvironment();
 
@@ -98,6 +105,7 @@ const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_APP_BRANDING_CHANNEL = "desktop:get-app-branding";
+const GET_HOSTNAME_CHANNEL = "desktop:get-hostname";
 const GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL = "desktop:get-local-environment-bootstrap";
 const GET_CLIENT_SETTINGS_CHANNEL = "desktop:get-client-settings";
 const SET_CLIENT_SETTINGS_CHANNEL = "desktop:set-client-settings";
@@ -115,6 +123,7 @@ const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 // renderer wiring lives in apps/desktop/src/preload.ts and the actual
 // flow logic in apps/desktop/src/v3GoogleAuthFlow.ts.
 const V3_OPEN_GOOGLE_SIGNIN_CHANNEL = "desktop:v3-open-google-signin";
+const V3_OPEN_GITHUB_SIGNIN_CHANNEL = "desktop:v3-open-github-signin";
 const V3_DEEP_LINK_SCHEME = "v3";
 
 // V3 Phase 1d — register the OS as the default handler for v3:// deep links
@@ -149,7 +158,13 @@ if (!acquiredV3InstanceLock) {
   app.quit();
 }
 
-const BASE_DIR = process.env.V3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
+// V3 home directory. Holds the embedded server's SQLite DB, Google
+// tokens, saved environments registry, logs, and desktop settings.
+// Always `~/.v3code` (overridable via `V3CODE_HOME`). Legacy `~/.t3`
+// data from a prior T3 Code fork is intentionally ignored so V3 starts
+// with clean device/session state rather than inheriting stale
+// "T3 Code (Alpha) (windows)" labels from pre-rename installs.
+const BASE_DIR = process.env.V3CODE_HOME?.trim() || Path.join(OS.homedir(), ".v3code");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
 const CLIENT_SETTINGS_PATH = Path.join(STATE_DIR, "client-settings.json");
@@ -163,11 +178,10 @@ const desktopAppBranding: DesktopAppBranding = resolveDesktopAppBranding({
   appVersion: app.getVersion(),
 });
 const APP_DISPLAY_NAME = desktopAppBranding.displayName;
-const APP_USER_MODEL_ID = isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code";
-const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "t3code-dev.desktop" : "t3code.desktop";
-const LINUX_WM_CLASS = isDevelopment ? "t3code-dev" : "t3code";
-const USER_DATA_DIR_NAME = isDevelopment ? "t3code-dev" : "t3code";
-const LEGACY_USER_DATA_DIR_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+const APP_USER_MODEL_ID = isDevelopment ? "com.agaminggod.v3code.dev" : "com.agaminggod.v3code";
+const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "v3code-dev.desktop" : "v3code.desktop";
+const LINUX_WM_CLASS = isDevelopment ? "v3code-dev" : "v3code";
+const USER_DATA_DIR_NAME = isDevelopment ? "v3code-dev" : "v3code";
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
 const LOG_DIR = Path.join(STATE_DIR, "logs");
@@ -345,6 +359,22 @@ function backendChildEnv(): NodeJS.ProcessEnv {
   delete env.V3CODE_DESKTOP_WS_URL;
   delete env.V3CODE_DESKTOP_LAN_ACCESS;
   delete env.V3CODE_DESKTOP_LAN_HOST;
+  // Seed the embedded server with build-time Google OAuth credentials
+  // so the Google sign-in button is enabled in the Devices panel out
+  // of the box. Explicit env vars still win — this only fills in the
+  // gap when the user hasn't set them manually.
+  if (EMBEDDED_GOOGLE_CLIENT_ID && !env.V3CODE_GOOGLE_CLIENT_ID) {
+    env.V3CODE_GOOGLE_CLIENT_ID = EMBEDDED_GOOGLE_CLIENT_ID;
+  }
+  if (EMBEDDED_GOOGLE_CLIENT_SECRET && !env.V3CODE_GOOGLE_CLIENT_SECRET) {
+    env.V3CODE_GOOGLE_CLIENT_SECRET = EMBEDDED_GOOGLE_CLIENT_SECRET;
+  }
+  if (EMBEDDED_GITHUB_CLIENT_ID && !env.V3CODE_GITHUB_CLIENT_ID) {
+    env.V3CODE_GITHUB_CLIENT_ID = EMBEDDED_GITHUB_CLIENT_ID;
+  }
+  if (EMBEDDED_GITHUB_CLIENT_SECRET && !env.V3CODE_GITHUB_CLIENT_SECRET) {
+    env.V3CODE_GITHUB_CLIENT_SECRET = EMBEDDED_GITHUB_CLIENT_SECRET;
+  }
   return env;
 }
 
@@ -840,7 +870,10 @@ function handleFatalStartupError(stage: string, error: unknown): void {
   console.error(`[desktop] fatal startup error (${stage})`, error);
   if (!isQuitting) {
     isQuitting = true;
-    dialog.showErrorBox("T3 Code failed to start", `Stage: ${stage}\n${message}${detail}`);
+    dialog.showErrorBox(
+      `${APP_DISPLAY_NAME} failed to start`,
+      `Stage: ${stage}\n${message}${detail}`,
+    );
   }
   stopBackend();
   restoreStdIoCapture?.();
@@ -945,7 +978,7 @@ async function checkForUpdatesFromMenu(): Promise<void> {
     void dialog.showMessageBox({
       type: "info",
       title: "You're up to date!",
-      message: `T3 Code ${updateState.currentVersion} is currently the newest version available.`,
+      message: `${APP_DISPLAY_NAME} ${updateState.currentVersion} is currently the newest version available.`,
       buttons: ["OK"],
     });
   } else if (updateState.status === "error") {
@@ -1074,13 +1107,16 @@ function resolveIconPath(ext: "ico" | "icns" | "png"): string | null {
  * Resolve the Electron userData directory path.
  *
  * Electron derives the default userData path from `productName` in
- * package.json, which currently produces directories with spaces and
- * parentheses (e.g. `~/.config/T3 Code (Alpha)` on Linux). This is
+ * package.json, which produces directories with spaces and
+ * parentheses (e.g. `~/.config/V3 Code (Alpha)` on Linux). This is
  * unfriendly for shell usage and violates Linux naming conventions.
  *
- * We override it to a clean lowercase name (`t3code`). If the legacy
- * directory already exists we keep using it so existing users don't
- * lose their Chromium profile data (localStorage, cookies, sessions).
+ * We override it to a clean lowercase name (`v3code`). Legacy T3 Code
+ * fork data in `T3 Code (Alpha)` or `t3code` is intentionally ignored:
+ * V3 pre-release builds shouldn't carry over T3 session/device state
+ * that would otherwise keep showing the old "T3 Code (Alpha) (windows)"
+ * labels. If the user manually wants to migrate, they can rename the
+ * directory.
  */
 function resolveUserDataPath(): string {
   const appDataBase =
@@ -1089,11 +1125,6 @@ function resolveUserDataPath(): string {
       : process.platform === "darwin"
         ? Path.join(OS.homedir(), "Library", "Application Support")
         : process.env.XDG_CONFIG_HOME || Path.join(OS.homedir(), ".config");
-
-  const legacyPath = Path.join(appDataBase, LEGACY_USER_DATA_DIR_NAME);
-  if (FS.existsSync(legacyPath)) {
-    return legacyPath;
-  }
 
   return Path.join(appDataBase, USER_DATA_DIR_NAME);
 }
@@ -1605,6 +1636,16 @@ function registerIpcHandlers(): void {
     event.returnValue = desktopAppBranding;
   });
 
+  ipcMain.removeAllListeners(GET_HOSTNAME_CHANNEL);
+  ipcMain.on(GET_HOSTNAME_CHANNEL, (event) => {
+    try {
+      const name = OS.hostname().trim();
+      event.returnValue = name.length > 0 ? name : null;
+    } catch {
+      event.returnValue = null;
+    }
+  });
+
   ipcMain.removeAllListeners(GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL);
   ipcMain.on(GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL, (event) => {
     event.returnValue = {
@@ -1757,6 +1798,31 @@ function registerIpcHandlers(): void {
       throw new Error("V3 Google client id is empty.");
     }
     return getSharedV3GoogleAuthFlow().start({ clientId });
+  });
+
+  ipcMain.removeHandler(V3_OPEN_GITHUB_SIGNIN_CHANNEL);
+  ipcMain.handle(V3_OPEN_GITHUB_SIGNIN_CHANNEL, async (_event, rawInput: unknown) => {
+    if (
+      typeof rawInput !== "object" ||
+      rawInput === null ||
+      typeof (rawInput as { scopes?: unknown }).scopes !== "string"
+    ) {
+      throw new Error("Invalid V3 GitHub sign-in input.");
+    }
+    const scopes = (rawInput as { scopes: string }).scopes.trim();
+    // Desktop-only OAuth client — registered with a loopback callback so
+    // the separate server-node GitHub app (which must use an https
+    // callback) isn't reused.
+    if (!EMBEDDED_GITHUB_CLIENT_ID || !EMBEDDED_GITHUB_CLIENT_SECRET) {
+      throw new Error(
+        "GitHub sign-in is not configured in this build. Set EMBEDDED_GITHUB_CLIENT_ID / EMBEDDED_GITHUB_CLIENT_SECRET in embeddedAuthConfig.ts.",
+      );
+    }
+    return getSharedV3GitHubAuthFlow().start({
+      clientId: EMBEDDED_GITHUB_CLIENT_ID,
+      clientSecret: EMBEDDED_GITHUB_CLIENT_SECRET,
+      scopes: scopes.length > 0 ? scopes : "repo read:user user:email",
+    });
   });
 
   // V3 Phase 2d — server-node setup wizard. All probes + the TOML write
@@ -2030,6 +2096,7 @@ function syncAllWindowAppearance(): void {
 nativeTheme.on("updated", syncAllWindowAppearance);
 
 function createWindow(): BrowserWindow {
+  const iconOption = getIconOption();
   const window = new BrowserWindow({
     width: 1100,
     height: 780,
@@ -2038,7 +2105,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: getInitialWindowBackgroundColor(),
-    ...getIconOption(),
+    ...iconOption,
     title: APP_DISPLAY_NAME,
     ...getWindowTitleBarOptions(),
     webPreferences: {
@@ -2048,6 +2115,22 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   });
+
+  // Belt-and-braces: some Windows icon rendering paths rely on a
+  // post-creation `setIcon` call rather than the constructor option. If
+  // `iconOption` was empty (resolveIconPath returned null), log it so
+  // operators can tell whether the fallback kicked in.
+  if ("icon" in iconOption && typeof iconOption.icon === "string") {
+    try {
+      window.setIcon(iconOption.icon);
+    } catch (cause) {
+      console.warn("[desktop] setIcon failed:", cause);
+    }
+  } else if (process.platform !== "darwin") {
+    console.warn(
+      "[desktop] No icon resolved from resolveIconPath(); Windows will fall back to the default Electron icon. Check that icon.ico exists in the packaged resources/ dir.",
+    );
+  }
 
   window.webContents.on("context-menu", (event, params) => {
     event.preventDefault();

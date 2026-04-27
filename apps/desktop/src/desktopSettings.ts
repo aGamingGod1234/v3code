@@ -58,7 +58,9 @@ export function markDesktopTourCompleted(
   settings: DesktopSettings,
   completed: boolean,
 ): DesktopSettings {
-  return settings.tourCompleted === completed ? settings : { ...settings, tourCompleted: completed };
+  return settings.tourCompleted === completed
+    ? settings
+    : { ...settings, tourCompleted: completed };
 }
 
 export function readDesktopSettings(settingsPath: string, appVersion: string): DesktopSettings {

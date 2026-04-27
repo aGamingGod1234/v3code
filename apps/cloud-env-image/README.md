@@ -24,8 +24,8 @@ Base image used by the server-node `ContainerManager` (apps/server/src/cloud/Lay
 ## Build & publish
 
 ```bash
-docker build -t ghcr.io/pingdotgg/t3-cloud-env:latest apps/cloud-env-image
-docker push ghcr.io/pingdotgg/t3-cloud-env:latest
+docker build -t ghcr.io/v3-code/cloud-env:latest apps/cloud-env-image
+docker push ghcr.io/v3-code/cloud-env:latest
 ```
 
 The server-node image tag is configurable via `V3CODE_CLOUD_ENV_BASE_IMAGE` or `[cloud_env].base_image` in `~/.v3-code-server/config.toml`.

@@ -122,8 +122,10 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import { DeviceApprovalServiceLive } from "./identity/Layers/DeviceApprovalService.ts";
+import { DevicePushTokenRepositoryLive } from "./identity/Layers/DevicePushTokenRepository.ts";
 import { DeviceRepositoryLive } from "./identity/Layers/DeviceRepository.ts";
 import { DeviceSessionRepositoryLive } from "./identity/Layers/DeviceSessionRepository.ts";
+import { FcmPushConfigRepositoryLive } from "./identity/Layers/FcmPushConfigRepository.ts";
 import { GitHubIdentityServiceLive } from "./identity/Layers/GitHubIdentityService.ts";
 import { GoogleTokenHandoffStoreLive } from "./identity/Layers/GoogleTokenHandoffStore.ts";
 import { GoogleIdentityServiceLive } from "./identity/Layers/GoogleIdentityService.ts";
@@ -239,6 +241,8 @@ const v3IdentityTestLayer = Layer.mergeAll(
   UserRepositoryLive,
   DeviceRepositoryLive,
   DeviceSessionRepositoryLive,
+  DevicePushTokenRepositoryLive,
+  FcmPushConfigRepositoryLive,
   GoogleIdentityServiceLive,
   GoogleTokenHandoffStoreLive,
   GitHubIdentityServiceLive,
@@ -415,12 +419,15 @@ const buildAppUnderTest = (options?: {
       githubOauthScopes: "read:user repo",
       cloudEnvEnabled: false,
       cloudEnvDockerSocket: undefined,
-      cloudEnvBaseImage: "ghcr.io/pingdotgg/t3-cloud-env:latest",
+      cloudEnvBaseImage: "ghcr.io/v3-code/cloud-env:latest",
       cloudEnvMaxContainers: 10,
       cloudEnvContainerCpuLimit: 2,
       cloudEnvContainerMemoryMb: 4096,
       cloudEnvContainerDiskGb: 20,
-      cloudEnvContainerMaxRuntimeHours: 12,
+      cloudEnvContainerMaxRuntimeHours: 720,
+      maxDevicesPerUser: 20,
+      maxChatsPerUser: 10_000,
+      maxEventLogSizeMb: 100_000,
       ...options?.config,
     };
     const layerConfig = Layer.succeed(ServerConfig, config);

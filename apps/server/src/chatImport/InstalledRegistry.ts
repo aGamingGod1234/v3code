@@ -155,9 +155,7 @@ export const resolveReferences = (
   for (const id of new Set(references.skillIds)) {
     const hit = skillIndex.get(id);
     skills.push(
-      hit
-        ? { id, status: "enabled", source: hit.source }
-        : { id, status: "missing", source: null },
+      hit ? { id, status: "enabled", source: hit.source } : { id, status: "missing", source: null },
     );
   }
 
@@ -165,9 +163,7 @@ export const resolveReferences = (
   for (const id of new Set(references.mcpServerIds)) {
     const hit = mcpIndex.get(id);
     mcpServers.push(
-      hit
-        ? { id, status: "enabled", source: hit.source }
-        : { id, status: "missing", source: null },
+      hit ? { id, status: "enabled", source: hit.source } : { id, status: "missing", source: null },
     );
   }
 

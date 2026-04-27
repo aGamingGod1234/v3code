@@ -1,65 +1,131 @@
-# Contributing
+# Contributing to V3 Code
 
-## Read This First
+V3 Code is a spec-driven fork of [T3 Code](https://github.com/pingdotgg/t3code).
+The spec is [V3_CODE_SPEC.md](./V3_CODE_SPEC.md); contributions are
+evaluated against it. If your change aligns with the spec, read this
+doc and go.
 
-We are not actively accepting contributions right now.
+Bug reports are always welcome, even without a PR. File them at
+[github.com/aGamingGod1234/v3code/issues](https://github.com/aGamingGod1234/v3code/issues).
 
-You can still open an issue or PR, but please do so knowing there is a high chance we close it, defer it forever, or never look at it.
+---
 
-If that sounds annoying, that is because it is. This project is still early and we are trying to keep scope, quality, and direction under control.
+## What we're most likely to accept
 
-PRs are automatically labeled with a `vouch:*` trust status and a `size:*` diff size based on changed lines.
+- Bug fixes with a tight repro.
+- Reliability + performance fixes on the mesh layer (spec §5).
+- Accessibility fixes in the web/mobile UI.
+- Cloud env hardening (resource limit enforcement, `previewProxy`
+  correctness, GitHub token rotation).
+- Spec-aligned documentation in `docs/`.
+- Test coverage for anything in `apps/server/src/mesh` or
+  `apps/server/src/cloud`.
 
-If you are an external contributor, expect `vouch:unvouched` until we explicitly add you to [.github/VOUCHED.td](.github/VOUCHED.td).
+## What we're least likely to accept
 
-## What We Are Most Likely To Accept
+- Large PRs without a prior issue. Open the issue first.
+- Scope creep (new providers, alternate auth methods, new deploy
+  targets) without a spec update.
+- Stylistic rewrites of working code.
+- Dependency churn that doesn't pull its weight.
+- Anything that slows the single-device experience to help the mesh
+  layer — single-device-first is a spec guarantee.
 
-Small, focused bug fixes.
+---
 
-Small reliability fixes.
+## Before you start
 
-Small performance improvements.
+Please open or comment on an issue first for anything non-trivial. That
+gives both sides a chance to catch scope/approach problems before a PR
+is written. "Non-trivial" = more than ~30 lines changed or anything
+that touches a protocol boundary.
 
-Tightly scoped maintenance work that clearly improves the project without changing its direction.
+If you want to work on something on the roadmap, grab a Phase X slice
+from the spec and say so in the issue.
 
-## What We Are Least Likely To Accept
+---
 
-Large PRs.
+## Workflow
 
-Drive-by feature work.
+1. Fork, branch, and clone.
+2. Install tools: `mise install` (optional), `bun install`.
+3. Build once: `bun run build`.
+4. Make your change. Respect the project conventions:
+   - TypeScript strict mode, no `any`.
+   - Effect-TS style on the server. Don't introduce ad-hoc Promises in
+     `apps/server/src/*` — wrap them in `Effect.fn` or a service.
+   - React Hooks on the client. Prefer `useAtomValue` over `useState`
+     for shared state (see `apps/web/src/rpc/atomRegistry.ts`).
+   - `packages/contracts` is **schema only** — no runtime logic.
+   - Use explicit subpath exports for `@v3tools/shared` (no barrel
+     `index.ts`).
+5. Run the gate before pushing:
 
-Opinionated rewrites.
+   ```bash
+   bun run fmt:check
+   bun run lint
+   bun run typecheck
+   bun run test        # uses `turbo run test`, NOT `bun test`
+   ```
 
-Anything that expands product scope without us asking for it first.
+6. Open a PR against `main`. Tests must pass on CI. PRs are labelled
+   automatically with `size:*` (diff size) and `vouch:*` (external
+   reviewer trust).
 
-If you open a 1,000+ line PR full of new features, we will probably close it quickly and remember that you ignored the clearly written instructions.
+---
 
-## If You Still Want To Open A PR
+## PR guidelines
 
-Keep it small.
+- **Title**: conventional commit style (`fix(mesh): …`,
+  `feat(cloud-env): …`, `docs(vps): …`). Keep it under 70 chars.
+- **Body**: what changed, why it changed, how you tested it. Include a
+  before/after if the change touches UI (screenshot for layout
+  changes, short clip for motion / transitions).
+- **Scope**: one logical change per PR. Mixed PRs get sent back for
+  splitting.
+- **Tests**: any new behaviour needs a test. A bug fix needs a test
+  that would have caught it.
+- **Docs**: any protocol or config change must update the relevant
+  file under `docs/`, and if it touches the WS wire, also
+  [MESH_CHANGES.md](./MESH_CHANGES.md).
 
-Explain exactly what changed.
+---
 
-Explain exactly why the change should exist.
+## Security-sensitive changes
 
-Do not mix unrelated fixes together.
+Anything in `apps/server/src/auth/` or `apps/server/src/identity/`,
+anything that touches session cookies, GitHub tokens, or the Drive App
+Data schema, gets extra scrutiny. Do:
 
-If the PR makes anything resembling a UI change, include clear before/after images.
+- Document the threat you're protecting against.
+- Prove you handled the error paths (malformed input, expired token,
+  revoked scope).
+- Keep secrets out of logs. Structured logging is set up so you can
+  attach `{ tokenHash }` instead of a raw token.
 
-If the change depends on motion, timing, transitions, or interaction details, include a short video.
+Don't:
 
-If we have to guess what changed, we are much less likely to review it.
+- Weaken `authorized_emails` enforcement "just for dev".
+- Skip encryption-at-rest for new secret material.
+- Store credentials client-side outside the OS keychain / IndexedDB.
 
-## Issues First
+---
 
-If you are thinking about a non-trivial change, open an issue first.
+## Style quick reference
 
-That still does not mean we will want the PR, but it gives you a chance to avoid wasting your time.
+- Run `bun run fmt` before committing. CI enforces it via `oxfmt --check`.
+- `oxlint` is the linter. Warnings in `.claude/worktrees/*` are
+  pre-existing stale-worktree noise — the main tree is clean (0 errors).
+- Imports are sorted by a rule set in `.oxlintrc.json`.
+- No commented-out code. If it's useful, it lives in git history.
 
-## Be Realistic
+---
 
-Opening a PR does not create an obligation on our side.
+## Final word
 
-We may close it. We may ignore it. We may ask you to shrink it. We may reimplement the idea ourselves later.
+V3 Code is small and opinionated. If a PR feels like a fight, it's
+probably out of scope — open an issue to discuss before burning more
+time on it. The maintainers reserve the right to close PRs that ignore
+this doc.
 
-If you are fine with that, proceed.
+Discord: [discord.gg/jn4EGJjrvv](https://discord.gg/jn4EGJjrvv).

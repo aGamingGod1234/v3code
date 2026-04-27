@@ -164,4 +164,85 @@ describe("ProviderRuntimeEvent", () => {
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);
   });
+
+  // V3 Phase 10 — subagent lifecycle event decoding.
+  it("decodes subagent.started / progress / completed / failed variants", () => {
+    const started = decodeRuntimeEvent({
+      type: "subagent.started",
+      eventId: "event-subagent-1",
+      provider: "claudeAgent",
+      createdAt: "2026-04-22T10:00:00.000Z",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: {
+        subagentId: "sub-1",
+        parentToolUseId: "tool-use-a",
+        agentType: "code-explorer",
+        label: "Explorer",
+        prompt: "Investigate auth",
+        model: "claude-sonnet-4-6",
+      },
+    });
+    expect(started.type).toBe("subagent.started");
+    if (started.type !== "subagent.started") throw new Error("expected subagent.started");
+    expect(started.payload.subagentId).toBe("sub-1");
+    expect(started.payload.agentType).toBe("code-explorer");
+
+    const progress = decodeRuntimeEvent({
+      type: "subagent.progress",
+      eventId: "event-subagent-2",
+      provider: "claudeAgent",
+      createdAt: "2026-04-22T10:00:05.000Z",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: {
+        subagentId: "sub-1",
+        summary: "Scanning file tree",
+        lastToolName: "Read",
+        toolCount: 3,
+        elapsedSeconds: 4.2,
+      },
+    });
+    expect(progress.type).toBe("subagent.progress");
+    if (progress.type !== "subagent.progress") throw new Error("expected subagent.progress");
+    expect(progress.payload.toolCount).toBe(3);
+
+    const completed = decodeRuntimeEvent({
+      type: "subagent.completed",
+      eventId: "event-subagent-3",
+      provider: "claudeAgent",
+      createdAt: "2026-04-22T10:00:15.000Z",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: {
+        subagentId: "sub-1",
+        summary: "Found 4 suspects in apps/server/src/auth",
+        toolCount: 8,
+        elapsedSeconds: 14.7,
+        result: "## Findings\n- ...",
+      },
+    });
+    expect(completed.type).toBe("subagent.completed");
+    if (completed.type !== "subagent.completed") throw new Error("expected subagent.completed");
+    expect(completed.payload.elapsedSeconds).toBeGreaterThan(0);
+
+    const failed = decodeRuntimeEvent({
+      type: "subagent.failed",
+      eventId: "event-subagent-4",
+      provider: "claudeAgent",
+      createdAt: "2026-04-22T10:00:20.000Z",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: {
+        subagentId: "sub-1",
+        reason: "timeout",
+        errorMessage: "30s elapsed",
+        toolCount: 12,
+        elapsedSeconds: 30,
+      },
+    });
+    expect(failed.type).toBe("subagent.failed");
+    if (failed.type !== "subagent.failed") throw new Error("expected subagent.failed");
+    expect(failed.payload.reason).toBe("timeout");
+  });
 });

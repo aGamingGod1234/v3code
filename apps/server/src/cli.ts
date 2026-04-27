@@ -261,6 +261,21 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  // V3 spec §10.4 `[limits]`. Operators can raise or lower these caps
+  // per deployment; defaults match the spec example values so an empty
+  // `[limits]` section still converges on something sane.
+  maxDevicesPerUser: Config.int("V3CODE_MAX_DEVICES_PER_USER").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  maxChatsPerUser: Config.int("V3CODE_MAX_CHATS_PER_USER").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  maxEventLogSizeMb: Config.int("V3CODE_MAX_EVENT_LOG_SIZE_MB").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
 });
 
 interface CliServerFlags {
@@ -510,7 +525,7 @@ export const resolveServerConfig = (
       cloudEnvBaseImage:
         env.cloudEnvBaseImage ??
         tomlConfig?.cloud_env?.base_image ??
-        "ghcr.io/pingdotgg/t3-cloud-env:latest",
+        "ghcr.io/v3-code/cloud-env:latest",
       cloudEnvMaxContainers:
         env.cloudEnvMaxContainers ?? tomlConfig?.cloud_env?.max_containers ?? 10,
       cloudEnvContainerCpuLimit:
@@ -522,7 +537,11 @@ export const resolveServerConfig = (
       cloudEnvContainerMaxRuntimeHours:
         env.cloudEnvContainerMaxRuntimeHours ??
         tomlConfig?.cloud_env?.container_max_runtime_hours ??
-        12,
+        720,
+      maxDevicesPerUser: env.maxDevicesPerUser ?? tomlConfig?.limits?.max_devices_per_user ?? 20,
+      maxChatsPerUser: env.maxChatsPerUser ?? tomlConfig?.limits?.max_chats_per_user ?? 10_000,
+      maxEventLogSizeMb:
+        env.maxEventLogSizeMb ?? tomlConfig?.limits?.max_event_log_size_mb ?? 100_000,
     };
 
     return config;
@@ -1268,13 +1287,13 @@ const runServerCommand = (
   });
 
 const startCommand = Command.make("start", { ...sharedServerCommandFlags }).pipe(
-  Command.withDescription("Run the T3 Code server."),
+  Command.withDescription("Run the V3 Code server."),
   Command.withHandler((flags) => runServerCommand(flags)),
 );
 
 const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe(
   Command.withDescription(
-    "Run the T3 Code server without opening a browser and print headless pairing details.",
+    "Run the V3 Code server without opening a browser and print headless pairing details.",
   ),
   Command.withHandler((flags) =>
     runServerCommand(flags, {
@@ -1285,7 +1304,7 @@ const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe
 );
 
 export const cli = Command.make("t3", { ...sharedServerCommandFlags }).pipe(
-  Command.withDescription("Run the T3 Code server."),
+  Command.withDescription("Run the V3 Code server."),
   Command.withHandler((flags) => runServerCommand(flags)),
   Command.withSubcommands([startCommand, serveCommand, authCommand, projectCommand]),
 );

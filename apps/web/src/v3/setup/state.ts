@@ -19,6 +19,16 @@ export type V3SetupWizardStep =
 
 export type V3SetupExposureMode = "cloudflare-tunnel" | "tailnet" | "manual";
 
+export const STEP_TITLES: Record<V3SetupWizardStep, string> = {
+  overview: "Overview",
+  preflight: "System checks",
+  exposure: "Public URL",
+  "data-dir": "Data directory",
+  auth: "Authentication",
+  review: "Review",
+  done: "Finished",
+};
+
 export interface V3SetupWizardState {
   readonly step: V3SetupWizardStep;
   // Pre-flight probe results — null while unchecked, captured structs

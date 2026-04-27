@@ -8,7 +8,7 @@ import {
 } from "@v3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockSubscribeThread = vi.fn();
+const mockSubscribeChat = vi.fn();
 const mockThreadUnsubscribe = vi.fn();
 const mockCreateEnvironmentConnection = vi.fn();
 const mockCreateWsRpcClient = vi.fn();
@@ -146,10 +146,10 @@ describe("retainThreadDetailSubscription", () => {
     vi.clearAllMocks();
 
     mockThreadUnsubscribe.mockImplementation(() => undefined);
-    mockSubscribeThread.mockImplementation(() => mockThreadUnsubscribe);
+    mockSubscribeChat.mockImplementation(() => mockThreadUnsubscribe);
     mockCreateWsRpcClient.mockReturnValue({
-      orchestration: {
-        subscribeThread: mockSubscribeThread,
+      mesh: {
+        subscribeChat: mockSubscribeChat,
       },
     });
     mockCreateEnvironmentConnection.mockImplementation((input) => ({
@@ -184,13 +184,13 @@ describe("retainThreadDetailSubscription", () => {
     const threadId = ThreadId.make("thread-1");
 
     const releaseFirst = retainThreadDetailSubscription(environmentId, threadId);
-    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+    expect(mockSubscribeChat).toHaveBeenCalledTimes(1);
 
     releaseFirst();
     expect(mockThreadUnsubscribe).not.toHaveBeenCalled();
 
     const releaseSecond = retainThreadDetailSubscription(environmentId, threadId);
-    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+    expect(mockSubscribeChat).toHaveBeenCalledTimes(1);
 
     releaseSecond();
     await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
@@ -227,7 +227,7 @@ describe("retainThreadDetailSubscription", () => {
     );
 
     const release = retainThreadDetailSubscription(environmentId, threadId);
-    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+    expect(mockSubscribeChat).toHaveBeenCalledTimes(1);
 
     release();
     await vi.advanceTimersByTimeAsync(30 * 60 * 1000);

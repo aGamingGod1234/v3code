@@ -28,6 +28,9 @@ export function V3DeviceApprovalToast(): null {
       title: "Device awaiting approval",
       description:
         "Sign in with V3 on an already-approved device and approve this one to start syncing.",
+      // Same rationale as the startup nudge: action toasts need enough time
+      // for the user to read + click before auto-dismissal.
+      timeout: 30_000,
       actionProps: {
         children: "Open devices",
         onClick: () => {

@@ -7,6 +7,7 @@ import { DeviceRegistry } from "../../mesh/Services/DeviceRegistry.ts";
 import {
   DeviceApprovalEvent,
   DeviceApprovalService,
+  DeviceLimitReachedError,
   type DeviceApprovalServiceShape,
 } from "../Services/DeviceApprovalService.ts";
 
@@ -37,6 +38,21 @@ export const makeDeviceApprovalService = Effect.gen(function* () {
     Effect.gen(function* () {
       const existing = yield* devices.get({ id: input.deviceId, userId: input.userId });
       const wasNewlyInserted = Option.isNone(existing);
+
+      if (wasNewlyInserted) {
+        // Spec §10.4 cap enforcement. We count *active* (non-removed)
+        // devices and reject if a new insert would exceed the limit.
+        // `listForUser` defaults to active-only so removed-then-reused
+        // device slots don't count against the cap.
+        const activeDevices = yield* devices.listForUser({ userId: input.userId });
+        if (activeDevices.length >= input.maxDevices) {
+          return yield* new DeviceLimitReachedError({
+            userId: input.userId,
+            currentCount: activeDevices.length,
+            limit: input.maxDevices,
+          });
+        }
+      }
 
       const registered = yield* devices.register({
         id: input.deviceId,
