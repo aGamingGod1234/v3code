@@ -758,6 +758,11 @@ export function GeneralSettingsPanel() {
         ...existing,
         [provider]: null,
       }));
+      toastManager.add({
+        type: "success",
+        title: "Custom model removed",
+        description: `${slug} is no longer available in the model picker.`,
+      });
     },
     [settings, updateSettings],
   );
@@ -1212,6 +1217,12 @@ export function GeneralSettingsPanel() {
                                   ...existing,
                                   [providerCard.provider]: null,
                                 }));
+                                toastManager.add({
+                                  type: "success",
+                                  title: `${providerDisplayName} settings reset`,
+                                  description:
+                                    "Binary path, server URL, custom models, and credentials have been cleared.",
+                                });
                               }}
                             />
                           ) : null}
@@ -1263,6 +1274,15 @@ export function GeneralSettingsPanel() {
                                 }
                               : {}),
                           });
+                          if (isDisabling) {
+                            toastManager.add({
+                              type: "success",
+                              title: `${providerDisplayName} disabled`,
+                              description: shouldClearModelSelection
+                                ? "Active sessions will be interrupted and the text-generation model picker has been reset."
+                                : "Active sessions for this provider will be interrupted.",
+                            });
+                          }
                         }}
                         aria-label={`Enable ${providerDisplayName}`}
                       />

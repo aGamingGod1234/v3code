@@ -72,6 +72,8 @@ function useSlowOperationState({
   return phase;
 }
 
+const MAX_PAIRING_ATTEMPTS = 3;
+
 export function PairingRouteSurface({
   auth,
   initialErrorMessage,
@@ -85,12 +87,14 @@ export function PairingRouteSurface({
   const [credential, setCredential] = useState(() => autoPairTokenRef.current ?? "");
   const [errorMessage, setErrorMessage] = useState(initialErrorMessage ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
   const autoSubmitAttemptedRef = useRef(false);
   const submitSlowState = useSlowOperationState({
     slowAtMs: 6_000,
     stuckAtMs: 15_000,
     active: isSubmitting,
   });
+  const isPairingLockedOut = failedAttempts >= MAX_PAIRING_ATTEMPTS;
 
   const submitCredential = useCallback(
     async (nextCredential: string) => {
@@ -106,9 +110,11 @@ export function PairingRouteSurface({
 
       if (submitError) {
         setErrorMessage(submitError);
+        setFailedAttempts((current) => current + 1);
         return;
       }
 
+      setFailedAttempts(0);
       startTransition(() => {
         onAuthenticated();
       });
@@ -119,10 +125,18 @@ export function PairingRouteSurface({
   const handleSubmit = useCallback(
     async (event?: React.SubmitEvent<HTMLFormElement>) => {
       event?.preventDefault();
+      if (isPairingLockedOut) {
+        return;
+      }
       await submitCredential(credential);
     },
-    [submitCredential, credential],
+    [isPairingLockedOut, submitCredential, credential],
   );
+
+  const handleResetAttempts = useCallback(() => {
+    setFailedAttempts(0);
+    setErrorMessage("");
+  }, []);
 
   useEffect(() => {
     const token = autoPairTokenRef.current;
@@ -173,7 +187,15 @@ export function PairingRouteSurface({
             />
           </div>
 
-          {errorMessage ? (
+          {isPairingLockedOut ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/40 bg-destructive/8 px-3 py-2 text-sm text-destructive"
+            >
+              Couldn't pair after {MAX_PAIRING_ATTEMPTS} attempts. Double-check the token (it may be
+              expired) or the server URL, then try again.
+            </div>
+          ) : errorMessage ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/6 px-3 py-2 text-sm text-destructive">
               {errorMessage}
             </div>
@@ -192,9 +214,15 @@ export function PairingRouteSurface({
           ) : null}
 
           <div className="flex flex-wrap gap-2">
-            <Button disabled={isSubmitting} size="sm" type="submit">
-              {isSubmitting ? "Pairing..." : "Continue"}
-            </Button>
+            {isPairingLockedOut ? (
+              <Button onClick={handleResetAttempts} size="sm" type="button">
+                Try again
+              </Button>
+            ) : (
+              <Button disabled={isSubmitting} size="sm" type="submit">
+                {isSubmitting ? "Pairing..." : "Continue"}
+              </Button>
+            )}
             <Button
               disabled={isSubmitting}
               onClick={() => window.location.reload()}
