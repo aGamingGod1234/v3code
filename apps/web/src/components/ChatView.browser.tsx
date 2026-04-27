@@ -56,40 +56,50 @@ import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test
 
 import { DEFAULT_CLIENT_SETTINGS } from "@v3tools/contracts/settings";
 
+import {
+  ADD_PROJECT_SUBMENU_PLACEHOLDER,
+  ARCHIVED_SECONDARY_THREAD_ID,
+  ATTACHMENT_SVG,
+  BASE_TIME_MS,
+  COMPACT_FOOTER_VIEWPORT,
+  DEFAULT_VIEWPORT,
+  LOCAL_ENVIRONMENT_ID,
+  NOW_ISO,
+  PROJECT_DRAFT_KEY,
+  PROJECT_ID,
+  PROJECT_LOGICAL_KEY,
+  REMOTE_ENVIRONMENT_ID,
+  SECOND_PROJECT_ID,
+  THREAD_ID,
+  THREAD_KEY,
+  THREAD_REF,
+  THREAD_TITLE,
+  UUID_ROUTE_RE,
+  WIDE_FOOTER_VIEWPORT,
+  type ViewportSpec,
+} from "./chatViewBrowser/constants";
+import {
+  createAssistantMessage,
+  createBaseServerConfig,
+  createMockEnvironmentApi,
+  createTerminalContext,
+  createUserMessage,
+  isoAt,
+} from "./chatViewBrowser/fixtures";
+import {
+  dispatchChatNewShortcut,
+  findButtonByText,
+  findButtonContainingText,
+  findComposerProviderModelPicker,
+  getCommandPaletteLegendEntries,
+} from "./chatViewBrowser/queryHelpers";
+
 vi.mock("../lib/gitStatusState", () => ({
   useGitStatus: () => ({ data: null, error: null, cause: null, isPending: false }),
   useGitStatuses: () => new Map(),
   refreshGitStatus: () => Promise.resolve(null),
   resetGitStatusStateForTests: () => undefined,
 }));
-
-const THREAD_ID = "thread-browser-test" as ThreadId;
-const THREAD_TITLE = "Browser test thread";
-const ARCHIVED_SECONDARY_THREAD_ID = "thread-secondary-project-archived" as ThreadId;
-const PROJECT_ID = "project-1" as ProjectId;
-const SECOND_PROJECT_ID = "project-2" as ProjectId;
-const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
-const REMOTE_ENVIRONMENT_ID = EnvironmentId.make("environment-remote");
-const THREAD_REF = scopeThreadRef(LOCAL_ENVIRONMENT_ID, THREAD_ID);
-const THREAD_KEY = scopedThreadKey(THREAD_REF);
-const UUID_ROUTE_RE = /^\/draft\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const PROJECT_DRAFT_KEY = `${LOCAL_ENVIRONMENT_ID}:${PROJECT_ID}`;
-const PROJECT_LOGICAL_KEY = deriveLogicalProjectKeyFromSettings(
-  {
-    environmentId: LOCAL_ENVIRONMENT_ID,
-    id: PROJECT_ID,
-    cwd: "/repo/project",
-    repositoryIdentity: null,
-  },
-  {
-    sidebarProjectGroupingMode: DEFAULT_CLIENT_SETTINGS.sidebarProjectGroupingMode,
-    sidebarProjectGroupingOverrides: DEFAULT_CLIENT_SETTINGS.sidebarProjectGroupingOverrides,
-  },
-);
-const NOW_ISO = "2026-03-04T12:00:00.000Z";
-const BASE_TIME_MS = Date.parse(NOW_ISO);
-const ATTACHMENT_SVG = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>";
-const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/projects/my-app)";
 
 interface TestFixture {
   snapshot: OrchestrationReadModel;
@@ -103,177 +113,12 @@ const wsRequests = rpcHarness.requests;
 let customWsRpcResolver: ((body: NormalizedWsRpcRequestBody) => unknown | undefined) | null = null;
 const wsLink = ws.link(/ws(s)?:\/\/.*/);
 
-interface ViewportSpec {
-  name: string;
-  width: number;
-  height: number;
-  textTolerancePx: number;
-  attachmentTolerancePx: number;
-}
-
-const DEFAULT_VIEWPORT: ViewportSpec = {
-  name: "desktop",
-  width: 960,
-  height: 1_100,
-  textTolerancePx: 44,
-  attachmentTolerancePx: 56,
-};
-const WIDE_FOOTER_VIEWPORT: ViewportSpec = {
-  name: "wide-footer",
-  width: 1_400,
-  height: 1_100,
-  textTolerancePx: 44,
-  attachmentTolerancePx: 56,
-};
-const COMPACT_FOOTER_VIEWPORT: ViewportSpec = {
-  name: "compact-footer",
-  width: 430,
-  height: 932,
-  textTolerancePx: 56,
-  attachmentTolerancePx: 56,
-};
-
 interface MountedChatView {
   [Symbol.asyncDispose]: () => Promise<void>;
   cleanup: () => Promise<void>;
   setViewport: (viewport: ViewportSpec) => Promise<void>;
   setContainerSize: (viewport: Pick<ViewportSpec, "width" | "height">) => Promise<void>;
   router: ReturnType<typeof getRouter>;
-}
-
-function isoAt(offsetSeconds: number): string {
-  return new Date(BASE_TIME_MS + offsetSeconds * 1_000).toISOString();
-}
-
-function createBaseServerConfig(): ServerConfig {
-  return {
-    environment: {
-      environmentId: EnvironmentId.make("environment-local"),
-      label: "Local environment",
-      platform: { os: "darwin" as const, arch: "arm64" as const },
-      serverVersion: "0.0.0-test",
-      capabilities: { repositoryIdentity: true },
-    },
-    auth: {
-      policy: "loopback-browser",
-      bootstrapMethods: ["one-time-token"],
-      sessionMethods: ["browser-session-cookie", "bearer-session-token"],
-      sessionCookieName: "t3_session",
-    },
-    cwd: "/repo/project",
-    keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
-    keybindings: [],
-    issues: [],
-    providers: [
-      {
-        provider: "codex",
-        enabled: true,
-        installed: true,
-        version: "0.116.0",
-        status: "ready",
-        auth: { status: "authenticated" },
-        checkedAt: NOW_ISO,
-        models: [],
-        slashCommands: [],
-        skills: [],
-      },
-    ],
-    availableEditors: [],
-    observability: {
-      logsDirectoryPath: "/repo/project/.v3code/logs",
-      localTracingEnabled: true,
-      otlpTracesEnabled: false,
-      otlpMetricsEnabled: false,
-    },
-    settings: {
-      ...DEFAULT_SERVER_SETTINGS,
-      ...DEFAULT_CLIENT_SETTINGS,
-    },
-  };
-}
-
-function createMockEnvironmentApi(input: {
-  browse: EnvironmentApi["filesystem"]["browse"];
-  dispatchCommand: EnvironmentApi["orchestration"]["dispatchCommand"];
-}): EnvironmentApi {
-  return {
-    terminal: {} as EnvironmentApi["terminal"],
-    projects: {} as EnvironmentApi["projects"],
-    filesystem: {
-      browse: input.browse,
-    },
-    git: {} as EnvironmentApi["git"],
-    orchestration: {
-      dispatchCommand: input.dispatchCommand,
-      forkChat: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["orchestration"]["forkChat"],
-      getTurnDiff: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["orchestration"]["getTurnDiff"],
-      getFullThreadDiff: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["orchestration"]["getFullThreadDiff"],
-      subscribeShell: (() => () => undefined) as EnvironmentApi["orchestration"]["subscribeShell"],
-      subscribeThread: (() => () =>
-        undefined) as EnvironmentApi["orchestration"]["subscribeThread"],
-    },
-  };
-}
-
-function createUserMessage(options: {
-  id: MessageId;
-  text: string;
-  offsetSeconds: number;
-  attachments?: Array<{
-    type: "image";
-    id: string;
-    name: string;
-    mimeType: string;
-    sizeBytes: number;
-  }>;
-}) {
-  return {
-    id: options.id,
-    role: "user" as const,
-    text: options.text,
-    ...(options.attachments ? { attachments: options.attachments } : {}),
-    turnId: null,
-    streaming: false,
-    createdAt: isoAt(options.offsetSeconds),
-    updatedAt: isoAt(options.offsetSeconds + 1),
-  };
-}
-
-function createAssistantMessage(options: { id: MessageId; text: string; offsetSeconds: number }) {
-  return {
-    id: options.id,
-    role: "assistant" as const,
-    text: options.text,
-    turnId: null,
-    streaming: false,
-    createdAt: isoAt(options.offsetSeconds),
-    updatedAt: isoAt(options.offsetSeconds + 1),
-  };
-}
-
-function createTerminalContext(input: {
-  id: string;
-  terminalLabel: string;
-  lineStart: number;
-  lineEnd: number;
-  text: string;
-}): TerminalContextDraft {
-  return {
-    id: input.id,
-    threadId: THREAD_ID,
-    terminalId: `terminal-${input.id}`,
-    terminalLabel: input.terminalLabel,
-    lineStart: input.lineStart,
-    lineEnd: input.lineEnd,
-    text: input.text,
-    createdAt: NOW_ISO,
-  };
 }
 
 function createSnapshotForTargetUser(options: {
@@ -1283,24 +1128,8 @@ async function waitForSendButton(): Promise<HTMLButtonElement> {
   );
 }
 
-function findComposerProviderModelPicker(): HTMLButtonElement | null {
-  return document.querySelector<HTMLButtonElement>('[data-chat-provider-model-picker="true"]');
-}
-
-function findButtonByText(text: string): HTMLButtonElement | null {
-  return (Array.from(document.querySelectorAll("button")).find(
-    (button) => button.textContent?.trim() === text,
-  ) ?? null) as HTMLButtonElement | null;
-}
-
 async function waitForButtonByText(text: string): Promise<HTMLButtonElement> {
   return waitForElement(() => findButtonByText(text), `Unable to find "${text}" button.`);
-}
-
-function findButtonContainingText(text: string): HTMLButtonElement | null {
-  return (Array.from(document.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes(text),
-  ) ?? null) as HTMLButtonElement | null;
 }
 
 async function waitForButtonContainingText(text: string): Promise<HTMLButtonElement> {
@@ -1373,20 +1202,6 @@ async function waitForServerConfigToApply(): Promise<void> {
   await waitForLayout();
 }
 
-function dispatchChatNewShortcut(): void {
-  const useMetaForMod = isMacPlatform(navigator.platform);
-  window.dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "o",
-      shiftKey: true,
-      metaKey: useMetaForMod,
-      ctrlKey: !useMetaForMod,
-      bubbles: true,
-      cancelable: true,
-    }),
-  );
-}
-
 async function triggerChatNewShortcutUntilPath(
   router: ReturnType<typeof getRouter>,
   predicate: (pathname: string) => boolean,
@@ -1437,22 +1252,6 @@ async function waitForCommandPaletteInput(placeholder: string): Promise<HTMLInpu
     () => document.querySelector(`input[placeholder="${placeholder}"]`) as HTMLInputElement | null,
     `Command palette input with placeholder "${placeholder}" did not render.`,
   );
-}
-
-function getCommandPaletteLegendEntries(): string[] {
-  const footer = document.querySelector('[data-slot="command-footer"]');
-  if (!footer) {
-    return [];
-  }
-
-  return Array.from(footer.querySelectorAll('[data-slot="kbd-group"]'))
-    .map((group) =>
-      Array.from(group.children)
-        .map((child) => child.textContent?.trim() ?? "")
-        .filter((value) => value.length > 0)
-        .join(" "),
-    )
-    .filter((value) => value.length > 0);
 }
 
 async function dispatchInputKey(
