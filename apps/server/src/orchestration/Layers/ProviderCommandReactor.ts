@@ -178,7 +178,21 @@ const make = Effect.gen(function* () {
         RETURNING key
       `;
       return rows.length === 0;
-    }).pipe(Effect.catchCause(() => Effect.succeed(false)));
+    }).pipe(
+      // Fail closed: when the table is missing or the DB is unhealthy we'd
+      // rather drop a duplicate-looking event than risk double-processing it.
+      // The Cause is logged at debug so operators can still trace the SQL
+      // failure without paging on a transient blip.
+      Effect.catchCause((cause) =>
+        Effect.gen(function* () {
+          yield* Effect.logError(
+            `Failed to check turn-start idempotency for key ${key}; defaulting to handled to avoid duplicate processing`,
+          );
+          yield* Effect.logDebug(Cause.pretty(cause));
+          return true;
+        }),
+      ),
+    );
 
   // Periodic cleanup keeps the table bounded under sustained load.
   const cleanupExpiredIdempotencyKeys: Effect.Effect<void> = Effect.suspend(() =>
