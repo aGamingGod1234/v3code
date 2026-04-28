@@ -401,14 +401,10 @@ jobs:
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
-      - id: app_token
-        name: Mint release app token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-
+      # Forks don't have RELEASE_APP_ID / RELEASE_APP_PRIVATE_KEY configured;
+      # fall back to the default GITHUB_TOKEN (the workflow declares
+      # `permissions: contents: write` at the top level so it has
+      # release-write scope).
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -493,7 +489,7 @@ jobs:
             release-assets/*.blockmap
             release-assets/*.yml
           fail_on_unmatched_files: true
-          token: ${{ steps.app_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish first release
         if: needs.preflight.outputs.previous_tag == ''
@@ -513,7 +509,7 @@ jobs:
             release-assets/*.blockmap
             release-assets/*.yml
           fail_on_unmatched_files: true
-          token: ${{ steps.app_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   finalize:
     name: Finalize release
@@ -521,6 +517,11 @@ jobs:
     needs: [preflight, release]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Forks don't have RELEASE_APP_ID/RELEASE_APP_PRIVATE_KEY, so the
+    # post-release housekeeping (dist-tag pin, version bump commit) is
+    # best-effort. Don't let it fail the run after the GitHub Release
+    # itself has already published.
+    continue-on-error: true
     steps:
       - id: app_token
         name: Mint release app token
@@ -535,7 +536,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ steps.app_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: true
 
       - id: app_bot
