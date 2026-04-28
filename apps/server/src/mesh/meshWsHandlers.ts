@@ -424,21 +424,17 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
           ),
           { "rpc.aggregate": "mesh" },
         ),
-      [MESH_WS_METHODS.importChat]: (input: {
-        command: ChatImportCommand;
-        targetProjectId: ProjectId | null;
-      }) =>
+      [MESH_WS_METHODS.importChat]: (input: { command: ChatImportCommand }) =>
         observeRpcEffect(
           MESH_WS_METHODS.importChat,
           Effect.gen(function* () {
-            // Resolution-only RPC for now: scan the host CLI registries on
-            // disk for skills + MCP servers that the imported transcript
-            // references, mark them enabled vs missing, and echo back a
-            // synthetic preview thread id. Persistence as a real
-            // orchestration thread is a follow-up that needs careful
-            // event-store integration alongside the existing fork flow.
-            const parsed = input.command.parsed;
+            const command = input.command;
+            const parsed = command.parsed;
 
+            // Scan host-CLI registries to mark referenced skills/MCPs as
+            // enabled vs missing. The result rides back on the RPC payload
+            // so the dialog can show post-import what's wired up; it isn't
+            // persisted into the orchestration event stream.
             const snapshot = yield* Effect.tryPromise({
               try: () => readInstalledSnapshot(),
               catch: (cause) =>
@@ -453,14 +449,49 @@ export const makeMeshWsHandlers = (context: MeshHandlerContext) =>
               snapshot,
             );
 
-            const previewThreadId = ThreadId.make(crypto.randomUUID());
-            const targetProjectId = input.targetProjectId ?? ProjectId.make(crypto.randomUUID());
+            // Stamp the source device id from the authenticated session so
+            // the server is the source of truth for "which device kicked
+            // off the import" — clients can suggest it but cannot spoof it.
+            const stampedCommand: ChatImportCommand = {
+              ...command,
+              ...(context.deviceId !== null && command.sourceDeviceId === undefined
+                ? { sourceDeviceId: context.deviceId }
+                : {}),
+            };
+
+            yield* orchestrationEngine
+              .dispatch(stampedCommand)
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError(
+                    `Failed to import chat into thread ${stampedCommand.targetThreadId}.`,
+                    cause,
+                  ),
+                ),
+              );
+
+            // Read back the projected target thread shell to populate the
+            // result payload (mainly so the dialog can show which device
+            // hosts the new chat after defaults were resolved server-side).
+            const targetShellOpt = yield* projectionSnapshotQuery
+              .getThreadShellById(stampedCommand.targetThreadId)
+              .pipe(
+                Effect.mapError((cause) =>
+                  toMeshRpcError("Failed to read imported chat shell.", cause),
+                ),
+              );
+            if (Option.isNone(targetShellOpt)) {
+              return yield* toMeshRpcError(
+                `Imported chat ${stampedCommand.targetThreadId} could not be loaded after creation.`,
+              );
+            }
+            const targetShell = targetShellOpt.value;
 
             return {
-              targetThreadId: previewThreadId,
+              targetThreadId: stampedCommand.targetThreadId,
               importedMessageCount: parsed.messages.length,
-              hostedOnDeviceId: context.deviceId,
-              targetProjectId,
+              hostedOnDeviceId: targetShell.hostDeviceId ?? null,
+              targetProjectId: targetShell.projectId as ProjectId,
               skills: resolution.skills,
               mcpServers: resolution.mcpServers,
             } as const;
