@@ -357,6 +357,11 @@ jobs:
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
+    # The `t3` package name on npmjs.org belongs to the upstream
+    # pingdotgg/t3code project. Forks (this repo) can't publish to it
+    # without renaming the CLI. Keep this job for upstream parity but
+    # don't let an npm-side 404/403 block the GitHub Release upload.
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -389,7 +394,10 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [preflight, build, publish_cli]
-    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' && needs.publish_cli.result == 'success' }}
+    # Don't gate the GitHub Release on npm publish success — see the
+    # continue-on-error note on publish_cli above. We only require that
+    # the binaries actually built.
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
