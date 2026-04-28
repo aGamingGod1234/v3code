@@ -234,12 +234,46 @@ export function removeSavedEnvironmentSecret(input: {
   } satisfies SavedEnvironmentRegistryDocument);
 }
 
+/**
+ * Read the persisted V3 Google token bundle.
+ *
+ * The on-disk file is `{ encryptedTokens: "<base64>" }` — the actual token
+ * material is encrypted via Electron's `safeStorage` API which delegates to
+ * the OS keychain (macOS Keychain, Windows DPAPI, libsecret/kwallet on
+ * Linux). Plaintext tokens never touch disk.
+ *
+ * Returns `null` when:
+ *   - The file is absent
+ *   - Encryption is unavailable on this OS (e.g. Linux without libsecret)
+ *   - The encrypted blob fails to decrypt or decode (corruption, key change)
+ *   - The file is a legacy *plaintext* shape from a build that pre-dated
+ *     encryption — in this case the file is also deleted from disk so the
+ *     plaintext credentials don't linger after the user re-signs in.
+ */
 export function readV3GoogleTokens(input: {
   readonly tokensPath: string;
   readonly secretStorage: DesktopSecretStorage;
 }): GoogleTokenBundleValue | null {
   const document = readJsonFile<GoogleTokenDocument>(input.tokensPath);
-  if (!document?.encryptedTokens || !input.secretStorage.isEncryptionAvailable()) {
+  if (!document) {
+    return null;
+  }
+
+  // Legacy plaintext shape — pre-encryption builds wrote the bundle straight
+  // to disk. Detect by the absence of `encryptedTokens` combined with any
+  // recognisable token field. Delete the file so the plaintext doesn't sit
+  // around indefinitely; the caller will treat this as "not signed in" and
+  // re-prompt.
+  if (!document.encryptedTokens && isLegacyPlaintextGoogleTokenDocument(document)) {
+    try {
+      FS.rmSync(input.tokensPath, { force: true });
+    } catch {
+      // Best effort — re-encryption on next sign-in will overwrite anyway.
+    }
+    return null;
+  }
+
+  if (!document.encryptedTokens || !input.secretStorage.isEncryptionAvailable()) {
     return null;
   }
 
@@ -253,6 +287,12 @@ export function readV3GoogleTokens(input: {
   }
 }
 
+/**
+ * Persist a Google token bundle, encrypted via the OS keychain.
+ *
+ * Refuses to write when `safeStorage` reports encryption is unavailable —
+ * we'd rather fail loudly than write plaintext as a fallback.
+ */
 export function writeV3GoogleTokens(input: {
   readonly tokensPath: string;
   readonly tokens: GoogleTokenBundleValue;
@@ -273,4 +313,21 @@ export function clearV3GoogleTokens(tokensPath: string): void {
     return;
   }
   FS.rmSync(tokensPath, { force: true });
+}
+
+/**
+ * Heuristic to spot pre-encryption legacy token files. A modern document is
+ * `{ encryptedTokens: "..." }`; legacy ones were the raw `GoogleTokenBundle`
+ * with `accessToken` / `idToken` keys at the top level.
+ */
+function isLegacyPlaintextGoogleTokenDocument(document: unknown): boolean {
+  if (typeof document !== "object" || document === null) {
+    return false;
+  }
+  const candidate = document as Record<string, unknown>;
+  return (
+    typeof candidate.accessToken === "string" ||
+    typeof candidate.idToken === "string" ||
+    typeof candidate.refreshToken === "string"
+  );
 }

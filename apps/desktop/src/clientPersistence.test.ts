@@ -10,15 +10,27 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  clearV3GoogleTokens,
   readClientSettings,
   readSavedEnvironmentRegistry,
   readSavedEnvironmentSecret,
+  readV3GoogleTokens,
   removeSavedEnvironmentSecret,
   writeClientSettings,
   writeSavedEnvironmentRegistry,
   writeSavedEnvironmentSecret,
+  writeV3GoogleTokens,
   type DesktopSecretStorage,
 } from "./clientPersistence.ts";
+
+const sampleGoogleBundle = {
+  accessToken: "ya29.a0-access",
+  idToken: "id-token",
+  refreshToken: "refresh-token",
+  expiresAt: "2026-12-31T00:00:00.000Z",
+  scope: "openid email https://www.googleapis.com/auth/drive.appdata",
+  tokenType: "Bearer",
+} as const;
 
 const tempDirectories: string[] = [];
 
@@ -236,5 +248,74 @@ describe("clientPersistence", () => {
         secretStorage,
       }),
     ).toBe("bearer-token");
+  });
+});
+
+describe("V3 Google tokens (safeStorage-backed)", () => {
+  it("round-trips an encrypted bundle through write + read", () => {
+    const tokensPath = makeTempPath("v3-google-tokens.json");
+    const secretStorage = makeSecretStorage(true);
+
+    writeV3GoogleTokens({ tokensPath, tokens: sampleGoogleBundle, secretStorage });
+
+    // The on-disk shape is the encrypted wrapper, never the bundle itself.
+    const onDisk = JSON.parse(fs.readFileSync(tokensPath, "utf8"));
+    expect(onDisk).toHaveProperty("encryptedTokens");
+    expect(onDisk).not.toHaveProperty("accessToken");
+
+    expect(readV3GoogleTokens({ tokensPath, secretStorage })).toEqual(sampleGoogleBundle);
+  });
+
+  it("returns null when the file does not exist", () => {
+    const tokensPath = makeTempPath("absent-tokens.json");
+    expect(readV3GoogleTokens({ tokensPath, secretStorage: makeSecretStorage(true) })).toBeNull();
+  });
+
+  it("refuses to write plaintext when encryption is unavailable", () => {
+    const tokensPath = makeTempPath("v3-google-tokens.json");
+    const secretStorage = makeSecretStorage(false);
+
+    expect(() => writeV3GoogleTokens({ tokensPath, tokens: sampleGoogleBundle, secretStorage }))
+      .toThrowError(/secure storage is unavailable/i);
+    expect(fs.existsSync(tokensPath)).toBe(false);
+  });
+
+  it("returns null and leaves the file alone when safeStorage is unavailable on read", () => {
+    const tokensPath = makeTempPath("v3-google-tokens.json");
+    writeV3GoogleTokens({ tokensPath, tokens: sampleGoogleBundle, secretStorage: makeSecretStorage(true) });
+
+    expect(readV3GoogleTokens({ tokensPath, secretStorage: makeSecretStorage(false) })).toBeNull();
+    expect(fs.existsSync(tokensPath)).toBe(true);
+  });
+
+  it("returns null when the encrypted blob is corrupted", () => {
+    const tokensPath = makeTempPath("v3-google-tokens.json");
+    fs.writeFileSync(
+      tokensPath,
+      JSON.stringify({ encryptedTokens: Buffer.from("not-our-prefix").toString("base64") }),
+      "utf8",
+    );
+
+    expect(readV3GoogleTokens({ tokensPath, secretStorage: makeSecretStorage(true) })).toBeNull();
+  });
+
+  it("detects + deletes a legacy plaintext file from a pre-encryption build", () => {
+    const tokensPath = makeTempPath("v3-google-tokens.json");
+    fs.writeFileSync(tokensPath, JSON.stringify(sampleGoogleBundle), "utf8");
+
+    expect(readV3GoogleTokens({ tokensPath, secretStorage: makeSecretStorage(true) })).toBeNull();
+    expect(fs.existsSync(tokensPath)).toBe(false);
+  });
+
+  it("clears the encrypted file on sign-out", () => {
+    const tokensPath = makeTempPath("v3-google-tokens.json");
+    writeV3GoogleTokens({ tokensPath, tokens: sampleGoogleBundle, secretStorage: makeSecretStorage(true) });
+    expect(fs.existsSync(tokensPath)).toBe(true);
+
+    clearV3GoogleTokens(tokensPath);
+    expect(fs.existsSync(tokensPath)).toBe(false);
+
+    // Idempotent — clearing an absent file is a no-op.
+    expect(() => clearV3GoogleTokens(tokensPath)).not.toThrow();
   });
 });
