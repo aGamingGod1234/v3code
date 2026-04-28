@@ -41,7 +41,6 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public readonly interruptCalls: Array<void> = [];
   public readonly setModelCalls: Array<string | undefined> = [];
   public readonly setPermissionModeCalls: Array<string> = [];
-  public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
   public closeCalls = 0;
 
   emit(message: SDKMessage): void {
@@ -88,10 +87,6 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
 
   readonly setPermissionMode = async (mode: PermissionMode): Promise<void> => {
     this.setPermissionModeCalls.push(mode);
-  };
-
-  readonly setMaxThinkingTokens = async (maxThinkingTokens: number | null): Promise<void> => {
-    this.setMaxThinkingTokensCalls.push(maxThinkingTokens);
   };
 
   readonly close = (): void => {

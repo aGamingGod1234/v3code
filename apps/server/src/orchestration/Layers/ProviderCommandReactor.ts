@@ -12,7 +12,8 @@ import {
   type TurnId,
 } from "@v3tools/contracts";
 import { isTemporaryWorktreeBranch, WORKTREE_BRANCH_PREFIX } from "@v3tools/shared/git";
-import { Cache, Cause, Duration, Effect, Equal, Layer, Option, Schema, Stream } from "effect";
+import { Cause, Duration, Effect, Equal, Layer, Option, Schedule, Schema, Stream } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { makeDrainableWorker } from "@v3tools/shared/DrainableWorker";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
@@ -72,8 +73,8 @@ const turnStartKeyForEvent = (event: ProviderIntentEvent): string =>
 const serverCommandId = (tag: string): CommandId =>
   CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
-const HANDLED_TURN_START_KEY_MAX = 10_000;
-const HANDLED_TURN_START_KEY_TTL = Duration.minutes(30);
+const HANDLED_TURN_START_KEY_TTL_MS = 30 * 60 * 1000;
+const HANDLED_TURN_START_KEY_CLEANUP_INTERVAL = Duration.minutes(15);
 const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 const DEFAULT_THREAD_TITLE = "New thread";
 
@@ -157,18 +158,56 @@ const make = Effect.gen(function* () {
   const gitStatusBroadcaster = yield* GitStatusBroadcaster;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
-  const handledTurnStartKeys = yield* Cache.make<string, true>({
-    capacity: HANDLED_TURN_START_KEY_MAX,
-    timeToLive: HANDLED_TURN_START_KEY_TTL,
-    lookup: () => Effect.succeed(true),
-  });
+  const sql = yield* SqlClient.SqlClient;
 
-  const hasHandledTurnStartRecently = (key: string) =>
-    Cache.getOption(handledTurnStartKeys, key).pipe(
-      Effect.flatMap((cached) =>
-        Cache.set(handledTurnStartKeys, key, true).pipe(Effect.as(Option.isSome(cached))),
+  // Persisted dedup for the turn-start command/event idempotency key.
+  // Replaces the previous in-memory Cache, which lost state on restart and
+  // let queued duplicate events re-fire after a crash. Each check runs an
+  // atomic upsert: a row is returned only when the key was new or the
+  // existing row was older than the TTL window, so an empty result set
+  // means the same key has already been handled within the window.
+  const hasHandledTurnStartRecently = (key: string): Effect.Effect<boolean> =>
+    Effect.gen(function* () {
+      const now = Date.now();
+      const cutoff = now - HANDLED_TURN_START_KEY_TTL_MS;
+      const rows = yield* sql<{ readonly key: string }>`
+        INSERT INTO command_idempotency_keys (key, processed_at)
+        VALUES (${key}, ${now})
+        ON CONFLICT(key) DO UPDATE SET processed_at = excluded.processed_at
+        WHERE command_idempotency_keys.processed_at < ${cutoff}
+        RETURNING key
+      `;
+      return rows.length === 0;
+    }).pipe(
+      // Fail closed: when the table is missing or the DB is unhealthy we'd
+      // rather drop a duplicate-looking event than risk double-processing it.
+      // The Cause is logged at debug so operators can still trace the SQL
+      // failure without paging on a transient blip.
+      Effect.catchCause((cause) =>
+        Effect.gen(function* () {
+          yield* Effect.logError(
+            `Failed to check turn-start idempotency for key ${key}; defaulting to handled to avoid duplicate processing`,
+          );
+          yield* Effect.logDebug(Cause.pretty(cause));
+          return true;
+        }),
       ),
     );
+
+  // Periodic cleanup keeps the table bounded under sustained load.
+  const cleanupExpiredIdempotencyKeys: Effect.Effect<void> = Effect.suspend(() =>
+    sql`
+      DELETE FROM command_idempotency_keys
+      WHERE processed_at < ${Date.now() - HANDLED_TURN_START_KEY_TTL_MS}
+    `.pipe(
+      Effect.asVoid,
+      Effect.catchCause(() => Effect.void),
+    ),
+  );
+  yield* cleanupExpiredIdempotencyKeys.pipe(
+    Effect.repeat(Schedule.spaced(HANDLED_TURN_START_KEY_CLEANUP_INTERVAL)),
+    Effect.forkScoped,
+  );
 
   const threadModelSelections = new Map<string, ModelSelection>();
 

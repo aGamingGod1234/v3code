@@ -36,6 +36,7 @@ const UPSTREAM_PORT_NAMES = [
   "V3UserGitHubScopes",
   "PostgresCanonicalizeModelSelections",
   "ProjectionThreadsForkLineageRecencyIndex",
+  "CommandIdempotencyKeys",
 ] as const;
 
 describe("PostgresMigrations", () => {
