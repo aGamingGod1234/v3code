@@ -3,6 +3,7 @@ import type {
   OrchestrationEvent,
   OrchestrationReadModel,
   OrchestrationThread,
+  ProjectId,
   ThreadId,
 } from "@v3tools/contracts";
 import { Effect } from "effect";
@@ -732,6 +733,18 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
     }
 
+    case "chat.import": {
+      // Import commands take a separate execution path inside the engine
+      // (mirrors chat.fork): the thread-created + N message-sent events
+      // must commit in one transaction, which doesn't fit the decider's
+      // "produce planned events from a read-model snapshot" contract.
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail:
+          "chat.import must be handled directly by OrchestrationEngine.processEnvelope, not the decider.",
+      });
+    }
+
     case "thread.activity.append": {
       yield* requireThread({
         readModel,
@@ -837,4 +850,54 @@ export const validateChatForkCommand = Effect.fn("validateChatForkCommand")(func
     },
     targetProjectId,
   } satisfies ChatForkValidationResult;
+});
+
+export interface ChatImportValidationResult {
+  readonly targetProjectId: ProjectId;
+}
+
+/**
+ * Validate a `chat.import` command against the read model.
+ *
+ * Mirrors validateChatForkCommand but for the simpler case of ingesting an
+ * external transcript: target thread must not exist, the target project must
+ * exist, and the parsed payload must carry at least one message. There's no
+ * source thread to inspect — the parser already vetted the payload shape.
+ */
+export const validateChatImportCommand = Effect.fn("validateChatImportCommand")(function* (input: {
+  readonly command: Extract<OrchestrationCommand, { type: "chat.import" }>;
+  readonly readModel: OrchestrationReadModel;
+}) {
+  const { command, readModel } = input;
+
+  yield* requireThreadAbsent({
+    readModel,
+    command,
+    threadId: command.targetThreadId,
+  });
+
+  if (command.targetProjectId === undefined) {
+    return yield* new OrchestrationCommandInvariantError({
+      commandType: command.type,
+      detail:
+        "chat.import requires a targetProjectId — the imported thread must be attached to a known project.",
+    });
+  }
+
+  yield* requireProject({
+    readModel,
+    command,
+    projectId: command.targetProjectId,
+  });
+
+  if (command.parsed.messages.length === 0) {
+    return yield* new OrchestrationCommandInvariantError({
+      commandType: command.type,
+      detail: "chat.import requires at least one message in the parsed transcript.",
+    });
+  }
+
+  return {
+    targetProjectId: command.targetProjectId,
+  } satisfies ChatImportValidationResult;
 });

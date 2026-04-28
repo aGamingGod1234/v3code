@@ -18,19 +18,23 @@ import { useCallback, useState } from "react";
 import {
   AlertCircleIcon,
   CheckCircle2Icon,
-  CircleDashedIcon,
   FileTextIcon,
   FolderSearchIcon,
   LoaderIcon,
   UploadCloudIcon,
 } from "lucide-react";
-import type {
-  ChatImportFormat,
-  DesktopTranscriptEntry,
-  MeshImportChatResult,
-  ParsedChat,
+import { useNavigate } from "@tanstack/react-router";
+import { scopeThreadRef } from "@v3tools/client-runtime";
+import {
+  CommandId,
+  ThreadId,
+  type ChatImportFormat,
+  type DesktopTranscriptEntry,
+  type MeshImportChatResult,
+  type ParsedChat,
 } from "@v3tools/contracts";
 import { parseChatImport } from "@v3tools/shared/chatImport";
+import { useShallow } from "zustand/react/shallow";
 
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -47,6 +51,8 @@ import {
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
 import { getPrimaryEnvironmentConnection } from "../../environments/runtime";
+import { selectProjectsForEnvironment, useStore } from "../../store";
+import { buildThreadRouteParams } from "../../threadRoutes";
 
 type Mode = "scan" | "upload" | "paste";
 
@@ -357,15 +363,6 @@ function ResolutionPanel({
         />
       ) : null}
 
-      <Alert>
-        <CircleDashedIcon />
-        <AlertTitle>Preview only</AlertTitle>
-        <AlertDescription>
-          The resolved import isn't yet persisted as a new chat thread. Persistence ships in a
-          follow-up. For now, the missing-skill / missing-MCP lists above are the actionable output
-          — install the host CLI tooling that provides them and re-import.
-        </AlertDescription>
-      </Alert>
     </div>
   );
 }
@@ -426,6 +423,17 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
   const [result, setResult] = useState<MeshImportChatResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  // Pick the first project from the primary environment as the import target.
+  // If the user has multiple projects, they can move the chat afterwards via
+  // the existing "move to project" flow. If there are zero projects, the
+  // dialog warns and disables submit.
+  const primaryEnvironmentId = getPrimaryEnvironmentConnection().environmentId;
+  const projectsInPrimary = useStore(
+    useShallow((state) => selectProjectsForEnvironment(state, primaryEnvironmentId)),
+  );
+  const targetProject = projectsInPrimary[0] ?? null;
 
   const reset = useCallback(() => {
     setPending(null);
@@ -447,14 +455,43 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
 
   const submit = useCallback(async () => {
     if (!pending) return;
+    if (!targetProject) {
+      toastManager.add({
+        type: "error",
+        title: "Create a project first",
+        description: "Imported chats need a project to live in.",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       const connection = getPrimaryEnvironmentConnection();
+      const targetThreadId = ThreadId.make(crypto.randomUUID());
       const response = await connection.client.mesh.importChat({
-        command: { parsed: pending.parsed },
-        targetProjectId: null,
+        command: {
+          type: "chat.import" as const,
+          commandId: CommandId.make(crypto.randomUUID()),
+          targetThreadId,
+          targetProjectId: targetProject.id,
+          parsed: pending.parsed,
+          createdAt: new Date().toISOString(),
+        },
       });
       setResult(response);
+      toastManager.add({
+        type: "success",
+        title: "Chat imported",
+        description: `${response.importedMessageCount} messages from ${
+          FORMAT_LABEL[pending.parsed.format]
+        }`,
+      });
+      setOpen(false);
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(
+          scopeThreadRef(primaryEnvironmentId, response.targetThreadId),
+        ),
+      });
     } catch (cause) {
       toastManager.add({
         type: "error",
@@ -464,7 +501,7 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
     } finally {
       setSubmitting(false);
     }
-  }, [pending]);
+  }, [navigate, pending, primaryEnvironmentId, targetProject]);
 
   return (
     <Dialog
@@ -509,10 +546,26 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
                 {pending.parsed.references.skillIds.length} skills ·{" "}
                 {pending.parsed.references.mcpServerIds.length} MCPs referenced
               </div>
+              {targetProject ? (
+                <div className="mt-1 text-muted-foreground">
+                  Will be added to <span className="text-foreground">{targetProject.name}</span>
+                </div>
+              ) : (
+                <Alert variant="error" className="mt-2">
+                  <AlertTitle>No project to import into</AlertTitle>
+                  <AlertDescription>
+                    Create a project in V3 first — imported chats need a project to live in.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="mt-3">
-                <Button size="sm" onClick={() => void submit()} disabled={submitting}>
+                <Button
+                  size="sm"
+                  onClick={() => void submit()}
+                  disabled={submitting || !targetProject}
+                >
                   {submitting ? <LoaderIcon className="mr-2 size-3 animate-spin" /> : null}
-                  Resolve references
+                  Import chat
                 </Button>
               </div>
             </div>
