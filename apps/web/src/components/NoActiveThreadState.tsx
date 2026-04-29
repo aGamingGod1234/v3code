@@ -1,5 +1,5 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
 import { SidebarInset, SidebarTrigger } from "./ui/sidebar";
+import { HomeComposer } from "./HomeComposer";
 import { isElectron } from "../env";
 import { cn } from "~/lib/utils";
 
@@ -17,28 +17,21 @@ export function NoActiveThreadState() {
         >
           {isElectron ? (
             <span className="text-xs text-muted-foreground/50 wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]">
-              No active thread
+              Start a chat
             </span>
           ) : (
             <div className="flex items-center gap-2">
               <SidebarTrigger className="size-7 shrink-0 md:hidden" />
               <span className="text-sm font-medium text-foreground md:text-muted-foreground/60">
-                No active thread
+                Start a chat
               </span>
             </div>
           )}
         </header>
 
-        <Empty className="flex-1">
-          <div className="w-full max-w-lg rounded-3xl border border-border/55 bg-card/20 px-8 py-12 shadow-sm/5">
-            <EmptyHeader className="max-w-none">
-              <EmptyTitle className="text-foreground text-xl">Pick a thread to continue</EmptyTitle>
-              <EmptyDescription className="mt-2 text-sm text-muted-foreground/78">
-                Select an existing thread or create a new one to get started.
-              </EmptyDescription>
-            </EmptyHeader>
-          </div>
-        </Empty>
+        <div className="flex flex-1 items-center justify-center overflow-y-auto px-4 py-10 sm:px-6 sm:py-16">
+          <HomeComposer />
+        </div>
       </div>
     </SidebarInset>
   );

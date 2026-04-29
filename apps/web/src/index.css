@@ -128,6 +128,69 @@
   }
 }
 
+/* ----------------------------------------------------------------------- */
+/* Named themes — palette/radius/font swaps only. Layout, spacing, and    */
+/* component structure stay identical across all themes.                  */
+/*                                                                         */
+/* Themes are inspired by other coding-agent UIs we admire, not copied.   */
+/* No protected branding, icons, or logos are reproduced.                 */
+/* ----------------------------------------------------------------------- */
+
+:root[data-theme="codex-inspired"] {
+  --radius: 0.5rem;
+  --primary: oklch(0.62 0.18 145);
+  --ring: oklch(0.62 0.18 145);
+}
+:root[data-theme="codex-inspired"].dark {
+  --primary: oklch(0.7 0.18 145);
+  --ring: oklch(0.7 0.18 145);
+  --background: oklch(0.18 0.005 250);
+  --card: oklch(0.21 0.005 250);
+  --popover: oklch(0.21 0.005 250);
+}
+
+:root[data-theme="claude-inspired"] {
+  --radius: 0.75rem;
+  --primary: oklch(0.65 0.16 35);
+  --ring: oklch(0.65 0.16 35);
+  --background: oklch(0.985 0.005 80);
+  --card: oklch(1 0 0);
+}
+:root[data-theme="claude-inspired"].dark {
+  --primary: oklch(0.72 0.16 35);
+  --ring: oklch(0.72 0.16 35);
+  --background: oklch(0.21 0.01 60);
+  --card: oklch(0.24 0.01 60);
+  --popover: oklch(0.24 0.01 60);
+}
+
+:root[data-theme="cursor-inspired"] {
+  --radius: 0.5rem;
+  --primary: oklch(0.62 0.22 285);
+  --ring: oklch(0.62 0.22 285);
+}
+:root[data-theme="cursor-inspired"].dark {
+  --primary: oklch(0.7 0.22 285);
+  --ring: oklch(0.7 0.22 285);
+  --background: oklch(0.16 0.01 280);
+  --card: oklch(0.2 0.01 280);
+  --popover: oklch(0.2 0.01 280);
+}
+
+:root[data-theme="windsurf-inspired"] {
+  --radius: 0.875rem;
+  --primary: oklch(0.65 0.16 200);
+  --ring: oklch(0.65 0.16 200);
+  --background: oklch(0.99 0.005 200);
+}
+:root[data-theme="windsurf-inspired"].dark {
+  --primary: oklch(0.72 0.16 200);
+  --ring: oklch(0.72 0.16 200);
+  --background: oklch(0.2 0.015 220);
+  --card: oklch(0.24 0.015 220);
+  --popover: oklch(0.24 0.015 220);
+}
+
 body {
   font-family:
     "DM Sans",

@@ -33,6 +33,67 @@ export const SidebarProjectGroupingMode = Schema.Literals([
 export type SidebarProjectGroupingMode = typeof SidebarProjectGroupingMode.Type;
 export const DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE: SidebarProjectGroupingMode = "repository";
 
+// Phase 1 Codex-style settings.
+export const WorkMode = Schema.Literals(["coding", "everyday"]);
+export type WorkMode = typeof WorkMode.Type;
+
+export const PermissionMode = Schema.Literals(["default", "auto-review", "full-access"]);
+export type PermissionMode = typeof PermissionMode.Type;
+
+export const FullAccessGrant = Schema.Struct({
+  cwd: Schema.String,
+  grantedAt: Schema.String,
+});
+export type FullAccessGrant = typeof FullAccessGrant.Type;
+
+export const PermissionsSettings = Schema.Struct({
+  mode: PermissionMode.pipe(Schema.withDecodingDefault(Effect.succeed("default" as const))),
+  // Per-project remembered Full Access grants — keyed by ProjectId, with the
+  // cwd at grant time so renamed/relocated projects get re-prompted.
+  // NOTE: legacy `Record<ProjectId, true>` values from earlier versions are
+  // discarded at parse time (Effect Schema rejects them as the wrong shape),
+  // matching the security-fail-closed migration plan.
+  fullAccessRememberByProject: Schema.Record(TrimmedNonEmptyString, FullAccessGrant).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+});
+export type PermissionsSettings = typeof PermissionsSettings.Type;
+
+export const FollowUpBehavior = Schema.Literals(["queue", "steer"]);
+export type FollowUpBehavior = typeof FollowUpBehavior.Type;
+
+export const CodeReviewStyle = Schema.Literals(["inline", "detached"]);
+export type CodeReviewStyle = typeof CodeReviewStyle.Type;
+
+export const CustomPrompt = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedString.pipe(
+    Schema.decodeTo(
+      Schema.String,
+      SchemaTransformation.transformOrFail({
+        decode: (value) => Effect.succeed(value.replace(/[\r\n]+/g, " ").slice(0, 60)),
+        encode: (value) => Effect.succeed(value),
+      }),
+    ),
+  ),
+  content: Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.String,
+      SchemaTransformation.transformOrFail({
+        decode: (value) => Effect.succeed(value.slice(0, 4000)),
+        encode: (value) => Effect.succeed(value),
+      }),
+    ),
+  ),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type CustomPrompt = typeof CustomPrompt.Type;
+
+export const GitHubAppSettings = Schema.Struct({
+  deviceFlowClientId: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+});
+export type GitHubAppSettings = typeof GitHubAppSettings.Type;
+
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -57,6 +118,22 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
   v3ServerNodeUrlOverride: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+
+  // Phase 1 Codex-style configuration. Only fields wired to runtime behaviour
+  // are persisted — unwired toggles must NOT live here.
+  workMode: WorkMode.pipe(Schema.withDecodingDefault(Effect.succeed("coding" as const))),
+  permissions: PermissionsSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  requireCtrlEnter: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  followUpBehavior: FollowUpBehavior.pipe(
+    Schema.withDecodingDefault(Effect.succeed("queue" as const)),
+  ),
+  codeReviewStyle: CodeReviewStyle.pipe(
+    Schema.withDecodingDefault(Effect.succeed("inline" as const)),
+  ),
+  agentEnvironment: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  terminalShell: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  customPrompts: Schema.Array(CustomPrompt).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  gitHub: GitHubAppSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 

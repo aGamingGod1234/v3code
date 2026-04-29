@@ -14,11 +14,12 @@
 // the dialog surfaces what would be enabled and lets the user copy
 // missing IDs to clipboard for manual install.
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircleIcon,
   CheckCircle2Icon,
   FileTextIcon,
+  FolderOpenIcon,
   FolderSearchIcon,
   LoaderIcon,
   UploadCloudIcon,
@@ -30,6 +31,8 @@ import {
   ThreadId,
   type ChatImportFormat,
   type DesktopTranscriptEntry,
+  type DesktopTranscriptListing,
+  type DesktopTranscriptScannedRoot,
   type MeshImportChatResult,
   type ParsedChat,
 } from "@v3tools/contracts";
@@ -66,6 +69,15 @@ const FORMAT_LABEL: Record<ChatImportFormat, string> = {
   claude: "Claude Code",
   "anthropic-console": "Anthropic Console",
 };
+
+const ENTRY_FORMAT_LABEL: Record<DesktopTranscriptEntry["format"], string> = {
+  codex: "Codex",
+  claude: "Claude Code",
+  "anthropic-console": "Anthropic Console",
+  unknown: "Unknown",
+};
+
+const PAGE_SIZE = 100;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -120,30 +132,171 @@ function ModeTabs({
   );
 }
 
+function ScannedRootsFooter({
+  scannedRoots,
+}: {
+  readonly scannedRoots: ReadonlyArray<DesktopTranscriptScannedRoot>;
+}) {
+  if (scannedRoots.length === 0) return null;
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
+      <div className="mb-1 font-medium uppercase tracking-wide">Scanned</div>
+      <ul className="space-y-0.5">
+        {scannedRoots.map((root) => (
+          <li
+            key={`${root.path}|${root.format}`}
+            className="flex items-center justify-between gap-3"
+          >
+            <span className="truncate font-mono">{root.path}</span>
+            <span className="shrink-0">
+              {root.existed ? `${root.fileCount} file${root.fileCount === 1 ? "" : "s"}` : "—"}
+              {root.truncated ? " (truncated)" : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ScanLocalTab({
   onPicked,
 }: {
   readonly onPicked: (entry: DesktopTranscriptEntry, content: string) => void;
 }) {
   const bridge = window.desktopBridge?.chatImport;
-  const [entries, setEntries] = useState<ReadonlyArray<DesktopTranscriptEntry> | null>(null);
+  const localBridge = window.desktopBridge;
+  const sessionRef = useRef<string | null>(null);
+  const [listing, setListing] = useState<DesktopTranscriptListing | null>(null);
   const [loading, setLoading] = useState(false);
-  const [readingPath, setReadingPath] = useState<string | null>(null);
+  const [scanningFolder, setScanningFolder] = useState(false);
+  const [readingId, setReadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [previewById, setPreviewById] = useState<Record<string, string | null>>({});
+  const previewedRef = useRef<Set<string>>(new Set());
+
+  const ensureSession = useCallback(async (): Promise<string | null> => {
+    if (!bridge) return null;
+    if (sessionRef.current) return sessionRef.current;
+    const result = await bridge.openSession();
+    sessionRef.current = result.sessionId;
+    previewedRef.current = new Set();
+    return result.sessionId;
+  }, [bridge]);
 
   const refresh = useCallback(async () => {
     if (!bridge) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await bridge.listLocalTranscripts();
-      setEntries(result.entries);
+      const sessionId = await ensureSession();
+      if (!sessionId) return;
+      const result = await bridge.listLocal({ sessionId });
+      setListing(result);
+      setPageSize(PAGE_SIZE);
+      previewedRef.current = new Set();
+      setPreviewById({});
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not list transcripts.");
+      const message = cause instanceof Error ? cause.message : "Could not list transcripts.";
+      if (message === "session-expired") {
+        sessionRef.current = null;
+        // Retry once on session expiry — the modal stayed open past the idle window.
+        try {
+          const newSessionId = await ensureSession();
+          if (!newSessionId) return;
+          const result = await bridge.listLocal({ sessionId: newSessionId });
+          setListing(result);
+          setPageSize(PAGE_SIZE);
+          previewedRef.current = new Set();
+          setPreviewById({});
+          return;
+        } catch (retryCause) {
+          setError(retryCause instanceof Error ? retryCause.message : message);
+        }
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
+  }, [bridge, ensureSession]);
+
+  const chooseFolder = useCallback(async () => {
+    if (!bridge || !localBridge) return;
+    setScanningFolder(true);
+    setError(null);
+    try {
+      const folderPath = await localBridge.pickFolder();
+      if (!folderPath) return;
+      const sessionId = await ensureSession();
+      if (!sessionId) return;
+      const result = await bridge.scanFolder({ sessionId, folderPath });
+      setListing(result);
+      setPageSize(PAGE_SIZE);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not scan folder.");
+    } finally {
+      setScanningFolder(false);
+    }
+  }, [bridge, ensureSession, localBridge]);
+
+  // Open a session on mount; close it on unmount.
+  useEffect(() => {
+    if (!bridge) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await ensureSession();
+        if (cancelled) return;
+        await refresh();
+      } catch (cause) {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      const sessionId = sessionRef.current;
+      sessionRef.current = null;
+      if (sessionId) {
+        void bridge.closeSession({ sessionId }).catch(() => {});
+      }
+    };
+    // refresh is stable enough — it depends on ensureSession which depends on bridge
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge]);
+
+  // Lazily fetch previews for visible rows (the first `pageSize` of `entries`).
+  const visibleEntries = listing?.entries.slice(0, pageSize) ?? [];
+  useEffect(() => {
+    if (!bridge) return;
+    const sessionId = sessionRef.current;
+    if (!sessionId) return;
+    const toFetch = visibleEntries.filter((entry) => !previewedRef.current.has(entry.transcriptId));
+    if (toFetch.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (const entry of toFetch) {
+        if (cancelled) return;
+        previewedRef.current.add(entry.transcriptId);
+        try {
+          const result = await bridge.readPreview({ sessionId, transcriptId: entry.transcriptId });
+          if (cancelled) return;
+          setPreviewById((current) => ({ ...current, [entry.transcriptId]: result.previewLine }));
+        } catch {
+          // Silent — the row falls back to displayPath.
+          if (!cancelled) {
+            setPreviewById((current) => ({ ...current, [entry.transcriptId]: null }));
+          }
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, listing, pageSize, visibleEntries]);
 
   if (!bridge) {
     return (
@@ -157,74 +310,118 @@ function ScanLocalTab({
     );
   }
 
+  const totalEntries = listing?.entries.length ?? 0;
+  const hasMore = totalEntries > pageSize;
+  const allEntries = listing?.entries ?? [];
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          Scans <code>~/.codex/sessions</code> and{" "}
-          <code>~/.claude/projects/&lt;slug&gt;/sessions</code>.
+          Scans <code>~/.codex/sessions</code> and <code>~/.claude/projects</code>.
         </p>
-        <Button size="xs" variant="outline" onClick={() => void refresh()} disabled={loading}>
-          {loading ? <LoaderIcon className="size-3 animate-spin" /> : null}
-          {entries === null ? "Scan now" : "Refresh"}
-        </Button>
+        <div className="flex items-center gap-1.5">
+          {localBridge ? (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => void chooseFolder()}
+              disabled={loading || scanningFolder}
+            >
+              {scanningFolder ? (
+                <LoaderIcon className="mr-1 size-3 animate-spin" />
+              ) : (
+                <FolderOpenIcon className="mr-1 size-3" />
+              )}
+              Choose transcript folder…
+            </Button>
+          ) : null}
+          <Button size="xs" variant="outline" onClick={() => void refresh()} disabled={loading}>
+            {loading ? <LoaderIcon className="mr-1 size-3 animate-spin" /> : null}
+            {listing === null ? "Scan now" : "Refresh"}
+          </Button>
+        </div>
       </div>
       {error ? (
         <Alert variant="error">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-      {entries !== null ? (
-        entries.length === 0 ? (
-          <Alert>
-            <AlertTitle>No transcripts found</AlertTitle>
-            <AlertDescription>
-              Neither <code>~/.codex/sessions</code> nor any{" "}
-              <code>~/.claude/projects/*/sessions</code> folder contained <code>.jsonl</code> files.
-              If you've used Codex or Claude Code, those host CLIs should have created these
-              directories — check that the host is installed and you've signed in at least once.
-            </AlertDescription>
-          </Alert>
+      {listing !== null ? (
+        totalEntries === 0 ? (
+          <>
+            <Alert>
+              <AlertTitle>No transcripts found</AlertTitle>
+              <AlertDescription>
+                The built-in scan didn't find any <code>.jsonl</code> files. Try{" "}
+                <span className="font-medium">Choose transcript folder…</span> to point at the
+                directory holding your transcripts.
+              </AlertDescription>
+            </Alert>
+            <ScannedRootsFooter scannedRoots={listing.scannedRoots} />
+          </>
         ) : (
-          <ul className="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border bg-background">
-            {entries.map((entry) => (
-              <li key={entry.path}>
-                <button
-                  type="button"
-                  disabled={readingPath !== null}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs hover:bg-muted disabled:cursor-wait disabled:opacity-60"
-                  onClick={async () => {
-                    setReadingPath(entry.path);
-                    try {
-                      const file = await bridge.readTranscript(entry.path);
-                      onPicked(entry, file.content);
-                    } catch (cause) {
-                      toastManager.add({
-                        type: "error",
-                        title: "Could not read transcript",
-                        description: cause instanceof Error ? cause.message : String(cause),
-                      });
-                    } finally {
-                      setReadingPath(null);
-                    }
-                  }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-foreground">
-                      {entry.preview ?? entry.path}
-                    </div>
-                    <div className="truncate text-[10px] text-muted-foreground">
-                      {FORMAT_LABEL[entry.format]} · {formatBytes(entry.bytes)} ·{" "}
-                      {new Date(entry.modifiedAt).toLocaleString()}
-                    </div>
-                  </div>
-                  {readingPath === entry.path ? (
-                    <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border bg-background">
+              {visibleEntries.map((entry) => {
+                const preview = previewById[entry.transcriptId] ?? null;
+                return (
+                  <li key={entry.transcriptId}>
+                    <button
+                      type="button"
+                      disabled={readingId !== null}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+                      onClick={async () => {
+                        const sessionId = sessionRef.current;
+                        if (!sessionId) return;
+                        setReadingId(entry.transcriptId);
+                        try {
+                          const file = await bridge.readTranscript({
+                            sessionId,
+                            transcriptId: entry.transcriptId,
+                          });
+                          onPicked(entry, file.content);
+                        } catch (cause) {
+                          toastManager.add({
+                            type: "error",
+                            title: "Could not read transcript",
+                            description: cause instanceof Error ? cause.message : String(cause),
+                          });
+                        } finally {
+                          setReadingId(null);
+                        }
+                      }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium text-foreground">
+                          {preview ?? entry.displayPath}
+                        </div>
+                        <div className="truncate text-[10px] text-muted-foreground">
+                          {ENTRY_FORMAT_LABEL[entry.format]} · {formatBytes(entry.bytes)} ·{" "}
+                          {new Date(entry.modifiedAt).toLocaleString()}
+                        </div>
+                      </div>
+                      {readingId === entry.transcriptId ? (
+                        <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {hasMore ? (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  setPageSize((current) => Math.min(current + PAGE_SIZE, allEntries.length))
+                }
+              >
+                Show more ({totalEntries - pageSize} remaining)
+              </Button>
+            ) : null}
+            <ScannedRootsFooter scannedRoots={listing.scannedRoots} />
+          </>
         )
       ) : null}
     </div>
@@ -362,7 +559,6 @@ function ResolutionPanel({
           onCopy={() => copyMissing(missingMcps)}
         />
       ) : null}
-
     </div>
   );
 }
@@ -524,7 +720,7 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
         <DialogPanel className="space-y-4">
           <ModeTabs mode={mode} onChange={setMode} hasDesktopBridge={hasDesktopBridge} />
           {mode === "scan" ? (
-            <ScanLocalTab onPicked={(entry, content) => handleParsed(entry.path, content)} />
+            <ScanLocalTab onPicked={(entry, content) => handleParsed(entry.displayPath, content)} />
           ) : null}
           {mode === "upload" ? <UploadTab onParsed={handleParsed} /> : null}
           {mode === "paste" ? <PasteTab onParsed={handleParsed} /> : null}

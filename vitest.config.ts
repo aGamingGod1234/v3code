@@ -11,6 +11,13 @@ export default defineConfig({
     ],
   },
   test: {
-    exclude: ["**/.claude/**", "**/.docs/**", "**/.git/**", "**/.plans/**", "**/.turbo/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/.claude/**",
+      "**/.docs/**",
+      "**/.git/**",
+      "**/.plans/**",
+      "**/.turbo/**",
+    ],
   },
 });

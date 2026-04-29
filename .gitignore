@@ -7,6 +7,7 @@ node_modules
 *.log
 *.tsbuildinfo
 apps/*/dist
+apps/*/dist-cloud
 .astro
 packages/*/dist
 .env
@@ -15,6 +16,7 @@ build/
 .logs/
 release/
 release-mock/
+release.exe/
 .t3
 .idea/
 apps/web/.playwright

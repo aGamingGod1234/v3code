@@ -1,10 +1,7 @@
 import { Schema } from "effect";
 
 import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "../baseSchemas.ts";
-import {
-  ChatImportMcpResolution,
-  ChatImportSkillResolution,
-} from "../chatImport.ts";
+import { ChatImportMcpResolution, ChatImportSkillResolution } from "../chatImport.ts";
 import { DeviceApprovalStreamEvent, DeviceId } from "../identity.ts";
 import {
   ChatForkCommand,

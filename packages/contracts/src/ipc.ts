@@ -225,6 +225,14 @@ export interface DesktopBridge {
   getServerExposureState: () => Promise<DesktopServerExposureState>;
   setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+  // Strict directory creation. The renderer passes a parent path the user
+  // already chose via pickFolder() and a single-segment name; main validates
+  // the name (no separators, no traversal, no Windows reserved names, no
+  // trailing dot/space) and returns the absolute path of the new directory.
+  createDirectory: (input: {
+    readonly parentPath: string;
+    readonly name: string;
+  }) => Promise<string>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -258,6 +266,30 @@ export interface DesktopBridge {
   // it against the signed-in V3 user. Rejects on cancellation, timeout,
   // network failure, or when the embedded client credentials are absent.
   openV3GitHubSignIn: (input: { scopes: string }) => Promise<GitHubTokenBundle>;
+  // V3 GitHub Device Flow. Token handling lives entirely in the main
+  // process — the renderer drives UI state via opaque deviceCodeHandles
+  // and never sees the raw access token. Polling cadence is owned by
+  // main; the renderer just reads cached status.
+  spawnDiscovery: {
+    readonly getOptions: (input?: {
+      readonly forceRefresh?: boolean;
+    }) => Promise<SpawnDiscoveryOptions>;
+  };
+  github: {
+    readonly setClientIdOverride: (input: { clientId: string | null }) => Promise<void>;
+    readonly startDeviceFlow: (input: {
+      readonly scopes: ReadonlyArray<string>;
+      readonly clientIdOverride?: string | null;
+    }) => Promise<GitHubDeviceFlowStart>;
+    readonly getDeviceFlowStatus: (input: {
+      readonly deviceCodeHandle: string;
+    }) => Promise<GitHubDeviceFlowStatus>;
+    readonly cancelDeviceFlow: (input: { readonly deviceCodeHandle: string }) => Promise<void>;
+    readonly getStatus: () => Promise<GitHubAuthStatus>;
+    readonly disconnect: () => Promise<{ readonly localCleared: boolean }>;
+    readonly validateToken: () => Promise<GitHubTokenValidation>;
+    readonly manualRevokeUrl: () => Promise<string>;
+  };
   // V3 (Phase 2d): server-node setup wizard IPC. Grouped under a single
   // object so the renderer can pass the whole namespace around as a
   // dependency without the `DesktopBridge` surface exploding flat-list-
@@ -275,32 +307,135 @@ export interface DesktopBridge {
     ) => Promise<V3WizardWriteConfigResult>;
     readonly generateEncryptionKey: () => Promise<string>;
   };
-  // Chat-import IPC: scan well-known transcript directories
-  // (~/.codex/sessions, ~/.claude/projects/<slug>/sessions) and read
-  // individual transcript files into the renderer for parsing. The
-  // parser itself is pure and lives in @v3tools/shared/chatImport, so
-  // file reads happen on the renderer side once the path is known.
+  // Chat-import IPC: session-scoped, opaque-ID-based. The renderer never
+  // sends raw paths back to main — every read op keys off a transcriptId
+  // minted by main during scan. Scanned paths displayed to the user via
+  // `displayPath` are read-only labels.
+  //
+  // Sessions expire after 30 minutes of inactivity; renderers must call
+  // `closeSession` on unmount.
   chatImport: {
-    readonly listLocalTranscripts: () => Promise<DesktopTranscriptListing>;
-    readonly readTranscript: (path: string) => Promise<DesktopTranscriptFile>;
+    readonly openSession: () => Promise<DesktopChatImportSession>;
+    readonly listLocal: (input: {
+      readonly sessionId: string;
+    }) => Promise<DesktopTranscriptListing>;
+    readonly scanFolder: (input: {
+      readonly sessionId: string;
+      readonly folderPath: string;
+    }) => Promise<DesktopTranscriptListing>;
+    readonly readPreview: (input: {
+      readonly sessionId: string;
+      readonly transcriptId: string;
+    }) => Promise<DesktopTranscriptPreview>;
+    readonly readTranscript: (input: {
+      readonly sessionId: string;
+      readonly transcriptId: string;
+    }) => Promise<DesktopTranscriptFile>;
+    readonly closeSession: (input: { readonly sessionId: string }) => Promise<void>;
   };
 }
 
+export interface DesktopChatImportSession {
+  readonly sessionId: string;
+}
+
+export type DesktopTranscriptFormat = "codex" | "claude" | "anthropic-console" | "unknown";
+export type DesktopTranscriptScanFormat = "codex" | "claude" | "auto";
+
 export interface DesktopTranscriptEntry {
-  readonly path: string;
-  readonly format: "codex" | "claude";
+  readonly transcriptId: string;
+  readonly displayPath: string;
+  readonly format: DesktopTranscriptFormat;
   readonly modifiedAt: string;
   readonly bytes: number;
-  readonly preview: string | null;
+}
+
+export interface DesktopTranscriptScannedRoot {
+  readonly path: string;
+  readonly format: DesktopTranscriptScanFormat;
+  readonly fileCount: number;
+  readonly truncated: boolean;
+  readonly existed: boolean;
 }
 
 export interface DesktopTranscriptListing {
   readonly entries: ReadonlyArray<DesktopTranscriptEntry>;
+  readonly scannedRoots: ReadonlyArray<DesktopTranscriptScannedRoot>;
+}
+
+export interface DesktopTranscriptPreview {
+  readonly previewLine: string | null;
 }
 
 export interface DesktopTranscriptFile {
-  readonly path: string;
   readonly content: string;
+}
+
+// Spawn discovery shapes ---------------------------------------------------
+
+export interface SpawnAgentEnvironmentOption {
+  readonly id: "windows-native" | "wsl" | "mac" | "linux";
+  readonly label: string;
+}
+
+export interface SpawnTerminalShellOption {
+  readonly id: string;
+  readonly label: string;
+  readonly path: string;
+}
+
+export interface SpawnDiscoveryOptions {
+  readonly agentEnvironments: ReadonlyArray<SpawnAgentEnvironmentOption>;
+  readonly terminalShells: ReadonlyArray<SpawnTerminalShellOption>;
+}
+
+// GitHub Device Flow shapes ------------------------------------------------
+
+export interface GitHubDeviceFlowStart {
+  readonly userCode: string;
+  readonly verificationUri: string;
+  readonly expiresIn: number;
+  readonly interval: number;
+  readonly deviceCodeHandle: string;
+}
+
+export type GitHubDeviceFlowState =
+  | "awaiting_user"
+  | "polling"
+  | "success"
+  | "expired_token"
+  | "access_denied"
+  | "incorrect_device_code"
+  | "incorrect_client_credentials"
+  | "unknown_error"
+  | "cancelled";
+
+export interface GitHubDeviceFlowStatus {
+  readonly state: GitHubDeviceFlowState;
+  readonly error: string | null;
+  readonly lastPolledAt: string | null;
+}
+
+export type GitHubAuthBootstrapState = "ok" | "failed" | "skipped";
+export type GitHubAuthTokenSource = "device-flow" | "browser-redirect" | "loopback" | null;
+
+export interface GitHubAuthStatus {
+  readonly connected: boolean;
+  readonly partial: boolean;
+  readonly login: string | null;
+  readonly scopes: ReadonlyArray<string>;
+  readonly avatarUrl: string | null;
+  readonly tokenSource: GitHubAuthTokenSource;
+  readonly lastValidatedAt: string | null;
+  readonly bootstrapState: GitHubAuthBootstrapState;
+  readonly needsReconnect: boolean;
+  readonly reconnectReason: string | null;
+}
+
+export interface GitHubTokenValidation {
+  readonly valid: boolean;
+  readonly login: string | null;
+  readonly scopes: ReadonlyArray<string>;
 }
 
 /**

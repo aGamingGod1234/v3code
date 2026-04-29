@@ -15,11 +15,20 @@ import { Route as PairRouteImport } from './routes/pair'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
+import { Route as SettingsWorktreesRouteImport } from './routes/settings.worktrees'
+import { Route as SettingsUsageRouteImport } from './routes/settings.usage'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
+import { Route as SettingsPersonalizationRouteImport } from './routes/settings.personalization'
+import { Route as SettingsMcpRouteImport } from './routes/settings.mcp'
+import { Route as SettingsGitRouteImport } from './routes/settings.git'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
+import { Route as SettingsEnvironmentsRouteImport } from './routes/settings.environments'
 import { Route as SettingsDevicesRouteImport } from './routes/settings.devices'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
+import { Route as SettingsConfigurationRouteImport } from './routes/settings.configuration'
+import { Route as SettingsBrowserRouteImport } from './routes/settings.browser'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
+import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 
@@ -52,14 +61,44 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ChatRoute,
 } as any)
+const SettingsWorktreesRoute = SettingsWorktreesRouteImport.update({
+  id: '/worktrees',
+  path: '/worktrees',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsUsageRoute = SettingsUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
   id: '/providers',
   path: '/providers',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsPersonalizationRoute = SettingsPersonalizationRouteImport.update({
+  id: '/personalization',
+  path: '/personalization',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsMcpRoute = SettingsMcpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsGitRoute = SettingsGitRouteImport.update({
+  id: '/git',
+  path: '/git',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
   id: '/general',
   path: '/general',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsEnvironmentsRoute = SettingsEnvironmentsRouteImport.update({
+  id: '/environments',
+  path: '/environments',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsDevicesRoute = SettingsDevicesRouteImport.update({
@@ -72,9 +111,24 @@ const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsConfigurationRoute = SettingsConfigurationRouteImport.update({
+  id: '/configuration',
+  path: '/configuration',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsBrowserRoute = SettingsBrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
   id: '/archived',
   path: '/archived',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
+  id: '/appearance',
+  path: '/appearance',
   getParentRoute: () => SettingsRoute,
 } as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
@@ -95,11 +149,20 @@ export interface FileRoutesByFullPath {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/setup': typeof SetupRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
+  '/settings/configuration': typeof SettingsConfigurationRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/devices': typeof SettingsDevicesRoute
+  '/settings/environments': typeof SettingsEnvironmentsRoute
   '/settings/general': typeof SettingsGeneralRoute
+  '/settings/git': typeof SettingsGitRoute
+  '/settings/mcp': typeof SettingsMcpRoute
+  '/settings/personalization': typeof SettingsPersonalizationRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/usage': typeof SettingsUsageRoute
+  '/settings/worktrees': typeof SettingsWorktreesRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
@@ -108,11 +171,20 @@ export interface FileRoutesByTo {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/setup': typeof SetupRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
+  '/settings/configuration': typeof SettingsConfigurationRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/devices': typeof SettingsDevicesRoute
+  '/settings/environments': typeof SettingsEnvironmentsRoute
   '/settings/general': typeof SettingsGeneralRoute
+  '/settings/git': typeof SettingsGitRoute
+  '/settings/mcp': typeof SettingsMcpRoute
+  '/settings/personalization': typeof SettingsPersonalizationRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/usage': typeof SettingsUsageRoute
+  '/settings/worktrees': typeof SettingsWorktreesRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -124,11 +196,20 @@ export interface FileRoutesById {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/setup': typeof SetupRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
+  '/settings/configuration': typeof SettingsConfigurationRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/devices': typeof SettingsDevicesRoute
+  '/settings/environments': typeof SettingsEnvironmentsRoute
   '/settings/general': typeof SettingsGeneralRoute
+  '/settings/git': typeof SettingsGitRoute
+  '/settings/mcp': typeof SettingsMcpRoute
+  '/settings/personalization': typeof SettingsPersonalizationRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/usage': typeof SettingsUsageRoute
+  '/settings/worktrees': typeof SettingsWorktreesRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -141,11 +222,20 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/setup'
+    | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/browser'
+    | '/settings/configuration'
     | '/settings/connections'
     | '/settings/devices'
+    | '/settings/environments'
     | '/settings/general'
+    | '/settings/git'
+    | '/settings/mcp'
+    | '/settings/personalization'
     | '/settings/providers'
+    | '/settings/usage'
+    | '/settings/worktrees'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
@@ -154,11 +244,20 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/setup'
+    | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/browser'
+    | '/settings/configuration'
     | '/settings/connections'
     | '/settings/devices'
+    | '/settings/environments'
     | '/settings/general'
+    | '/settings/git'
+    | '/settings/mcp'
+    | '/settings/personalization'
     | '/settings/providers'
+    | '/settings/usage'
+    | '/settings/worktrees'
     | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
@@ -169,11 +268,20 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/setup'
+    | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/browser'
+    | '/settings/configuration'
     | '/settings/connections'
     | '/settings/devices'
+    | '/settings/environments'
     | '/settings/general'
+    | '/settings/git'
+    | '/settings/mcp'
+    | '/settings/personalization'
     | '/settings/providers'
+    | '/settings/usage'
+    | '/settings/worktrees'
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/draft/$draftId'
@@ -231,6 +339,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/settings/worktrees': {
+      id: '/settings/worktrees'
+      path: '/worktrees'
+      fullPath: '/settings/worktrees'
+      preLoaderRoute: typeof SettingsWorktreesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/usage': {
+      id: '/settings/usage'
+      path: '/usage'
+      fullPath: '/settings/usage'
+      preLoaderRoute: typeof SettingsUsageRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/providers': {
       id: '/settings/providers'
       path: '/providers'
@@ -238,11 +360,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsProvidersRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/personalization': {
+      id: '/settings/personalization'
+      path: '/personalization'
+      fullPath: '/settings/personalization'
+      preLoaderRoute: typeof SettingsPersonalizationRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/mcp': {
+      id: '/settings/mcp'
+      path: '/mcp'
+      fullPath: '/settings/mcp'
+      preLoaderRoute: typeof SettingsMcpRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/git': {
+      id: '/settings/git'
+      path: '/git'
+      fullPath: '/settings/git'
+      preLoaderRoute: typeof SettingsGitRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/general': {
       id: '/settings/general'
       path: '/general'
       fullPath: '/settings/general'
       preLoaderRoute: typeof SettingsGeneralRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/environments': {
+      id: '/settings/environments'
+      path: '/environments'
+      fullPath: '/settings/environments'
+      preLoaderRoute: typeof SettingsEnvironmentsRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/devices': {
@@ -259,11 +409,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsConnectionsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/configuration': {
+      id: '/settings/configuration'
+      path: '/configuration'
+      fullPath: '/settings/configuration'
+      preLoaderRoute: typeof SettingsConfigurationRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/browser': {
+      id: '/settings/browser'
+      path: '/browser'
+      fullPath: '/settings/browser'
+      preLoaderRoute: typeof SettingsBrowserRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/archived': {
       id: '/settings/archived'
       path: '/archived'
       fullPath: '/settings/archived'
       preLoaderRoute: typeof SettingsArchivedRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/appearance': {
+      id: '/settings/appearance'
+      path: '/appearance'
+      fullPath: '/settings/appearance'
+      preLoaderRoute: typeof SettingsAppearanceRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/_chat/draft/$draftId': {
@@ -298,19 +469,37 @@ const ChatRouteChildren: ChatRouteChildren = {
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
 interface SettingsRouteChildren {
+  SettingsAppearanceRoute: typeof SettingsAppearanceRoute
   SettingsArchivedRoute: typeof SettingsArchivedRoute
+  SettingsBrowserRoute: typeof SettingsBrowserRoute
+  SettingsConfigurationRoute: typeof SettingsConfigurationRoute
   SettingsConnectionsRoute: typeof SettingsConnectionsRoute
   SettingsDevicesRoute: typeof SettingsDevicesRoute
+  SettingsEnvironmentsRoute: typeof SettingsEnvironmentsRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
+  SettingsGitRoute: typeof SettingsGitRoute
+  SettingsMcpRoute: typeof SettingsMcpRoute
+  SettingsPersonalizationRoute: typeof SettingsPersonalizationRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
+  SettingsUsageRoute: typeof SettingsUsageRoute
+  SettingsWorktreesRoute: typeof SettingsWorktreesRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAppearanceRoute: SettingsAppearanceRoute,
   SettingsArchivedRoute: SettingsArchivedRoute,
+  SettingsBrowserRoute: SettingsBrowserRoute,
+  SettingsConfigurationRoute: SettingsConfigurationRoute,
   SettingsConnectionsRoute: SettingsConnectionsRoute,
   SettingsDevicesRoute: SettingsDevicesRoute,
+  SettingsEnvironmentsRoute: SettingsEnvironmentsRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,
+  SettingsGitRoute: SettingsGitRoute,
+  SettingsMcpRoute: SettingsMcpRoute,
+  SettingsPersonalizationRoute: SettingsPersonalizationRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
+  SettingsUsageRoute: SettingsUsageRoute,
+  SettingsWorktreesRoute: SettingsWorktreesRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopBridge } from "@v3tools/contracts";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
+const CREATE_DIRECTORY_CHANNEL = "desktop:create-directory";
 const CONFIRM_CHANNEL = "desktop:confirm";
 const SET_THEME_CHANNEL = "desktop:set-theme";
 const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
@@ -42,8 +43,21 @@ const V3_WIZARD_PROBE_PATHS_CHANNEL = "desktop:v3-wizard-probe-paths";
 const V3_WIZARD_PICK_DATA_DIRECTORY_CHANNEL = "desktop:v3-wizard-pick-data-directory";
 const V3_WIZARD_WRITE_CONFIG_CHANNEL = "desktop:v3-wizard-write-config";
 const V3_WIZARD_GENERATE_KEY_CHANNEL = "desktop:v3-wizard-generate-key";
-const V3_CHAT_IMPORT_LIST_TRANSCRIPTS_CHANNEL = "desktop:v3-chat-import-list-transcripts";
+const V3_SPAWN_DISCOVERY_GET_OPTIONS_CHANNEL = "desktop:v3-spawn-discovery-get-options";
+const V3_GITHUB_SET_CLIENT_ID_OVERRIDE_CHANNEL = "desktop:v3-github-set-client-id-override";
+const V3_GITHUB_START_DEVICE_FLOW_CHANNEL = "desktop:v3-github-start-device-flow";
+const V3_GITHUB_GET_DEVICE_FLOW_STATUS_CHANNEL = "desktop:v3-github-get-device-flow-status";
+const V3_GITHUB_CANCEL_DEVICE_FLOW_CHANNEL = "desktop:v3-github-cancel-device-flow";
+const V3_GITHUB_GET_STATUS_CHANNEL = "desktop:v3-github-get-status";
+const V3_GITHUB_DISCONNECT_CHANNEL = "desktop:v3-github-disconnect";
+const V3_GITHUB_VALIDATE_TOKEN_CHANNEL = "desktop:v3-github-validate-token";
+const V3_GITHUB_MANUAL_REVOKE_URL_CHANNEL = "desktop:v3-github-manual-revoke-url";
+const V3_CHAT_IMPORT_OPEN_SESSION_CHANNEL = "desktop:v3-chat-import-open-session";
+const V3_CHAT_IMPORT_LIST_LOCAL_CHANNEL = "desktop:v3-chat-import-list-local";
+const V3_CHAT_IMPORT_SCAN_FOLDER_CHANNEL = "desktop:v3-chat-import-scan-folder";
+const V3_CHAT_IMPORT_READ_PREVIEW_CHANNEL = "desktop:v3-chat-import-read-preview";
 const V3_CHAT_IMPORT_READ_TRANSCRIPT_CHANNEL = "desktop:v3-chat-import-read-transcript";
+const V3_CHAT_IMPORT_CLOSE_SESSION_CHANNEL = "desktop:v3-chat-import-close-session";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getAppBranding: () => {
@@ -84,6 +98,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getServerExposureState: () => ipcRenderer.invoke(GET_SERVER_EXPOSURE_STATE_CHANNEL),
   setServerExposureMode: (mode) => ipcRenderer.invoke(SET_SERVER_EXPOSURE_MODE_CHANNEL, mode),
   pickFolder: (options) => ipcRenderer.invoke(PICK_FOLDER_CHANNEL, options),
+  createDirectory: (input) => ipcRenderer.invoke(CREATE_DIRECTORY_CHANNEL, input),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),
   showContextMenu: (items, position) => ipcRenderer.invoke(CONTEXT_MENU_CHANNEL, items, position),
@@ -127,8 +142,27 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     writeServerNodeConfig: (input) => ipcRenderer.invoke(V3_WIZARD_WRITE_CONFIG_CHANNEL, input),
     generateEncryptionKey: () => ipcRenderer.invoke(V3_WIZARD_GENERATE_KEY_CHANNEL),
   },
+  spawnDiscovery: {
+    getOptions: (input) => ipcRenderer.invoke(V3_SPAWN_DISCOVERY_GET_OPTIONS_CHANNEL, input ?? {}),
+  },
+  github: {
+    setClientIdOverride: (input) =>
+      ipcRenderer.invoke(V3_GITHUB_SET_CLIENT_ID_OVERRIDE_CHANNEL, input),
+    startDeviceFlow: (input) => ipcRenderer.invoke(V3_GITHUB_START_DEVICE_FLOW_CHANNEL, input),
+    getDeviceFlowStatus: (input) =>
+      ipcRenderer.invoke(V3_GITHUB_GET_DEVICE_FLOW_STATUS_CHANNEL, input),
+    cancelDeviceFlow: (input) => ipcRenderer.invoke(V3_GITHUB_CANCEL_DEVICE_FLOW_CHANNEL, input),
+    getStatus: () => ipcRenderer.invoke(V3_GITHUB_GET_STATUS_CHANNEL),
+    disconnect: () => ipcRenderer.invoke(V3_GITHUB_DISCONNECT_CHANNEL),
+    validateToken: () => ipcRenderer.invoke(V3_GITHUB_VALIDATE_TOKEN_CHANNEL),
+    manualRevokeUrl: () => ipcRenderer.invoke(V3_GITHUB_MANUAL_REVOKE_URL_CHANNEL),
+  },
   chatImport: {
-    listLocalTranscripts: () => ipcRenderer.invoke(V3_CHAT_IMPORT_LIST_TRANSCRIPTS_CHANNEL),
-    readTranscript: (path) => ipcRenderer.invoke(V3_CHAT_IMPORT_READ_TRANSCRIPT_CHANNEL, path),
+    openSession: () => ipcRenderer.invoke(V3_CHAT_IMPORT_OPEN_SESSION_CHANNEL),
+    listLocal: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_LIST_LOCAL_CHANNEL, input),
+    scanFolder: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_SCAN_FOLDER_CHANNEL, input),
+    readPreview: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_READ_PREVIEW_CHANNEL, input),
+    readTranscript: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_READ_TRANSCRIPT_CHANNEL, input),
+    closeSession: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_CLOSE_SESSION_CHANNEL, input),
   },
 } satisfies DesktopBridge);

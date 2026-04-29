@@ -296,9 +296,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       return result;
     });
 
-  const processImportEnvelope = (
-    command: Extract<OrchestrationCommand, { type: "chat.import" }>,
-  ) =>
+  const processImportEnvelope = (command: Extract<OrchestrationCommand, { type: "chat.import" }>) =>
     Effect.gen(function* () {
       // Validate against the live in-memory read model before opening the
       // transaction so invariant errors don't trigger SQL rollback noise.

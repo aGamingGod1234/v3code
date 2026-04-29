@@ -140,6 +140,7 @@ interface ComposerDraftStoreState {
       threadId?: ThreadId;
       branch?: string | null;
       worktreePath?: string | null;
+      cwd?: string | null;
       hostDeviceId?: DeviceId | null;
       createdAt?: string;
       envMode?: DraftThreadEnvMode;
@@ -155,6 +156,7 @@ interface ComposerDraftStoreState {
       threadId?: ThreadId;
       branch?: string | null;
       worktreePath?: string | null;
+      cwd?: string | null;
       hostDeviceId?: DeviceId | null;
       createdAt?: string;
       envMode?: DraftThreadEnvMode;
@@ -168,6 +170,7 @@ interface ComposerDraftStoreState {
     options: {
       branch?: string | null;
       worktreePath?: string | null;
+      cwd?: string | null;
       hostDeviceId?: DeviceId | null;
       projectRef?: ScopedProjectRef;
       createdAt?: string;
@@ -327,6 +330,7 @@ function createDraftThreadState(
     threadId?: ThreadId;
     branch?: string | null;
     worktreePath?: string | null;
+    cwd?: string | null;
     hostDeviceId?: DeviceId | null;
     createdAt?: string;
     envMode?: DraftThreadEnvMode;
@@ -350,6 +354,12 @@ function createDraftThreadState(
         ? null
         : (existingThread?.branch ?? null)
       : (options.branch ?? null);
+  const nextCwd =
+    options?.cwd === undefined
+      ? projectChanged
+        ? null
+        : (existingThread?.cwd ?? null)
+      : (options.cwd ?? null);
   return {
     threadId,
     environmentId: projectRef.environmentId,
@@ -361,6 +371,7 @@ function createDraftThreadState(
       options?.interactionMode ?? existingThread?.interactionMode ?? DEFAULT_INTERACTION_MODE,
     branch: nextBranch,
     worktreePath: nextWorktreePath,
+    cwd: nextCwd,
     hostDeviceId: options?.hostDeviceId ?? existingThread?.hostDeviceId ?? null,
     envMode:
       options?.envMode ??
@@ -399,6 +410,7 @@ function draftThreadsEqual(left: DraftThreadState | undefined, right: DraftThrea
     left.interactionMode === right.interactionMode &&
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath &&
+    left.cwd === right.cwd &&
     left.hostDeviceId === right.hostDeviceId &&
     left.envMode === right.envMode &&
     scopedThreadRefsEqual(left.promotedTo, right.promotedTo)
@@ -1096,6 +1108,7 @@ function toHydratedDraftThreadState(
     interactionMode: persistedDraftThread.interactionMode,
     branch: persistedDraftThread.branch,
     worktreePath: persistedDraftThread.worktreePath,
+    cwd: persistedDraftThread.cwd ?? null,
     hostDeviceId: persistedDraftThread.hostDeviceId ?? null,
     envMode: persistedDraftThread.envMode,
     promotedTo: persistedDraftThread.promotedTo
@@ -1283,6 +1296,12 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                   ? null
                   : existing.branch
                 : (options.branch ?? null);
+            const nextCwd =
+              options.cwd === undefined
+                ? projectChanged
+                  ? null
+                  : (existing.cwd ?? null)
+                : (options.cwd ?? null);
             const nextDraftThread: DraftThreadState = {
               threadId: existing.threadId,
               environmentId: nextProjectRef.environmentId,
@@ -1296,6 +1315,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               interactionMode: options.interactionMode ?? existing.interactionMode,
               branch: nextBranch,
               worktreePath: nextWorktreePath,
+              cwd: nextCwd,
               hostDeviceId: options.hostDeviceId ?? existing.hostDeviceId ?? null,
               envMode:
                 options.envMode ??
@@ -1315,6 +1335,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               nextDraftThread.interactionMode === existing.interactionMode &&
               nextDraftThread.branch === existing.branch &&
               nextDraftThread.worktreePath === existing.worktreePath &&
+              nextDraftThread.cwd === existing.cwd &&
               nextDraftThread.hostDeviceId === existing.hostDeviceId &&
               nextDraftThread.envMode === existing.envMode &&
               scopedThreadRefsEqual(nextDraftThread.promotedTo, existing.promotedTo);

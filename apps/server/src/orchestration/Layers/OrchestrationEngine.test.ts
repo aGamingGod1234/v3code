@@ -1176,8 +1176,20 @@ describe("OrchestrationEngine", () => {
           startedAt: null,
           messages: [
             { role: "user", content: "hello", toolName: null, toolCallId: null, timestamp: null },
-            { role: "assistant", content: "hi back", toolName: null, toolCallId: null, timestamp: null },
-            { role: "tool", content: "ran ls", toolName: "ls", toolCallId: "call-1", timestamp: null },
+            {
+              role: "assistant",
+              content: "hi back",
+              toolName: null,
+              toolCallId: null,
+              timestamp: null,
+            },
+            {
+              role: "tool",
+              content: "ran ls",
+              toolName: "ls",
+              toolCallId: "call-1",
+              timestamp: null,
+            },
           ],
           references: { skillIds: [], mcpServerIds: [], modelIds: [] },
         },

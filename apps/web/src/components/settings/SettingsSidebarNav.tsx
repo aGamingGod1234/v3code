@@ -2,10 +2,18 @@ import type { ComponentType } from "react";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
-  Link2Icon,
+  BarChart3Icon,
+  BoxesIcon,
+  GitBranchIcon,
+  GitForkIcon,
+  GlobeIcon,
   MonitorIcon,
+  PaletteIcon,
   PlugIcon,
+  ServerIcon,
   Settings2Icon,
+  SlidersIcon,
+  UserIcon,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -24,9 +32,17 @@ import { V3SignInButton } from "../../v3/ui/SignInButton";
 
 export type SettingsSectionPath =
   | "/settings/general"
+  | "/settings/appearance"
+  | "/settings/configuration"
+  | "/settings/personalization"
   | "/settings/providers"
-  | "/settings/connections"
+  | "/settings/mcp"
+  | "/settings/git"
+  | "/settings/environments"
+  | "/settings/worktrees"
+  | "/settings/browser"
   | "/settings/devices"
+  | "/settings/usage"
   | "/settings/archived";
 
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
@@ -35,9 +51,17 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   icon: ComponentType<{ className?: string }>;
 }> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
+  { label: "Appearance", to: "/settings/appearance", icon: PaletteIcon },
+  { label: "Configuration", to: "/settings/configuration", icon: SlidersIcon },
+  { label: "Personalization", to: "/settings/personalization", icon: UserIcon },
   { label: "Providers", to: "/settings/providers", icon: PlugIcon },
-  { label: "Connections", to: "/settings/connections", icon: Link2Icon },
+  { label: "MCP servers", to: "/settings/mcp", icon: BoxesIcon },
+  { label: "Git", to: "/settings/git", icon: GitBranchIcon },
+  { label: "Environments", to: "/settings/environments", icon: ServerIcon },
+  { label: "Worktrees", to: "/settings/worktrees", icon: GitForkIcon },
+  { label: "Browser use", to: "/settings/browser", icon: GlobeIcon },
   { label: "Devices", to: "/settings/devices", icon: MonitorIcon },
+  { label: "Usage", to: "/settings/usage", icon: BarChart3Icon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
 ];
 

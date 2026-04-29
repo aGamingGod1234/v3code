@@ -1,12 +1,15 @@
-// V3 Phase 1e — Connect GitHub button for settings surfaces.
+// V3 — Connect GitHub button for settings surfaces.
 //
-// Renders three states:
-//   * "not configured" — operator hasn't set V3CODE_GITHUB_CLIENT_ID;
-//     disabled affordance with a tooltip.
+// Renders states:
+//   * "device-flow available" — desktop bridge + a public client ID is
+//     resolvable; primary "Connect GitHub" button opens the device-code dialog.
+//   * "client-id missing" — desktop bridge present but no client ID has been
+//     set (build-time bundle empty AND Settings → Git override blank);
+//     button text guides the user to fix it.
 //   * "connected" — chip showing the GitHub login + scope list + a
-//     "Disconnect" action that POSTs /api/auth/github/disconnect.
-//   * "disconnected" — primary "Connect GitHub" button that kicks off
-//     the server-hosted redirect flow.
+//     "Disconnect" action.
+//   * "browser redirect path" — when the operator HAS configured server-side
+//     OAuth, fall back to the original /api/auth/github/* redirect flow.
 
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangleIcon, GithubIcon, LoaderIcon, LogOutIcon, RefreshCwIcon } from "lucide-react";
@@ -23,10 +26,19 @@ import {
   startConnectGitHubDesktop,
   V3GitHubConnectError,
 } from "../auth/connectGitHub";
-import type { GitHubConnectionStatus } from "@v3tools/contracts";
+import {
+  disconnectGitHub as desktopDisconnectGitHub,
+  getGitHubStatus as fetchDesktopGitHubStatus,
+  getManualRevokeUrl,
+  isGitHubBridgeAvailable,
+} from "../auth/githubBridge";
+import { GitHubDeviceCodeDialog } from "./GitHubDeviceCodeDialog";
+import type { GitHubAuthStatus, GitHubConnectionStatus } from "@v3tools/contracts";
 
 interface ConnectGitHubButtonProps {
   readonly className?: string;
+  readonly clientIdOverride?: string | null;
+  readonly scopes?: ReadonlyArray<string>;
 }
 
 interface ConfigSnapshot {
@@ -34,27 +46,44 @@ interface ConfigSnapshot {
   readonly scopes: string;
 }
 
-export function V3ConnectGitHubButton({ className }: ConnectGitHubButtonProps) {
+export function V3ConnectGitHubButton({
+  className,
+  clientIdOverride = null,
+  scopes,
+}: ConnectGitHubButtonProps) {
   const [config, setConfig] = useState<ConfigSnapshot | null>(null);
   const [status, setStatus] = useState<GitHubConnectionStatus | null>(null);
+  const [desktopStatus, setDesktopStatus] = useState<GitHubAuthStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deviceFlowOpen, setDeviceFlowOpen] = useState(false);
+  const desktopFlowAvailable = isGitHubBridgeAvailable();
+  const requestedScopes = scopes && scopes.length > 0 ? scopes : ["read:user"];
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const [configResult, statusResult] = await Promise.all([
-        fetchGitHubClientConfig(signal),
-        fetchGitHubConnectionStatus(signal).catch(() => null),
-      ]);
-      setConfig({ available: configResult.available, scopes: configResult.scopes });
-      setStatus(statusResult);
-    } catch (error) {
-      // Config fetch failures are silent — the button falls back to a
-      // "not configured" state so the UI still paints.
-      if (error instanceof Error && error.name === "AbortError") return;
-      setConfig({ available: false, scopes: "" });
-      setStatus(null);
-    }
-  }, []);
+  const refresh = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const [configResult, statusResult] = await Promise.all([
+          fetchGitHubClientConfig(signal),
+          fetchGitHubConnectionStatus(signal).catch(() => null),
+        ]);
+        setConfig({ available: configResult.available, scopes: configResult.scopes });
+        setStatus(statusResult);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        setConfig({ available: false, scopes: "" });
+        setStatus(null);
+      }
+      if (desktopFlowAvailable) {
+        try {
+          const next = await fetchDesktopGitHubStatus();
+          setDesktopStatus(next);
+        } catch {
+          setDesktopStatus(null);
+        }
+      }
+    },
+    [desktopFlowAvailable],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -130,6 +159,105 @@ export function V3ConnectGitHubButton({ className }: ConnectGitHubButtonProps) {
   }
 
   if (!config.available) {
+    if (desktopFlowAvailable) {
+      // Desktop bridge is present — drive the Device Flow path. This works
+      // entirely client-side from the desktop app; no operator config needed.
+      if (desktopStatus?.connected) {
+        return (
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-2 rounded-xl border bg-background/85 px-3 py-2 text-xs text-foreground",
+              desktopStatus.partial ? "border-warning/35 bg-warning/10" : "border-border/70",
+              className,
+            )}
+            title={
+              desktopStatus.partial
+                ? "Signed in locally — server handoff failed. Repo browsing from this device works; cloud environment handoff is unavailable."
+                : "Connected via GitHub Device Flow."
+            }
+          >
+            {desktopStatus.partial ? (
+              <AlertTriangleIcon className="size-3.5 text-warning-foreground" />
+            ) : null}
+            <GithubIcon className="size-3.5" />
+            <span className="truncate font-medium">
+              {desktopStatus.login ?? "Connected"}
+              {desktopStatus.partial ? " (local-only)" : ""}
+            </span>
+            {desktopStatus.scopes.length > 0 ? (
+              <span className="truncate text-muted-foreground">
+                ({desktopStatus.scopes.join(", ")})
+              </span>
+            ) : null}
+            <button
+              type="button"
+              aria-label="Revoke on GitHub"
+              onClick={() => {
+                void getManualRevokeUrl().then((url) => {
+                  if (window.desktopBridge?.openExternal) {
+                    void window.desktopBridge.openExternal(url);
+                  } else {
+                    window.open(url, "_blank", "noopener");
+                  }
+                });
+              }}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+              title="Open GitHub settings to revoke this app's grant"
+            >
+              <RefreshCwIcon className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Disconnect GitHub"
+              onClick={() => {
+                void desktopDisconnectGitHub()
+                  .then(() => refresh())
+                  .then(() =>
+                    toastManager.add({
+                      type: "success",
+                      title: "Disconnected GitHub",
+                      description: "Local token cleared. Use the link icon to revoke on GitHub.",
+                    }),
+                  );
+              }}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <LogOutIcon className="size-3.5" />
+            </button>
+          </div>
+        );
+      }
+      return (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDeviceFlowOpen(true)}
+            className={cn("gap-2", className)}
+          >
+            <GithubIcon className="size-3.5" />
+            Connect GitHub
+          </Button>
+          <GitHubDeviceCodeDialog
+            open={deviceFlowOpen}
+            scopes={requestedScopes}
+            clientIdOverride={clientIdOverride}
+            onOpenChange={setDeviceFlowOpen}
+            onSuccess={() => {
+              void refresh();
+              toastManager.add({
+                type: "success",
+                title: "GitHub connected",
+                description: "Sign-in completed via Device Flow.",
+              });
+            }}
+          />
+        </>
+      );
+    }
+    // Web build with no operator config and no desktop bridge — there's no
+    // way to obtain a token here.
     return (
       <div
         className={cn(

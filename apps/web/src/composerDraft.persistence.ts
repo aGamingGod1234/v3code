@@ -104,6 +104,7 @@ export const PersistedDraftThreadState = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
+  cwd: Schema.optionalKey(Schema.NullOr(Schema.String)),
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   envMode: DraftThreadEnvModeSchema,
   promotedTo: Schema.optionalKey(

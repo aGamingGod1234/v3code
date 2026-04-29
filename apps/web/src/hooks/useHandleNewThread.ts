@@ -37,6 +37,7 @@ function useNewThreadState() {
       options?: {
         branch?: string | null;
         worktreePath?: string | null;
+        cwd?: string | null;
         envMode?: DraftThreadEnvMode;
       },
     ): Promise<void> => {
@@ -60,6 +61,7 @@ function useNewThreadState() {
       const hasBranchOption = options?.branch !== undefined;
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
+      const hasCwdOption = options?.cwd !== undefined;
       const nextHostDeviceId = currentDeviceId ?? null;
       const storedDraftThread = getDraftSessionByLogicalProjectKey(logicalProjectKey);
       const latestActiveDraftThread: DraftThreadState | null = currentRouteTarget
@@ -75,11 +77,13 @@ function useNewThreadState() {
             hasBranchOption ||
             hasWorktreePathOption ||
             hasEnvModeOption ||
+            hasCwdOption ||
             shouldBackfillHostDeviceId
           ) {
             setDraftThreadContext(storedDraftThread.draftId, {
               ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
               ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
+              ...(hasCwdOption ? { cwd: options?.cwd ?? null } : {}),
               ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
               ...(shouldBackfillHostDeviceId ? { hostDeviceId: nextHostDeviceId } : {}),
             });
@@ -113,11 +117,13 @@ function useNewThreadState() {
           hasBranchOption ||
           hasWorktreePathOption ||
           hasEnvModeOption ||
+          hasCwdOption ||
           shouldBackfillHostDeviceId
         ) {
           setDraftThreadContext(currentRouteTarget.draftId, {
             ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
             ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
+            ...(hasCwdOption ? { cwd: options?.cwd ?? null } : {}),
             ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
             ...(shouldBackfillHostDeviceId ? { hostDeviceId: nextHostDeviceId } : {}),
           });
@@ -130,6 +136,7 @@ function useNewThreadState() {
           hostDeviceId: latestActiveDraftThread.hostDeviceId ?? nextHostDeviceId,
           ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
           ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
+          ...(hasCwdOption ? { cwd: options?.cwd ?? null } : {}),
           ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
         });
         return Promise.resolve();
@@ -144,6 +151,7 @@ function useNewThreadState() {
           createdAt,
           branch: options?.branch ?? null,
           worktreePath: options?.worktreePath ?? null,
+          cwd: options?.cwd ?? null,
           hostDeviceId: nextHostDeviceId,
           envMode: options?.envMode ?? "local",
           runtimeMode: DEFAULT_RUNTIME_MODE,

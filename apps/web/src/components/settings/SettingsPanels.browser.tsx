@@ -309,6 +309,9 @@ const createDesktopBridgeStub = (overrides?: {
         advertisedHost: mode === "network-accessible" ? "192.168.1.44" : null,
       })),
     pickFolder: vi.fn().mockResolvedValue(null),
+    createDirectory: vi
+      .fn()
+      .mockImplementation(async ({ parentPath, name }) => `${parentPath}/${name}`),
     confirm: vi.fn().mockResolvedValue(false),
     setTheme: vi.fn().mockResolvedValue(undefined),
     showContextMenu: vi.fn().mockResolvedValue(null),
@@ -345,6 +348,40 @@ const createDesktopBridgeStub = (overrides?: {
       scopes: [],
       tokenType: "bearer",
     }),
+    spawnDiscovery: {
+      getOptions: vi.fn().mockResolvedValue({ agentEnvironments: [], terminalShells: [] }),
+    },
+    github: {
+      setClientIdOverride: vi.fn().mockResolvedValue(undefined),
+      startDeviceFlow: vi.fn().mockResolvedValue({
+        userCode: "ABCD-1234",
+        verificationUri: "https://github.com/login/device",
+        expiresIn: 900,
+        interval: 5,
+        deviceCodeHandle: "device-flow-handle",
+      }),
+      getDeviceFlowStatus: vi.fn().mockResolvedValue({
+        state: "awaiting_user",
+        error: null,
+        lastPolledAt: null,
+      }),
+      cancelDeviceFlow: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        partial: false,
+        login: null,
+        scopes: [],
+        avatarUrl: null,
+        tokenSource: null,
+        lastValidatedAt: null,
+        bootstrapState: "skipped",
+        needsReconnect: false,
+        reconnectReason: null,
+      }),
+      disconnect: vi.fn().mockResolvedValue({ localCleared: true }),
+      validateToken: vi.fn().mockResolvedValue({ valid: false, login: null, scopes: [] }),
+      manualRevokeUrl: vi.fn().mockResolvedValue("https://github.com/settings/applications"),
+    },
     v3Wizard: {
       probeDocker: vi.fn().mockResolvedValue({ status: "ok", version: "27.0.0", message: null }),
       probePort: vi.fn(async (port: number) => ({ port, available: true, message: null })),
@@ -365,8 +402,12 @@ const createDesktopBridgeStub = (overrides?: {
       generateEncryptionKey: vi.fn().mockResolvedValue("mock-encryption-key"),
     },
     chatImport: {
-      listLocalTranscripts: vi.fn().mockResolvedValue({ entries: [] }),
-      readTranscript: vi.fn().mockResolvedValue({ path: "", content: "" }),
+      openSession: vi.fn().mockResolvedValue({ sessionId: "test-session" }),
+      listLocal: vi.fn().mockResolvedValue({ entries: [], scannedRoots: [] }),
+      scanFolder: vi.fn().mockResolvedValue({ entries: [], scannedRoots: [] }),
+      readPreview: vi.fn().mockResolvedValue({ previewLine: null }),
+      readTranscript: vi.fn().mockResolvedValue({ content: "" }),
+      closeSession: vi.fn().mockResolvedValue(undefined),
     },
   };
 };

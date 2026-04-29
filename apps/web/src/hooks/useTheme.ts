@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
+import { DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "../themes/themeNames";
+
 type Theme = "light" | "dark" | "system";
 type ThemeSnapshot = {
   theme: Theme;
   systemDark: boolean;
+  themeName: ThemeName;
+  accentOverride: string | null;
 };
 
 const STORAGE_KEY = "t3code:theme";
+const THEME_NAME_STORAGE_KEY = "v3code:themeName";
+const ACCENT_STORAGE_KEY = "v3code:accentOverride";
+const ACCENT_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const MEDIA_QUERY = "(prefers-color-scheme: dark)";
 const DEFAULT_THEME_SNAPSHOT: ThemeSnapshot = {
   theme: "system",
   systemDark: false,
+  themeName: DEFAULT_THEME_NAME,
+  accentOverride: null,
 };
 const THEME_COLOR_META_NAME = "theme-color";
 const DYNAMIC_THEME_COLOR_SELECTOR = `meta[name="${THEME_COLOR_META_NAME}"][data-dynamic-theme-color="true"]`;
@@ -36,6 +45,19 @@ function getStored(): Theme {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw === "light" || raw === "dark" || raw === "system") return raw;
   return DEFAULT_THEME_SNAPSHOT.theme;
+}
+
+function getStoredThemeName(): ThemeName {
+  if (!hasThemeStorage()) return DEFAULT_THEME_NAME;
+  const raw = localStorage.getItem(THEME_NAME_STORAGE_KEY);
+  return isThemeName(raw) ? raw : DEFAULT_THEME_NAME;
+}
+
+function getStoredAccent(): string | null {
+  if (!hasThemeStorage()) return null;
+  const raw = localStorage.getItem(ACCENT_STORAGE_KEY);
+  if (!raw) return null;
+  return ACCENT_REGEX.test(raw) ? raw : null;
 }
 
 function ensureThemeColorMetaTag(): HTMLMetaElement {
@@ -87,6 +109,32 @@ export function syncBrowserChromeTheme() {
   ensureThemeColorMetaTag().setAttribute("content", backgroundColor);
 }
 
+function applyThemeName(name: ThemeName) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  if (typeof root.setAttribute !== "function") return;
+  root.setAttribute("data-theme", name);
+}
+
+function applyAccentOverride(accent: string | null) {
+  if (typeof document === "undefined") return;
+  const style = document.documentElement.style;
+  if (
+    !style ||
+    typeof style.setProperty !== "function" ||
+    typeof style.removeProperty !== "function"
+  ) {
+    return;
+  }
+  if (accent && ACCENT_REGEX.test(accent)) {
+    style.setProperty("--primary", accent);
+    style.setProperty("--ring", accent);
+  } else {
+    style.removeProperty("--primary");
+    style.removeProperty("--ring");
+  }
+}
+
 function applyTheme(theme: Theme, suppressTransitions = false) {
   if (typeof document === "undefined" || typeof window === "undefined") return;
   if (suppressTransitions) {
@@ -94,6 +142,8 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
   }
   const isDark = theme === "dark" || (theme === "system" && getSystemDark());
   document.documentElement.classList.toggle("dark", isDark);
+  applyThemeName(getStoredThemeName());
+  applyAccentOverride(getStoredAccent());
   syncBrowserChromeTheme();
   syncDesktopTheme(theme);
   if (suppressTransitions) {
@@ -130,12 +180,20 @@ function getSnapshot(): ThemeSnapshot {
   if (!hasThemeStorage()) return DEFAULT_THEME_SNAPSHOT;
   const theme = getStored();
   const systemDark = theme === "system" ? getSystemDark() : false;
+  const themeName = getStoredThemeName();
+  const accentOverride = getStoredAccent();
 
-  if (lastSnapshot && lastSnapshot.theme === theme && lastSnapshot.systemDark === systemDark) {
+  if (
+    lastSnapshot &&
+    lastSnapshot.theme === theme &&
+    lastSnapshot.systemDark === systemDark &&
+    lastSnapshot.themeName === themeName &&
+    lastSnapshot.accentOverride === accentOverride
+  ) {
     return lastSnapshot;
   }
 
-  lastSnapshot = { theme, systemDark };
+  lastSnapshot = { theme, systemDark, themeName, accentOverride };
   return lastSnapshot;
 }
 
@@ -157,7 +215,7 @@ function subscribe(listener: () => void): () => void {
 
   // Listen for storage changes from other tabs
   const handleStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) {
+    if (e.key === STORAGE_KEY || e.key === THEME_NAME_STORAGE_KEY || e.key === ACCENT_STORAGE_KEY) {
       applyTheme(getStored(), true);
       emitChange();
     }
@@ -191,4 +249,33 @@ export function useTheme() {
   }, [theme]);
 
   return { theme, setTheme, resolvedTheme } as const;
+}
+
+export function useThemeName() {
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const setThemeName = useCallback((next: ThemeName) => {
+    if (!hasThemeStorage()) return;
+    localStorage.setItem(THEME_NAME_STORAGE_KEY, next);
+    applyThemeName(next);
+    syncBrowserChromeTheme();
+    emitChange();
+  }, []);
+  return { themeName: snapshot.themeName, setThemeName } as const;
+}
+
+export function useAccentOverride() {
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const setAccent = useCallback((next: string | null) => {
+    if (!hasThemeStorage()) return;
+    if (next && !ACCENT_REGEX.test(next)) return;
+    if (next) {
+      localStorage.setItem(ACCENT_STORAGE_KEY, next);
+    } else {
+      localStorage.removeItem(ACCENT_STORAGE_KEY);
+    }
+    applyAccentOverride(next);
+    syncBrowserChromeTheme();
+    emitChange();
+  }, []);
+  return { accentOverride: snapshot.accentOverride, setAccent } as const;
 }

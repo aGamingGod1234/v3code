@@ -1,5 +1,6 @@
 import {
   CommandId,
+  DEFAULT_CLIENT_SETTINGS,
   DEFAULT_SERVER_SETTINGS,
   type DesktopBridge,
   EnvironmentId,
@@ -190,6 +191,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       advertisedHost: null,
     }),
     pickFolder: async () => null,
+    createDirectory: async ({ parentPath, name }) => `${parentPath}/${name}`,
     confirm: async () => true,
     setTheme: async () => undefined,
     showContextMenu: async () => null,
@@ -211,6 +213,40 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       scopes: [],
       tokenType: "bearer",
     }),
+    spawnDiscovery: {
+      getOptions: async () => ({ agentEnvironments: [], terminalShells: [] }),
+    },
+    github: {
+      setClientIdOverride: async () => undefined,
+      startDeviceFlow: async () => ({
+        userCode: "ABCD-1234",
+        verificationUri: "https://github.com/login/device",
+        expiresIn: 900,
+        interval: 5,
+        deviceCodeHandle: "device-flow-handle",
+      }),
+      getDeviceFlowStatus: async () => ({
+        state: "awaiting_user",
+        error: null,
+        lastPolledAt: null,
+      }),
+      cancelDeviceFlow: async () => undefined,
+      getStatus: async () => ({
+        connected: false,
+        partial: false,
+        login: null,
+        scopes: [],
+        avatarUrl: null,
+        tokenSource: null,
+        lastValidatedAt: null,
+        bootstrapState: "skipped",
+        needsReconnect: false,
+        reconnectReason: null,
+      }),
+      disconnect: async () => ({ localCleared: true }),
+      validateToken: async () => ({ valid: false, login: null, scopes: [] }),
+      manualRevokeUrl: async () => "https://github.com/settings/applications",
+    },
     v3Wizard: {
       probeDocker: async () => ({ status: "ok", version: "27.0.0", message: null }),
       probePort: async (port: number) => ({ port, available: true, message: null }),
@@ -229,8 +265,12 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       generateEncryptionKey: async () => "mock-encryption-key",
     },
     chatImport: {
-      listLocalTranscripts: async () => ({ entries: [] }),
-      readTranscript: async () => ({ path: "", content: "" }),
+      openSession: async () => ({ sessionId: "test-session" }),
+      listLocal: async () => ({ entries: [], scannedRoots: [] }),
+      scanFolder: async () => ({ entries: [], scannedRoots: [] }),
+      readPreview: async () => ({ previewLine: null }),
+      readTranscript: async () => ({ content: "" }),
+      closeSession: async () => {},
     },
     getUpdateState: async () => {
       throw new Error("getUpdateState not implemented in test");
@@ -576,6 +616,7 @@ describe("wsApi", () => {
 
   it("reads and writes persistence through the desktop bridge when available", async () => {
     const clientSettings = {
+      ...DEFAULT_CLIENT_SETTINGS,
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       diffWordWrap: true,
@@ -635,6 +676,7 @@ describe("wsApi", () => {
     const { createLocalApi } = await import("./localApi");
     const api = createLocalApi(rpcClientMock as never);
     const clientSettings = {
+      ...DEFAULT_CLIENT_SETTINGS,
       confirmThreadArchive: true,
       confirmThreadDelete: false,
       diffWordWrap: true,

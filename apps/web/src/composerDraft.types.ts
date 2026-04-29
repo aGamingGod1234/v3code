@@ -76,6 +76,12 @@ export interface DraftSessionState {
   interactionMode: ProviderInteractionMode;
   branch: string | null;
   worktreePath: string | null;
+  /**
+   * Workspace anchor for the agent run. Set by HomeComposer when the user
+   * picks an arbitrary folder; unrelated to git worktrees. Falls back to
+   * `worktreePath` when null for backwards compatibility.
+   */
+  cwd?: string | null;
   hostDeviceId?: DeviceId | null;
   envMode: DraftThreadEnvMode;
   promotedTo?: ScopedThreadRef | null;

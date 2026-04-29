@@ -62,6 +62,7 @@ const PLATFORM_CONFIG: Record<typeof BuildPlatform.Type, PlatformConfig> = {
     archChoices: ["x64", "arm64"],
   },
 };
+const WINDOWS_TOOLSET_VERSION = "1.1.0";
 
 interface BuildCliInput {
   readonly platform: Option.Option<typeof BuildPlatform.Type>;
@@ -626,21 +627,26 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
 
   if (platform === "win") {
     buildConfig.npmRebuild = false;
+    buildConfig.toolsets = {
+      // The legacy winCodeSign bundle is a cross-platform .7z archive that
+      // contains Darwin symlinks. Non-admin Windows shells cannot always
+      // extract those links, even for unsigned builds that only need rcedit.
+      winCodeSign: WINDOWS_TOOLSET_VERSION,
+    };
     const winConfig: Record<string, unknown> = {
       target: [target],
       icon: "icon.ico",
     };
     if (signed) {
       winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
+    } else {
+      // Electron-builder's Windows rcedit path downloads the legacy
+      // winCodeSign .7z bundle through app-builder, which requires symlink
+      // privileges on Windows because the archive includes Darwin symlinks.
+      // Unsigned local release builds should still produce an installer, so
+      // skip the combined sign/edit step unless signing is explicitly enabled.
+      winConfig.signAndEditExecutable = false;
     }
-    // Note: do NOT set `signAndEditExecutable: false` for unsigned builds.
-    // That flag disables both code-signing AND the rcedit step that
-    // embeds icon / product-name / company-name into the .exe's PE
-    // resources, which Windows Firewall + the taskbar read. The signing
-    // side is already gated separately via CSC_IDENTITY_AUTO_DISCOVERY=false
-    // (see buildEnv below), so leaving this at its default `true` lets
-    // rcedit run and brand the binary as "V3 Code" without ever trying
-    // to sign.
     buildConfig.win = winConfig;
   }
 

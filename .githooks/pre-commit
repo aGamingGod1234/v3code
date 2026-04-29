@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# v3code pre-commit guard: prevent edits to the stale outer tree
+# (apps/ and packages/ at the git root). The active source lives under
+# v3code-main/. Modifications there are always allowed.
+#
+# Enable this hook once via:
+#   bun run --cwd v3code-main setup:hooks
+# (or manually: git config core.hooksPath v3code-main/.githooks)
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+exec node "$ROOT/v3code-main/scripts/assert-active-tree.ts" --mode cached

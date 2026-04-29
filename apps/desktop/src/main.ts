@@ -83,6 +83,8 @@ import { getSharedV3GitHubAuthFlow } from "./v3GitHubAuthFlow.ts";
 import { getSharedV3GoogleAuthFlow } from "./v3GoogleAuthFlow.ts";
 import { registerV3SetupWizardIpc } from "./v3SetupWizard.ts";
 import { registerV3ChatImportIpc } from "./v3ChatImport.ts";
+import { registerV3GitHubAuthIpc } from "./v3GitHubAuth.ts";
+import { registerV3SpawnDiscoveryIpc } from "./spawnDiscovery.ts";
 import {
   EMBEDDED_GITHUB_CLIENT_ID,
   EMBEDDED_GITHUB_CLIENT_SECRET,
@@ -93,6 +95,7 @@ import {
 syncShellEnvironment();
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
+const CREATE_DIRECTORY_CHANNEL = "desktop:create-directory";
 const CONFIRM_CHANNEL = "desktop:confirm";
 const SET_THEME_CHANNEL = "desktop:set-theme";
 const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
@@ -1845,6 +1848,72 @@ function registerIpcHandlers(): void {
   });
 
   registerV3ChatImportIpc();
+  registerV3GitHubAuthIpc();
+  registerV3SpawnDiscoveryIpc();
+
+  ipcMain.removeHandler(CREATE_DIRECTORY_CHANNEL);
+  ipcMain.handle(CREATE_DIRECTORY_CHANNEL, async (_event, raw: unknown) => {
+    if (typeof raw !== "object" || raw === null) {
+      throw new Error("createDirectory requires { parentPath, name }");
+    }
+    const parentPath = (raw as { parentPath?: unknown }).parentPath;
+    const name = (raw as { name?: unknown }).name;
+    if (typeof parentPath !== "string" || parentPath.length === 0) {
+      throw new Error("parentPath must be a non-empty string");
+    }
+    if (typeof name !== "string") {
+      throw new Error("name must be a string");
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0) throw new Error("name cannot be empty");
+    if (trimmed === "." || trimmed === "..") throw new Error("name cannot be . or ..");
+    if (/[/\\]/.test(trimmed)) throw new Error("name must not contain path separators");
+    if (/[<>:"|?* -]/.test(trimmed)) {
+      throw new Error("name contains characters that are not allowed");
+    }
+    if (trimmed.endsWith(".") || trimmed.endsWith(" ")) {
+      throw new Error("name cannot end in '.' or space");
+    }
+    if (/^[A-Za-z]:/.test(trimmed)) throw new Error("name cannot start with a drive prefix");
+    const reserved = new Set([
+      "CON",
+      "PRN",
+      "AUX",
+      "NUL",
+      "COM1",
+      "COM2",
+      "COM3",
+      "COM4",
+      "COM5",
+      "COM6",
+      "COM7",
+      "COM8",
+      "COM9",
+      "LPT1",
+      "LPT2",
+      "LPT3",
+      "LPT4",
+      "LPT5",
+      "LPT6",
+      "LPT7",
+      "LPT8",
+      "LPT9",
+    ]);
+    const baseUpper = trimmed.split(".")[0]?.toUpperCase() ?? "";
+    if (reserved.has(baseUpper)) {
+      throw new Error("name is a Windows reserved name");
+    }
+    const fs = await import("node:fs/promises");
+    const pathModule = await import("node:path");
+    const parentReal = await fs.realpath(parentPath);
+    const candidate = pathModule.resolve(parentReal, trimmed);
+    const rel = pathModule.relative(parentReal, candidate);
+    if (rel.startsWith("..") || pathModule.isAbsolute(rel)) {
+      throw new Error("name resolves outside parentPath");
+    }
+    await fs.mkdir(candidate, { recursive: false });
+    return candidate;
+  });
 
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
   ipcMain.handle(PICK_FOLDER_CHANNEL, async (_event, rawOptions: unknown) => {
