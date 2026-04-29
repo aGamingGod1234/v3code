@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isLoopbackHostname, resolveDevRedirectUrl } from "./http.ts";
+import { isLoopbackHostname, resolveDevRedirectUrl, shouldRedirectPairToLogin } from "./http.ts";
 
 describe("http dev routing", () => {
   it("treats localhost and loopback addresses as local", () => {
@@ -23,5 +23,12 @@ describe("http dev routing", () => {
     expect(resolveDevRedirectUrl(devUrl, requestUrl)).toBe(
       "http://127.0.0.1:5173/pair?token=test-token",
     );
+  });
+
+  it("redirects the legacy pairing route only for server-node cloud deployments", () => {
+    expect(shouldRedirectPairToLogin("server-node", "/pair")).toBe(true);
+    expect(shouldRedirectPairToLogin("web", "/pair")).toBe(false);
+    expect(shouldRedirectPairToLogin("desktop", "/pair")).toBe(false);
+    expect(shouldRedirectPairToLogin("server-node", "/pairing")).toBe(false);
   });
 });

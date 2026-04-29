@@ -112,3 +112,30 @@
 - Configure the production Google OAuth client redirect URI for `https://v3.agaminggod.com/api/auth/google/callback`.
 - Add a focused browser test that asserts the mobile pane selector at a mobile viewport once Playwright browsers are installed in CI.
 - Wire cloud environment status details into the Live chats table after the cloud container backend is fully enabled.
+
+## [2026-04-30] - Production Pairing Redirect Repair
+
+### What Was Implemented
+
+- Added a server-node-only HTTP redirect so public `/pair` requests go to `/login` instead of serving the legacy pairing app.
+- Added a unit test that preserves local `web`/`desktop` pairing behavior while enforcing the server-node redirect.
+- Rebuilt and redeployed the Mini PC server after verifying the public route mismatch.
+
+### Files Modified
+
+- `apps/server/src/http.ts` - redirects `/pair` to `/login` when the runtime mode is `server-node`.
+- `apps/server/src/http.test.ts` - covers the mode-specific redirect predicate.
+- `PROJECT_LOG.md` - records the production redirect repair and deployment verification.
+
+### Assumptions Made (flag these for review)
+
+- Public `server-node` deployments should not expose the one-time pairing UI at `/pair`; Google OAuth at `/login` is the only public web login path.
+- Local `web` and `desktop` modes still need `/pair` for loopback/manual pairing flows.
+
+### Known Issues / Deferred
+
+- `/control` still renders an unauthenticated shell and receives a 401 for protected data until the user signs in; this is expected for now.
+
+### Suggested Next Steps
+
+- Add an end-to-end HTTP route test around the full server router once the test harness can cheaply construct `ServerConfig` in `server-node` mode.
