@@ -2277,6 +2277,7 @@ export default function ChatView(props: ChatViewProps) {
                       interactionMode,
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
+                      hostDeviceId: activeThread.hostDeviceId,
                       createdAt: activeThread.createdAt,
                     },
                   }

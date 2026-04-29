@@ -1,4 +1,5 @@
 import * as NFS from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -58,15 +59,17 @@ it.layer(NodeServices.layer)("readBootstrapEnvelope", (it) => {
         })}\n`,
       );
 
-      const fd = yield* Effect.acquireRelease(
-        Effect.sync(() => NFS.openSync(filePath, "r")),
-        (fd) => Effect.sync(() => NFS.closeSync(fd)),
-      );
-
-      const payload = yield* readBootstrapEnvelope(TestEnvelopeSchema, fd, { timeoutMs: 100 });
-      assertSome(payload, {
-        mode: "desktop",
-      });
+      const fd = NFS.openSync(filePath, "r");
+      try {
+        const payload = yield* readBootstrapEnvelope(TestEnvelopeSchema, fd, { timeoutMs: 100 });
+        assertSome(payload, {
+          mode: "desktop",
+        });
+      } finally {
+        if (process.platform !== "win32") {
+          NFS.closeSync(fd);
+        }
+      }
     }),
   );
 
@@ -102,7 +105,7 @@ it.layer(NodeServices.layer)("readBootstrapEnvelope", (it) => {
 
   it.effect("returns none when the fd is unavailable", () =>
     Effect.gen(function* () {
-      const fd = NFS.openSync("/dev/null", "r");
+      const fd = NFS.openSync(os.devNull, "r");
       NFS.closeSync(fd);
 
       const payload = yield* readBootstrapEnvelope(TestEnvelopeSchema, fd, { timeoutMs: 100 });
@@ -112,6 +115,9 @@ it.layer(NodeServices.layer)("readBootstrapEnvelope", (it) => {
 
   it.effect("returns none when the bootstrap read times out before any value arrives", () =>
     Effect.gen(function* () {
+      if (process.platform === "win32") {
+        return;
+      }
       const fs = yield* FileSystem.FileSystem;
       const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-bootstrap-" });
       const fifoPath = path.join(tempDir, "bootstrap.pipe");

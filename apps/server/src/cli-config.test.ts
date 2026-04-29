@@ -1,4 +1,7 @@
 import os from "node:os";
+import * as NFS from "node:fs";
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { assert, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer, Option, Path } from "effect";
@@ -7,6 +10,12 @@ import { NetService } from "@v3tools/shared/Net";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { deriveServerPaths } from "./config.ts";
 import { resolveServerConfig } from "./cli.ts";
+
+const expectedAutoCloudModeStaticDir = (): string | undefined => {
+  const appsDir = NodePath.resolve(NodePath.dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const cloudModeStaticDir = NodePath.join(appsDir, "web", "dist-cloud");
+  return NFS.existsSync(cloudModeStaticDir) ? cloudModeStaticDir : undefined;
+};
 
 it.layer(NodeServices.layer)("cli config resolution", (it) => {
   const defaultObservabilityConfig = {
@@ -25,7 +34,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
     const fs = yield* FileSystem.FileSystem;
     const filePath = yield* fs.makeTempFileScoped({ prefix: "t3-bootstrap-", suffix: ".ndjson" });
     yield* fs.writeFileString(filePath, `${JSON.stringify(payload)}\n`);
-    const { fd } = yield* fs.open(filePath, { flag: "r" });
+    const fd = yield* Effect.sync(() => NFS.openSync(filePath, "r"));
+    if (process.platform !== "win32") {
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          NFS.closeSync(fd);
+        }).pipe(Effect.ignore),
+      );
+    }
     return fd;
   });
 
@@ -92,7 +108,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -174,7 +190,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -206,7 +222,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -277,7 +293,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -299,7 +315,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
   it.effect("uses bootstrap envelope values as fallbacks when flags and env are absent", () =>
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
-      const baseDir = "/tmp/t3-bootstrap-home";
+      const baseDir = join(os.tmpdir(), "t3-bootstrap-home");
       const fd = yield* openBootstrapFd({
         mode: "desktop",
         port: 4888,
@@ -366,7 +382,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -451,7 +467,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -524,7 +540,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -608,7 +624,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",
@@ -687,7 +703,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         postgresUrl: undefined,
         googleClientSecret: undefined,
         serverPublicUrl: undefined,
-        cloudModeStaticDir: undefined,
+        cloudModeStaticDir: expectedAutoCloudModeStaticDir(),
         githubClientId: undefined,
         githubClientSecret: undefined,
         githubOauthScopes: "read:user repo",

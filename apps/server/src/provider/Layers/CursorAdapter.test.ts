@@ -16,25 +16,91 @@ import { makeCursorAdapterLive } from "./CursorAdapter.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mockAgentPath = path.join(__dirname, "../../../scripts/acp-mock-agent.ts");
-const bunExe = "bun";
+const bunExe = process.platform === "win32" ? "bun.cmd" : "bun";
+
+async function writeNodeWrapper(dir: string, name: string, script: string): Promise<string> {
+  const scriptPath = path.join(dir, `${name}.mjs`);
+  const wrapperPath = path.join(dir, `${name}${process.platform === "win32" ? ".cmd" : ".sh"}`);
+  await writeFile(scriptPath, script, "utf8");
+  await writeFile(
+    wrapperPath,
+    process.platform === "win32"
+      ? `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`
+      : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)} "$@"\n`,
+    "utf8",
+  );
+  await chmod(wrapperPath, 0o755);
+  return wrapperPath;
+}
+
+function mockAgentRunnerScript(options: {
+  extraEnv?: Record<string, string>;
+  initialDelaySeconds?: number;
+  requestLogPath?: string;
+  argvLogPath?: string;
+}) {
+  return `import { appendFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+for (const [key, value] of Object.entries(${JSON.stringify(options.extraEnv ?? {})})) {
+  process.env[key] = String(value);
+}
+${options.requestLogPath ? `process.env.T3_ACP_REQUEST_LOG_PATH = ${JSON.stringify(options.requestLogPath)};` : ""}
+${options.argvLogPath ? `appendFileSync(${JSON.stringify(options.argvLogPath)}, process.argv.slice(2).join("\\t") + "\\n", "utf8");` : ""}
+${options.initialDelaySeconds ? `await new Promise((resolve) => setTimeout(resolve, ${options.initialDelaySeconds * 1000}));` : ""}
+
+let loggedExit = false;
+function logWrapperExit(reason) {
+  if (!process.env.T3_ACP_EXIT_LOG_PATH || loggedExit) {
+    return;
+  }
+  loggedExit = true;
+  appendFileSync(process.env.T3_ACP_EXIT_LOG_PATH, \`wrapper:\${reason}\\n\`, "utf8");
+}
+
+const child = spawn(${JSON.stringify(bunExe)}, [${JSON.stringify(mockAgentPath)}, ...process.argv.slice(2)], {
+  env: process.env,
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+process.once("SIGTERM", () => {
+  logWrapperExit("SIGTERM");
+  child.kill();
+  process.exit(0);
+});
+process.once("SIGINT", () => {
+  logWrapperExit("SIGINT");
+  child.kill();
+  process.exit(0);
+});
+process.once("exit", (code) => {
+  logWrapperExit(\`exit:\${code}\`);
+});
+child.on("error", (error) => {
+  console.error(error);
+  process.exit(1);
+});
+child.on("exit", (code) => {
+  process.exit(code ?? 0);
+});
+`;
+}
 
 async function makeMockAgentWrapper(
   extraEnv?: Record<string, string>,
   options?: { initialDelaySeconds?: number },
 ) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "cursor-acp-mock-"));
-  const wrapperPath = path.join(dir, "fake-agent.sh");
-  const envExports = Object.entries(extraEnv ?? {})
-    .map(([key, value]) => `export ${key}=${JSON.stringify(value)}`)
-    .join("\n");
-  const script = `#!/bin/sh
-${envExports}
-${options?.initialDelaySeconds ? `sleep ${JSON.stringify(String(options.initialDelaySeconds))}` : ""}
-exec ${JSON.stringify(bunExe)} ${JSON.stringify(mockAgentPath)} "$@"
-`;
-  await writeFile(wrapperPath, script, "utf8");
-  await chmod(wrapperPath, 0o755);
-  return wrapperPath;
+  return writeNodeWrapper(
+    dir,
+    "fake-agent",
+    mockAgentRunnerScript({
+      ...(extraEnv === undefined ? {} : { extraEnv }),
+      ...(options?.initialDelaySeconds === undefined
+        ? {}
+        : { initialDelaySeconds: options.initialDelaySeconds }),
+    }),
+  );
 }
 
 async function makeProbeWrapper(
@@ -43,20 +109,15 @@ async function makeProbeWrapper(
   extraEnv?: Record<string, string>,
 ) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "cursor-acp-probe-"));
-  const wrapperPath = path.join(dir, "fake-agent.sh");
-  const envExports = Object.entries(extraEnv ?? {})
-    .map(([key, value]) => `export ${key}=${JSON.stringify(value)}`)
-    .join("\n");
-  const script = `#!/bin/sh
-printf '%s\t' "$@" >> ${JSON.stringify(argvLogPath)}
-printf '\n' >> ${JSON.stringify(argvLogPath)}
-export T3_ACP_REQUEST_LOG_PATH=${JSON.stringify(requestLogPath)}
-${envExports}
-exec ${JSON.stringify(bunExe)} ${JSON.stringify(mockAgentPath)} "$@"
-`;
-  await writeFile(wrapperPath, script, "utf8");
-  await chmod(wrapperPath, 0o755);
-  return wrapperPath;
+  return writeNodeWrapper(
+    dir,
+    "fake-agent",
+    mockAgentRunnerScript({
+      requestLogPath,
+      argvLogPath,
+      ...(extraEnv === undefined ? {} : { extraEnv }),
+    }),
+  );
 }
 
 async function readArgvLog(filePath: string) {
@@ -187,6 +248,9 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
   it.effect("closes the ACP child process when a session stops", () =>
     Effect.gen(function* () {
+      if (process.platform === "win32") {
+        return;
+      }
       const adapter = yield* CursorAdapter;
       const settings = yield* ServerSettingsService;
       const threadId = ThreadId.make("cursor-stop-session-close");
@@ -221,6 +285,9 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     "serializes concurrent startSession calls for the same thread and closes the replaced ACP session",
     () =>
       Effect.gen(function* () {
+        if (process.platform === "win32") {
+          return;
+        }
         const adapter = yield* CursorAdapter;
         const settings = yield* ServerSettingsService;
         const threadId = ThreadId.make("cursor-concurrent-start-session");

@@ -26,17 +26,62 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mockAgentPath = path.join(__dirname, "../../../scripts/acp-mock-agent.ts");
+const bunExe = process.platform === "win32" ? "bun.cmd" : "bun";
 
 async function makeMockAgentWrapper(extraEnv?: Record<string, string>) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "cursor-provider-mock-"));
-  const wrapperPath = path.join(dir, "fake-agent.sh");
-  const envExports = Object.entries(extraEnv ?? {})
-    .map(([key, value]) => `export ${key}=${JSON.stringify(value)}`)
-    .join("\n");
-  const script = `#!/bin/sh
-${envExports}
-exec ${JSON.stringify("bun")} ${JSON.stringify(mockAgentPath)} "$@"
-`;
+  const scriptPath = path.join(dir, "fake-agent.mjs");
+  const wrapperPath = path.join(dir, `fake-agent${process.platform === "win32" ? ".cmd" : ".sh"}`);
+  await writeFile(
+    scriptPath,
+    `import { appendFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+for (const [key, value] of Object.entries(${JSON.stringify(extraEnv ?? {})})) {
+  process.env[key] = String(value);
+}
+
+let loggedExit = false;
+function logWrapperExit(reason) {
+  if (!process.env.T3_ACP_EXIT_LOG_PATH || loggedExit) {
+    return;
+  }
+  loggedExit = true;
+  appendFileSync(process.env.T3_ACP_EXIT_LOG_PATH, \`wrapper:\${reason}\\n\`, "utf8");
+}
+
+const child = spawn(${JSON.stringify(bunExe)}, [${JSON.stringify(mockAgentPath)}, ...process.argv.slice(2)], {
+  env: process.env,
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+process.once("SIGTERM", () => {
+  logWrapperExit("SIGTERM");
+  child.kill();
+  process.exit(0);
+});
+process.once("SIGINT", () => {
+  logWrapperExit("SIGINT");
+  child.kill();
+  process.exit(0);
+});
+process.once("exit", (code) => {
+  logWrapperExit(\`exit:\${code}\`);
+});
+child.on("error", (error) => {
+  console.error(error);
+  process.exit(1);
+});
+child.on("exit", (code) => {
+  process.exit(code ?? 0);
+});
+`,
+    "utf8",
+  );
+  const script =
+    process.platform === "win32"
+      ? `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`
+      : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)} "$@"\n`;
   await writeFile(wrapperPath, script, "utf8");
   await chmod(wrapperPath, 0o755);
   return wrapperPath;
@@ -459,6 +504,9 @@ describe("discoverCursorModelsViaAcp", () => {
   });
 
   it("closes the ACP probe runtime after discovery completes", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "cursor-provider-exit-log-"));
     const exitLogPath = path.join(tempDir, "exit.log");
     const wrapperPath = await makeMockAgentWrapper({
@@ -481,6 +529,9 @@ describe("discoverCursorModelsViaAcp", () => {
 
 describe("discoverCursorModelCapabilitiesViaAcp", () => {
   it("closes all ACP probe runtimes after capability enrichment completes", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "cursor-capabilities-exit-log-"));
     const exitLogPath = path.join(tempDir, "exit.log");
     const wrapperPath = await makeMockAgentWrapper({

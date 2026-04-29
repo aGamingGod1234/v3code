@@ -93,7 +93,13 @@ function RootRouteView() {
   }
 
   if (authGateState.status !== "authenticated") {
-    return <Outlet />;
+    return (
+      <ToastProvider>
+        <AnchoredToastProvider>
+          <Outlet />
+        </AnchoredToastProvider>
+      </ToastProvider>
+    );
   }
   return (
     <ToastProvider>

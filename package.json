@@ -1,6 +1,10 @@
 {
   "name": "@v3tools/monorepo",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aGamingGod1234/v3code.git"
+  },
   "workspaces": {
     "packages": [
       "apps/*",

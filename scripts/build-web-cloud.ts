@@ -26,6 +26,12 @@ const scriptDir = NodePath.dirname(fileURLToPath(scriptUrl));
 const webDir = NodePath.resolve(scriptDir, "..", "apps", "web");
 
 const extra = process.argv.slice(2);
+const bunFromLifecycle = process.env.npm_execpath;
+const bunExecutable =
+  bunFromLifecycle && /(^|[\\/])bun(\.exe|\.cmd)?$/i.test(bunFromLifecycle)
+    ? bunFromLifecycle
+    : "bun";
+const needsWindowsShellFallback = process.platform === "win32" && bunExecutable === "bun";
 
 const env: NodeJS.ProcessEnv = {
   ...process.env,
@@ -35,14 +41,18 @@ if (!env.VITE_V3_CLOUD_MODE_BASE) {
   env.VITE_V3_CLOUD_MODE_BASE = "/app/";
 }
 
-const command = process.platform === "win32" ? "bun.cmd" : "bun";
 const args = ["x", "vite", "build", "--outDir", "dist-cloud", "--emptyOutDir", ...extra];
 
-const child = spawn(command, args, {
+const child = spawn(bunExecutable, args, {
   cwd: webDir,
   env,
   stdio: "inherit",
-  shell: process.platform === "win32",
+  shell: needsWindowsShellFallback,
+});
+
+child.on("error", (error) => {
+  console.error(`Failed to start Bun for cloud web build: ${error.message}`);
+  process.exit(1);
 });
 
 child.on("exit", (code, signal) => {

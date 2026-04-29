@@ -217,6 +217,7 @@ interface StagePackageJson {
   readonly private: true;
   readonly description: string;
   readonly author: string;
+  readonly repository: Record<string, unknown> | undefined;
   readonly main: string;
   readonly build: Record<string, unknown>;
   readonly dependencies: Record<string, unknown>;
@@ -812,6 +813,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     private: true,
     description: "V3 Code desktop build",
     author: "aGamingGod1234",
+    repository: rootPackageJson.repository,
     main: "apps/desktop/dist-electron/main.cjs",
     build: yield* createBuildConfig(
       options.platform,

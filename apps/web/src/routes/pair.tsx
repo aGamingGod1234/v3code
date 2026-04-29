@@ -13,7 +13,7 @@ export const Route = createFileRoute("/pair")({
     // mode the user must sign in via Google so redirect them home so
     // the `V3SignInButton` / nudge drives the browser flow instead.
     if (IS_CLOUD_MODE) {
-      throw redirect({ to: "/", replace: true });
+      throw redirect({ to: "/login", replace: true });
     }
     return {
       authGateState,

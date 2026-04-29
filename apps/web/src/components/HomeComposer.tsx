@@ -1,21 +1,13 @@
 import { scopeThreadRef } from "@v3tools/client-runtime";
-import {
-  DEFAULT_MODEL_BY_PROVIDER,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
-  type EnvironmentId,
-  type ProjectId,
-} from "@v3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { FolderIcon, FolderPlusIcon, FolderSearchIcon, SendHorizonalIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { readEnvironmentApi } from "../environmentApi";
 import { usePrimaryEnvironmentId } from "../environments/primary";
-import { inferProjectTitleFromPath, normalizeProjectPathForComparison } from "../lib/projectPaths";
+import { normalizeProjectPathForComparison } from "../lib/projectPaths";
 import { pushRecentFolder, readRecentFolders, removeRecentFolder } from "../lib/recentFolders";
-import { newCommandId, newMessageId, newProjectId, newThreadId } from "../lib/utils";
+import { startThreadFromFolder } from "../lib/startThreadFromFolder";
 import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { buildThreadRouteParams } from "../threadRoutes";
 import { Button } from "./ui/button";
@@ -141,97 +133,25 @@ export function HomeComposer() {
     }
   }, [desktopBridge, rememberFolder, selectedFolder]);
 
-  const resolveProject = useCallback(async (): Promise<{
-    readonly environmentId: EnvironmentId;
-    readonly projectId: ProjectId;
-    readonly cwd: string;
-  }> => {
-    if (!selectedFolder) {
-      throw new Error("Pick a folder first.");
-    }
-    if (matchingProject) {
-      return {
-        environmentId: matchingProject.environmentId,
-        projectId: matchingProject.id,
-        cwd: matchingProject.cwd,
-      };
-    }
-    if (!primaryEnvironmentId) {
-      throw new Error("No local environment is connected.");
-    }
-    const api = readEnvironmentApi(primaryEnvironmentId);
-    if (!api) {
-      throw new Error("Environment API is unavailable.");
-    }
-    const projectId = newProjectId();
-    await api.orchestration.dispatchCommand({
-      type: "project.create",
-      commandId: newCommandId(),
-      projectId,
-      title: inferProjectTitleFromPath(selectedFolder),
-      workspaceRoot: selectedFolder,
-      createWorkspaceRootIfMissing: true,
-      defaultModelSelection: {
-        provider: "codex",
-        model: DEFAULT_MODEL_BY_PROVIDER.codex,
-      },
-      createdAt: new Date().toISOString(),
-    });
-    return { environmentId: primaryEnvironmentId, projectId, cwd: selectedFolder };
-  }, [matchingProject, primaryEnvironmentId, selectedFolder]);
-
   const onSend = useCallback(async () => {
     const trimmedPrompt = prompt.trim();
     if (busy || trimmedPrompt.length === 0) return;
     setBusy(true);
     try {
-      const project = await resolveProject();
-      const api = readEnvironmentApi(project.environmentId);
-      if (!api) {
-        throw new Error("Environment API is unavailable.");
+      if (!selectedFolder) {
+        throw new Error("Pick a folder first.");
       }
-      const threadId = newThreadId();
-      const messageCreatedAt = new Date().toISOString();
-      const title = trimmedPrompt.slice(0, 80) || "New thread";
-      await api.orchestration.dispatchCommand({
-        type: "thread.turn.start",
-        commandId: newCommandId(),
-        threadId,
-        message: {
-          messageId: newMessageId(),
-          role: "user",
-          text: prompt,
-          attachments: [],
-        },
-        modelSelection: {
-          provider: "codex",
-          model: DEFAULT_MODEL_BY_PROVIDER.codex,
-        },
-        titleSeed: title,
-        runtimeMode: DEFAULT_RUNTIME_MODE,
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        bootstrap: {
-          createThread: {
-            projectId: project.projectId,
-            title,
-            modelSelection: {
-              provider: "codex",
-              model: DEFAULT_MODEL_BY_PROVIDER.codex,
-            },
-            runtimeMode: DEFAULT_RUNTIME_MODE,
-            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-            branch: null,
-            worktreePath: null,
-            createdAt: messageCreatedAt,
-          },
-        },
-        createdAt: messageCreatedAt,
+      const created = await startThreadFromFolder({
+        folderPath: selectedFolder,
+        primaryEnvironmentId,
+        projects,
+        prompt: trimmedPrompt,
       });
-      rememberFolder(project.cwd);
+      rememberFolder(created.cwd);
       setPrompt("");
       await navigate({
         to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(scopeThreadRef(project.environmentId, threadId)),
+        params: buildThreadRouteParams(scopeThreadRef(created.environmentId, created.threadId)),
       });
     } catch (cause) {
       toastManager.add({
@@ -242,7 +162,7 @@ export function HomeComposer() {
     } finally {
       setBusy(false);
     }
-  }, [busy, navigate, prompt, rememberFolder, resolveProject]);
+  }, [busy, navigate, primaryEnvironmentId, projects, prompt, rememberFolder, selectedFolder]);
 
   const headline = `What should we build in ${folderName(selectedFolder)}?`;
 

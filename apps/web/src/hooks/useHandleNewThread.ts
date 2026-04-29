@@ -1,5 +1,5 @@
 import { scopedProjectKey, scopeProjectRef } from "@v3tools/client-runtime";
-import { DEFAULT_RUNTIME_MODE, type ScopedProjectRef } from "@v3tools/contracts";
+import { DEFAULT_RUNTIME_MODE, type DeviceId, type ScopedProjectRef } from "@v3tools/contracts";
 import { useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -39,6 +39,7 @@ function useNewThreadState() {
         worktreePath?: string | null;
         cwd?: string | null;
         envMode?: DraftThreadEnvMode;
+        hostDeviceId?: DeviceId | null;
       },
     ): Promise<void> => {
       const {
@@ -62,7 +63,8 @@ function useNewThreadState() {
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
       const hasCwdOption = options?.cwd !== undefined;
-      const nextHostDeviceId = currentDeviceId ?? null;
+      const hasHostDeviceOption = options?.hostDeviceId !== undefined;
+      const nextHostDeviceId = options?.hostDeviceId ?? currentDeviceId ?? null;
       const storedDraftThread = getDraftSessionByLogicalProjectKey(logicalProjectKey);
       const latestActiveDraftThread: DraftThreadState | null = currentRouteTarget
         ? currentRouteTarget.kind === "server"
@@ -78,6 +80,7 @@ function useNewThreadState() {
             hasWorktreePathOption ||
             hasEnvModeOption ||
             hasCwdOption ||
+            hasHostDeviceOption ||
             shouldBackfillHostDeviceId
           ) {
             setDraftThreadContext(storedDraftThread.draftId, {
@@ -85,7 +88,9 @@ function useNewThreadState() {
               ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
               ...(hasCwdOption ? { cwd: options?.cwd ?? null } : {}),
               ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
-              ...(shouldBackfillHostDeviceId ? { hostDeviceId: nextHostDeviceId } : {}),
+              ...(hasHostDeviceOption || shouldBackfillHostDeviceId
+                ? { hostDeviceId: nextHostDeviceId }
+                : {}),
             });
           }
           setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, storedDraftThread.draftId, {
@@ -118,6 +123,7 @@ function useNewThreadState() {
           hasWorktreePathOption ||
           hasEnvModeOption ||
           hasCwdOption ||
+          hasHostDeviceOption ||
           shouldBackfillHostDeviceId
         ) {
           setDraftThreadContext(currentRouteTarget.draftId, {
@@ -125,7 +131,9 @@ function useNewThreadState() {
             ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
             ...(hasCwdOption ? { cwd: options?.cwd ?? null } : {}),
             ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
-            ...(shouldBackfillHostDeviceId ? { hostDeviceId: nextHostDeviceId } : {}),
+            ...(hasHostDeviceOption || shouldBackfillHostDeviceId
+              ? { hostDeviceId: nextHostDeviceId }
+              : {}),
           });
         }
         setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, currentRouteTarget.draftId, {
@@ -138,6 +146,7 @@ function useNewThreadState() {
           ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
           ...(hasCwdOption ? { cwd: options?.cwd ?? null } : {}),
           ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
+          ...(hasHostDeviceOption ? { hostDeviceId: nextHostDeviceId } : {}),
         });
         return Promise.resolve();
       }

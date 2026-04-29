@@ -1,5 +1,5 @@
 import { scopeProjectRef } from "@v3tools/client-runtime";
-import type { EnvironmentId, ProjectId, ScopedProjectRef } from "@v3tools/contracts";
+import type { DeviceId, EnvironmentId, ProjectId, ScopedProjectRef } from "@v3tools/contracts";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
 
 interface ThreadContextLike {
@@ -19,6 +19,7 @@ interface NewThreadHandler {
     options?: {
       branch?: string | null;
       worktreePath?: string | null;
+      hostDeviceId?: DeviceId | null;
       envMode?: DraftThreadEnvMode;
     },
   ): Promise<void>;

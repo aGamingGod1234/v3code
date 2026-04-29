@@ -1,53 +1,60 @@
-## [2026-04-29] - V3 Code desktop release update
+## [2026-04-29] - Multi-Agent Workspace, Cloud Login/Admin, Windows Release
 
 ### What Was Implemented
 
-- Added the active-tree guard and pre-commit hook to block edits under the stale outer tree.
-- Reworked desktop chat import around session-scoped opaque transcript IDs, bounded Codex recursion, flat Claude project scanning, lazy previews, and manual folder scan support.
-- Added GitHub Device Flow authentication in the Electron main process with secure local token storage and renderer-safe IPC/status APIs.
-- Replaced the empty-thread state with a folder-aware Home Composer that can create/register projects and start runs from a selected cwd.
-- Added named theme support, accent override handling, Appearance settings, Configuration settings, Personalization settings, Git settings, and stub settings tabs.
-- Added spawn discovery IPC and settings support for runtime-discovered terminal/environment options.
-- Bumped releasable package versions to 0.0.25.
-- Built the Windows x64 NSIS installer into `release.exe/`.
-- Updated the desktop artifact builder so unsigned Windows builds can complete on non-admin Windows shells.
+- Added a multi-agent chat workspace that supports single-pane, left/right, up/down, and four-quarter layouts.
+- Added pane-level chat targeting so any pane can open old, active, archived, or cross-device chats.
+- Added device-hosted and cloud-environment chat starts from the multi-chat empty pane flow.
+- Added a cloud login page that uses the existing Google OAuth browser flow and server redirect endpoints.
+- Expanded the admin page with Live chats and Devices tabs for cross-device chat visibility and controls.
+- Protected the cloud admin route so unauthenticated `/app/admin` visits land on the Google login surface.
+- Added host-device propagation when starting threads so chats can be associated with a selected device.
+- Fixed Windows packaging metadata so the NSIS release build can generate update files reliably.
+- Fixed the cloud web build helper so Windows Bun installs that expose `bun.exe` but not `bun.cmd` can build.
+- Recreated `release.exe` with the fresh Windows installer artifacts.
+- Deployed the server-node website to the Mini PC at `C:\v3code` and verified the NSSM service is running.
+- Made Windows test portability fixes so the full root verification suite passes on this machine.
 
 ### Files Modified
 
-- `.gitignore` - ignored generated `dist-cloud` and local `release.exe` artifacts.
-- `.githooks/pre-commit` - added active-tree guard hook.
-- `package.json` - added active-tree scripts.
-- `scripts/assert-active-tree.ts` and `scripts/assert-active-tree.test.ts` - added stale-tree protection.
-- `scripts/build-desktop-artifact.ts` and `scripts/build-desktop-artifact.test.ts` - added Windows packaging fallback and V3 branding expectations.
-- `apps/desktop/package.json`, `apps/server/package.json`, `apps/web/package.json`, `packages/contracts/package.json` - bumped release versions to 0.0.25.
-- `apps/desktop/src/main.ts`, `apps/desktop/src/preload.ts`, `apps/desktop/src/v3ChatImport.ts`, `apps/desktop/src/v3ChatImportCore.ts`, `apps/desktop/src/v3ChatImport*.test.ts` - rewired chat import IPC and scanner behavior.
-- `apps/desktop/src/v3GitHubAuth.ts` - added main-process GitHub Device Flow implementation.
-- `apps/desktop/src/spawnDiscovery.ts` - added runtime environment/shell discovery.
-- `packages/contracts/src/ipc.ts`, `packages/contracts/src/settings.ts`, `packages/contracts/src/mesh/chat.ts` - extended shared contracts for new IPC/settings shapes.
-- `apps/web/src/components/HomeComposer.tsx`, `apps/web/src/components/NoActiveThreadState.tsx`, `apps/web/src/composerDraft*`, `apps/web/src/hooks/useHandleNewThread.ts` - added folder/cwd start flow.
-- `apps/web/src/components/chat/ImportChatDialog.tsx` - added session-scoped local import UX, manual folder scan, debug footer, and progressive row loading.
-- `apps/web/src/v3/auth/githubBridge.ts`, `apps/web/src/v3/ui/GitHubDeviceCodeDialog.tsx`, `apps/web/src/v3/ui/ConnectGitHubButton.tsx` - added renderer GitHub Device Flow UI.
-- `apps/web/src/hooks/useTheme.ts`, `apps/web/src/index.css`, `apps/web/src/themes/*` - added named themes and accent override.
-- `apps/web/src/components/settings/*`, `apps/web/src/routes/settings.*.tsx`, `apps/web/src/routeTree.gen.ts` - added new settings panels/routes and navigation.
-- `apps/web/src/localApi.test.ts`, `apps/web/src/components/settings/SettingsPanels.browser.tsx`, `apps/desktop/src/clientPersistence.test.ts` - updated mocks/tests for new settings and bridge contracts.
-- `vitest.config.ts` - excluded `node_modules` from test discovery.
+- `apps/web/src/multiChatLayoutStore.ts` - persisted pane layout and pane target state.
+- `apps/web/src/components/multiChat/MultiChatWorkspace.tsx` - multi-pane workspace UI and pane actions.
+- `apps/web/src/routes/_chat.index.tsx` - renders the multi-chat workspace on the chat home route.
+- `apps/web/src/routes/_chat.$environmentId.$threadId.tsx` - renders route chats inside the multi-chat workspace.
+- `apps/web/src/hooks/useHandleNewThread.ts` - accepts host device selection when creating drafts.
+- `apps/web/src/lib/chatThreadActions.ts` - forwards host device and folder context through thread creation.
+- `apps/web/src/lib/startThreadFromFolder.ts` - shared folder-to-thread start helper.
+- `apps/web/src/components/HomeComposer.tsx` - reuses the shared folder start helper.
+- `apps/web/src/components/ChatView.tsx` - forwards host device context during thread bootstrap.
+- `apps/web/src/routes/login.tsx` - Google OAuth login page for the cloud/server-node web surface.
+- `apps/web/src/routes/_chat.tsx` - cloud unauthenticated users redirect to `/login`.
+- `apps/web/src/routes/pair.tsx` - cloud unauthenticated pairing redirects to `/login`.
+- `apps/web/src/routes/__root.tsx` - keeps toast providers available for unauthenticated cloud pages.
+- `apps/web/src/routes/admin.tsx` - added Live chats and Devices controls to admin.
+- `apps/web/src/routeTree.gen.ts` - regenerated TanStack route tree.
+- `scripts/build-web-cloud.ts` - uses the Bun lifecycle executable when available and handles spawn errors.
+- `scripts/build-desktop-artifact.ts` - includes repository metadata in staged Electron package.
+- `package.json` - added repository metadata for release/updater tooling.
+- `apps/web/package.json` - made web Vitest execution Windows-safe.
+- `packages/effect-acp/package.json` - increased test timeout for slower Windows runs.
+- `apps/server/**/*.test.ts` - Windows path, shell wrapper, CRLF, and process-behavior portability fixes.
 
 ### Assumptions Made (flag these for review)
 
-- Used `0.0.25` as the next release version because the latest existing tag is `v0.0.24`.
-- Published the `.exe` as a GitHub Release asset instead of committing `release.exe/`, because the installer is larger than GitHub's normal repository blob limit.
-- Built an unsigned local Windows installer. Signed Windows CI/release builds can still enable signing explicitly.
+- The Mini PC deployment target is the existing `C:\v3code` NSSM-managed server.
+- The existing Google OAuth server endpoints are the intended OAuth redirect surface for `v3.agaminggod.com`.
+- The production web control surface is the cloud bundle under `/app`, with `/login` hosted at the root.
+- Cloud environment creation should surface existing server capabilities and fail gracefully when the backend is not configured.
 
 ### Known Issues / Deferred
 
-- `bun run test` is not green on this Windows machine. The server suite reports pre-existing Windows/environment failures such as `mkfifo` missing, `C:\dev\null`, CRLF newline expectations, temp CLI executable resolution, and Windows permission checks.
-- `bun lint` exits successfully but still reports existing warnings.
-- The unsigned local Windows build skips electron-builder's combined sign/edit executable step to avoid the winCodeSign symlink extraction failure on non-admin Windows shells.
-- Full-access run confirmation modal is implemented but still needs final dispatcher integration.
+- Mobile layout was DOM-verified through responsive markup and desktop browser inspection; the local Playwright mobile run could not use the bundled browser because the Playwright browser binary is not installed on this machine.
+- The admin Live chats page can issue control commands only when the browser has an authenticated server-node session.
+- The Windows installer is unsigned unless the Azure Trusted Signing environment is configured.
+- The previous Mini PC deployment was backed up at `C:\v3code-backup-20260429220016`.
 
 ### Suggested Next Steps
 
-- Fix or platform-gate the Windows-incompatible server tests so `bun run test` is green on Windows.
-- Run a signed Windows build in CI or an elevated/dev-mode Windows shell if PE resource signing/editing is required.
-- Complete the remaining settings extraction from the legacy Connections page.
-- Wire the Full Access confirmation modal into the actual run-start dispatcher.
+- Configure the production Google OAuth client redirect URI for `https://v3.agaminggod.com/api/auth/google/callback`.
+- Add a focused browser test that asserts the mobile pane selector at a mobile viewport once Playwright browsers are installed in CI.
+- Wire cloud environment status details into the Live chats table after the cloud container backend is fully enabled.

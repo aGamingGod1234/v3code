@@ -42,107 +42,97 @@ function makeFakeCodexBinary(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const binDir = path.join(dir, "bin");
-    const codexPath = path.join(binDir, "codex");
+    const scriptPath = path.join(binDir, "fake-codex.mjs");
+    const codexPath = path.join(binDir, process.platform === "win32" ? "codex.cmd" : "codex");
     yield* fs.makeDirectory(binDir, { recursive: true });
 
     yield* fs.writeFileString(
+      scriptPath,
+      `import { promises as fs } from "node:fs";
+
+const config = ${JSON.stringify(input)};
+const args = process.argv.slice(2);
+let outputPath = "";
+let seenImage = false;
+let seenFastServiceTier = false;
+let seenReasoningEffort = "";
+
+for (let index = 0; index < args.length; index += 1) {
+  const arg = args[index];
+  if (arg === "--image") {
+    index += 1;
+    seenImage = Boolean(args[index]);
+    continue;
+  }
+  if (arg === "--config") {
+    index += 1;
+    const value = args[index] ?? "";
+    if (value === 'service_tier="fast"' || value === "service_tier=fast") {
+      seenFastServiceTier = true;
+    }
+    if (value.startsWith("model_reasoning_effort=")) {
+      seenReasoningEffort = value;
+    }
+    continue;
+  }
+  if (arg === "--output-last-message") {
+    index += 1;
+    outputPath = args[index] ?? "";
+  }
+}
+
+const stdin = await new Promise((resolve) => {
+  let content = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    content += chunk;
+  });
+  process.stdin.on("end", () => resolve(content));
+});
+
+if (config.requireImage && !seenImage) {
+  console.error("missing --image input");
+  process.exit(2);
+}
+if (config.requireFastServiceTier && !seenFastServiceTier) {
+  console.error("missing fast service tier config");
+  process.exit(5);
+}
+if (config.requireReasoningEffort !== undefined) {
+  const expectedQuoted = \`model_reasoning_effort="\${config.requireReasoningEffort}"\`;
+  const expectedUnquoted = \`model_reasoning_effort=\${config.requireReasoningEffort}\`;
+  if (seenReasoningEffort !== expectedQuoted && seenReasoningEffort !== expectedUnquoted) {
+  console.error(\`unexpected reasoning effort config: \${seenReasoningEffort}\`);
+  process.exit(6);
+  }
+}
+if (config.forbidReasoningEffort && seenReasoningEffort.length > 0) {
+  console.error(\`reasoning effort config should be omitted: \${seenReasoningEffort}\`);
+  process.exit(7);
+}
+if (config.stdinMustContain !== undefined && !stdin.includes(config.stdinMustContain)) {
+  console.error("stdin missing expected content");
+  process.exit(3);
+}
+if (config.stdinMustNotContain !== undefined && stdin.includes(config.stdinMustNotContain)) {
+  console.error("stdin contained forbidden content");
+  process.exit(4);
+}
+if (config.stderr !== undefined) {
+  console.error(config.stderr);
+}
+if (outputPath.length > 0) {
+  await fs.writeFile(outputPath, config.output, "utf8");
+}
+process.exit(config.exitCode ?? 0);
+`,
+    );
+
+    yield* fs.writeFileString(
       codexPath,
-      [
-        "#!/bin/sh",
-        'output_path=""',
-        'seen_image="0"',
-        'seen_fast_service_tier="0"',
-        'seen_reasoning_effort=""',
-        "while [ $# -gt 0 ]; do",
-        '  if [ "$1" = "--image" ]; then',
-        "    shift",
-        '    if [ -n "$1" ]; then',
-        '      seen_image="1"',
-        "    fi",
-        "    shift",
-        "    continue",
-        "  fi",
-        '  if [ "$1" = "--config" ]; then',
-        "    shift",
-        '    if [ "$1" = "service_tier=\\"fast\\"" ]; then',
-        '      seen_fast_service_tier="1"',
-        "    fi",
-        '    case "$1" in',
-        "      model_reasoning_effort=*)",
-        '        seen_reasoning_effort="$1"',
-        "        ;;",
-        "    esac",
-        "    shift",
-        "    continue",
-        "  fi",
-        '  if [ "$1" = "--output-last-message" ]; then',
-        "    shift",
-        '    output_path="$1"',
-        "    shift",
-        "    continue",
-        "  fi",
-        "  shift",
-        "done",
-        'stdin_content="$(cat)"',
-        ...(input.requireImage
-          ? [
-              'if [ "$seen_image" != "1" ]; then',
-              '  printf "%s\\n" "missing --image input" >&2',
-              `  exit 2`,
-              "fi",
-            ]
-          : []),
-        ...(input.requireFastServiceTier
-          ? [
-              'if [ "$seen_fast_service_tier" != "1" ]; then',
-              '  printf "%s\\n" "missing fast service tier config" >&2',
-              `  exit 5`,
-              "fi",
-            ]
-          : []),
-        ...(input.requireReasoningEffort !== undefined
-          ? [
-              `if [ "$seen_reasoning_effort" != "model_reasoning_effort=\\"${input.requireReasoningEffort}\\"" ]; then`,
-              '  printf "%s\\n" "unexpected reasoning effort config: $seen_reasoning_effort" >&2',
-              `  exit 6`,
-              "fi",
-            ]
-          : []),
-        ...(input.forbidReasoningEffort
-          ? [
-              'if [ -n "$seen_reasoning_effort" ]; then',
-              '  printf "%s\\n" "reasoning effort config should be omitted: $seen_reasoning_effort" >&2',
-              `  exit 7`,
-              "fi",
-            ]
-          : []),
-        ...(input.stdinMustContain !== undefined
-          ? [
-              `if ! printf "%s" "$stdin_content" | grep -F -- ${JSON.stringify(input.stdinMustContain)} >/dev/null; then`,
-              '  printf "%s\\n" "stdin missing expected content" >&2',
-              `  exit 3`,
-              "fi",
-            ]
-          : []),
-        ...(input.stdinMustNotContain !== undefined
-          ? [
-              `if printf "%s" "$stdin_content" | grep -F -- ${JSON.stringify(input.stdinMustNotContain)} >/dev/null; then`,
-              '  printf "%s\\n" "stdin contained forbidden content" >&2',
-              `  exit 4`,
-              "fi",
-            ]
-          : []),
-        ...(input.stderr !== undefined
-          ? [`printf "%s\\n" ${JSON.stringify(input.stderr)} >&2`]
-          : []),
-        'if [ -n "$output_path" ]; then',
-        "  cat > \"$output_path\" <<'__V3CODE_FAKE_CODEX_OUTPUT__'",
-        input.output,
-        "__V3CODE_FAKE_CODEX_OUTPUT__",
-        "fi",
-        `exit ${input.exitCode ?? 0}`,
-        "",
-      ].join("\n"),
+      process.platform === "win32"
+        ? `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`
+        : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)} "$@"\n`,
     );
     yield* fs.chmod(codexPath, 0o755);
     return codexPath;

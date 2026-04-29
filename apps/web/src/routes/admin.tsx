@@ -18,30 +18,51 @@ import {
   AdminSummaryResponse,
 } from "@v3tools/contracts";
 import { DateTime, Schema } from "effect";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import {
   ActivityIcon,
+  CloudIcon,
   ContainerIcon,
   DatabaseIcon,
+  ExternalLinkIcon,
   FileTextIcon,
   RefreshCwIcon,
+  SendIcon,
   ShieldAlertIcon,
+  SquareIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { scopeThreadRef } from "@v3tools/client-runtime";
+import { useShallow } from "zustand/react/shallow";
 
-import { resolvePrimaryEnvironmentHttpUrl } from "../environments/primary";
+import { resolvePrimaryEnvironmentHttpUrl, usePrimaryEnvironmentId } from "../environments/primary";
 import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
+import { DevicesSettingsPanel } from "../components/settings/DevicesSettingsPanel";
+import { CloudChatCreateDialog } from "../components/cloudMode/CloudChatCreateDialog";
+import { readEnvironmentApi } from "../environmentApi";
+import { newCommandId, newMessageId } from "../lib/utils";
+import { useMultiChatLayoutStore } from "../multiChatLayoutStore";
+import { selectThreadsAcrossEnvironments, useStore } from "../store";
+import { buildThreadRouteParams } from "../threadRoutes";
+import { toastManager } from "../components/ui/toast";
+import { useMeshDeviceSnapshot } from "../rpc/meshState";
+import { IS_CLOUD_MODE } from "../build-flags";
 
 const formatIsoDate = (value: DateTime.Utc | null): string =>
   value === null ? "—" : new Date(DateTime.toEpochMillis(value)).toLocaleString();
 
 export const Route = createFileRoute("/admin")({
+  beforeLoad: ({ context }) => {
+    if (IS_CLOUD_MODE && context.authGateState.status !== "authenticated") {
+      throw redirect({ to: "/login", replace: true });
+    }
+  },
   component: V3AdminPage,
 });
 
-type Tab = "overview" | "sessions" | "event-log" | "containers" | "logs";
+type Tab = "overview" | "live-chats" | "devices" | "sessions" | "event-log" | "containers" | "logs";
 
 function V3AdminPage() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -59,6 +80,8 @@ function V3AdminPage() {
         {(
           [
             { value: "overview", label: "Overview", Icon: ActivityIcon },
+            { value: "live-chats", label: "Live chats", Icon: SendIcon },
+            { value: "devices", label: "Devices", Icon: UsersIcon },
             { value: "sessions", label: "Sessions", Icon: UsersIcon },
             { value: "event-log", label: "Event log", Icon: DatabaseIcon },
             { value: "containers", label: "Containers", Icon: ContainerIcon },
@@ -83,6 +106,8 @@ function V3AdminPage() {
       </nav>
       <main className="min-h-0 flex-1 overflow-auto rounded-md border border-border/60 bg-muted/20 p-4">
         {tab === "overview" ? <OverviewTab /> : null}
+        {tab === "live-chats" ? <LiveChatsTab /> : null}
+        {tab === "devices" ? <DevicesTab /> : null}
         {tab === "sessions" ? <SessionsTab /> : null}
         {tab === "event-log" ? <EventLogTab /> : null}
         {tab === "containers" ? <ContainersTab /> : null}
@@ -218,6 +243,297 @@ function OverviewTab() {
           Refresh
         </Button>
       </div>
+    </div>
+  );
+}
+
+function DevicesTab() {
+  return (
+    <div className="-m-4">
+      <DevicesSettingsPanel />
+    </div>
+  );
+}
+
+function LiveChatsTab() {
+  const navigate = useNavigate();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const threads = useStore(useShallow(selectThreadsAcrossEnvironments));
+  const mesh = useMeshDeviceSnapshot();
+  const activePaneId = useMultiChatLayoutStore((state) => state.activePaneId);
+  const setPaneTarget = useMultiChatLayoutStore((state) => state.setPaneTarget);
+  const [promptByThreadKey, setPromptByThreadKey] = useState<Record<string, string>>({});
+  const [busyByThreadKey, setBusyByThreadKey] = useState<Record<string, boolean>>({});
+  const [cloudDialogOpen, setCloudDialogOpen] = useState(false);
+
+  const deviceNameById = useMemo(
+    () => new Map(mesh.devices.map((device) => [device.id, device.name] as const)),
+    [mesh.devices],
+  );
+  const visibleThreads = useMemo(
+    () =>
+      threads.toSorted((left, right) =>
+        (right.updatedAt ?? right.createdAt).localeCompare(left.updatedAt ?? left.createdAt),
+      ),
+    [threads],
+  );
+
+  const setThreadBusy = useCallback((threadKey: string, busy: boolean) => {
+    setBusyByThreadKey((current) => {
+      if ((current[threadKey] ?? false) === busy) return current;
+      return { ...current, [threadKey]: busy };
+    });
+  }, []);
+
+  const openThread = useCallback(
+    (thread: (typeof visibleThreads)[number]) => {
+      const target = scopeThreadRef(thread.environmentId, thread.id);
+      setPaneTarget(activePaneId, target);
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(target),
+      });
+    },
+    [activePaneId, navigate, setPaneTarget],
+  );
+
+  const interruptThread = useCallback(
+    async (thread: (typeof visibleThreads)[number]) => {
+      const api = readEnvironmentApi(thread.environmentId);
+      if (!api) return;
+      const threadKey = `${thread.environmentId}:${thread.id}`;
+      setThreadBusy(threadKey, true);
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.turn.interrupt",
+          commandId: newCommandId(),
+          threadId: thread.id,
+          createdAt: new Date().toISOString(),
+        });
+        toastManager.add({ type: "success", title: "Stop requested" });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Could not stop agent",
+          description: error instanceof Error ? error.message : "Unknown error.",
+        });
+      } finally {
+        setThreadBusy(threadKey, false);
+      }
+    },
+    [setThreadBusy],
+  );
+
+  const stopSession = useCallback(
+    async (thread: (typeof visibleThreads)[number]) => {
+      const api = readEnvironmentApi(thread.environmentId);
+      if (!api) return;
+      const threadKey = `${thread.environmentId}:${thread.id}`;
+      setThreadBusy(threadKey, true);
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.session.stop",
+          commandId: newCommandId(),
+          threadId: thread.id,
+          createdAt: new Date().toISOString(),
+        });
+        toastManager.add({ type: "success", title: "Session stop requested" });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Could not end session",
+          description: error instanceof Error ? error.message : "Unknown error.",
+        });
+      } finally {
+        setThreadBusy(threadKey, false);
+      }
+    },
+    [setThreadBusy],
+  );
+
+  const sendPrompt = useCallback(
+    async (thread: (typeof visibleThreads)[number]) => {
+      const threadKey = `${thread.environmentId}:${thread.id}`;
+      const prompt = (promptByThreadKey[threadKey] ?? "").trim();
+      if (!prompt) return;
+      const api = readEnvironmentApi(thread.environmentId);
+      if (!api) return;
+      setThreadBusy(threadKey, true);
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.turn.start",
+          commandId: newCommandId(),
+          threadId: thread.id,
+          message: {
+            messageId: newMessageId(),
+            role: "user",
+            text: prompt,
+            attachments: [],
+          },
+          modelSelection: thread.modelSelection,
+          titleSeed: thread.title,
+          runtimeMode: thread.runtimeMode,
+          interactionMode: thread.interactionMode,
+          createdAt: new Date().toISOString(),
+        });
+        setPromptByThreadKey((current) => ({ ...current, [threadKey]: "" }));
+        toastManager.add({ type: "success", title: "Prompt sent" });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Could not send prompt",
+          description: error instanceof Error ? error.message : "Unknown error.",
+        });
+      } finally {
+        setThreadBusy(threadKey, false);
+      }
+    },
+    [promptByThreadKey, setThreadBusy],
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs text-muted-foreground">
+          {visibleThreads.length} chat{visibleThreads.length === 1 ? "" : "s"} across{" "}
+          {mesh.devices.length} device{mesh.devices.length === 1 ? "" : "s"}.
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => setCloudDialogOpen(true)}
+        >
+          <CloudIcon className="size-3.5" />
+          New cloud chat
+        </Button>
+      </div>
+      <div className="overflow-auto rounded-md border border-border/60">
+        <table className="w-full min-w-[760px] text-xs">
+          <thead className="bg-muted/40 text-left text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">Chat</th>
+              <th className="px-3 py-2">Host</th>
+              <th className="px-3 py-2">State</th>
+              <th className="px-3 py-2">Prompt</th>
+              <th className="px-3 py-2 text-right">Control</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleThreads.map((thread) => {
+              const threadKey = `${thread.environmentId}:${thread.id}`;
+              const running = thread.session?.status === "running";
+              const busy = busyByThreadKey[threadKey] ?? false;
+              const hostName =
+                thread.hostDeviceId === null
+                  ? "Unassigned"
+                  : (deviceNameById.get(thread.hostDeviceId) ?? thread.hostDeviceId.slice(0, 12));
+              return (
+                <tr key={threadKey} className="border-t border-border/50 align-top">
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-foreground">{thread.title}</div>
+                    <div className="font-mono text-[10px] text-muted-foreground">
+                      {thread.id.slice(0, 16)}...
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">{hostName}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={cn(
+                        "inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium",
+                        running ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {thread.archivedAt ? "archived" : (thread.session?.status ?? "idle")}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex min-w-[260px] gap-2">
+                      <input
+                        value={promptByThreadKey[threadKey] ?? ""}
+                        onChange={(event) =>
+                          setPromptByThreadKey((current) => ({
+                            ...current,
+                            [threadKey]: event.currentTarget.value,
+                          }))
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                            event.preventDefault();
+                            void sendPrompt(thread);
+                          }
+                        }}
+                        className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ring focus:ring-2 focus:ring-ring/25"
+                        placeholder="Send prompt..."
+                      />
+                      <Button
+                        size="sm"
+                        disabled={busy || !(promptByThreadKey[threadKey] ?? "").trim()}
+                        onClick={() => void sendPrompt(thread)}
+                        className="gap-1"
+                      >
+                        <SendIcon className="size-3.5" />
+                        Send
+                      </Button>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openThread(thread)}
+                        className="gap-1"
+                      >
+                        <ExternalLinkIcon className="size-3.5" />
+                        Open
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy || !running}
+                        onClick={() => void interruptThread(thread)}
+                        className="gap-1"
+                      >
+                        <SquareIcon className="size-3.5" />
+                        Stop
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={
+                          busy || thread.session === null || thread.session.status === "closed"
+                        }
+                        onClick={() => void stopSession(thread)}
+                      >
+                        End
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {visibleThreads.length === 0 ? (
+          <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+            No chats are available yet.
+          </div>
+        ) : null}
+      </div>
+      <CloudChatCreateDialog
+        open={cloudDialogOpen}
+        onOpenChange={setCloudDialogOpen}
+        onCreated={(result) => {
+          if (!primaryEnvironmentId) return;
+          const target = scopeThreadRef(primaryEnvironmentId, result.threadId);
+          setPaneTarget(activePaneId, target);
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(target),
+          });
+        }}
+      />
     </div>
   );
 }

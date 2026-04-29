@@ -213,9 +213,9 @@ it.layer(NodeServices.layer)("ServerSecretStoreLive", (it) => {
 
       yield* secretStore.set("session-signing-key", Uint8Array.from([1, 2, 3]));
 
-      expect(chmodCalls.some((call) => call.mode === 0o700 && call.path.endsWith("/secrets"))).toBe(
-        true,
-      );
+      expect(
+        chmodCalls.some((call) => call.mode === 0o700 && /[/\\]secrets$/.test(call.path)),
+      ).toBe(true);
       expect(chmodCalls.filter((call) => call.mode === 0o600).length).toBeGreaterThanOrEqual(2);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
