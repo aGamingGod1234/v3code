@@ -46,6 +46,7 @@ import { cn } from "../../lib/utils";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
 import { pushRecentFolder, readRecentFolders } from "../../lib/recentFolders";
 import { startThreadFromFolder } from "../../lib/startThreadFromFolder";
+import { useSettings } from "../../hooks/useSettings";
 
 const CURRENT_DEVICE_SELECT_VALUE = "__current_device__";
 
@@ -339,6 +340,7 @@ function PaneEmptyState({ paneId }: { readonly paneId: MultiChatPaneId }) {
   const navigate = useNavigate();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const desktopBridge = window.desktopBridge;
+  const settings = useSettings();
   const setPaneTarget = useMultiChatLayoutStore((state) => state.setPaneTarget);
   const threads = useStore(useShallow(selectSidebarThreadsAcrossEnvironments));
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
@@ -466,6 +468,7 @@ function PaneEmptyState({ paneId }: { readonly paneId: MultiChatPaneId }) {
         primaryEnvironmentId,
         projects,
         prompt,
+        settings,
       });
       pushRecentFolder(created.cwd);
       setDraftPrompt("");
@@ -493,6 +496,7 @@ function PaneEmptyState({ paneId }: { readonly paneId: MultiChatPaneId }) {
     selectedFolder,
     selectedHostDeviceId,
     setPaneTarget,
+    settings,
     startingDraft,
   ]);
 

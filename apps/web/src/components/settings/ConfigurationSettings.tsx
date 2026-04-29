@@ -69,6 +69,7 @@ const CODE_REVIEW_OPTIONS: ReadonlyArray<{
 
 export function ConfigurationSettings() {
   const settings = useSettings((s) => ({
+    codexRuntime: s.codexRuntime,
     workMode: s.workMode,
     permissions: s.permissions,
     requireCtrlEnter: s.requireCtrlEnter,
@@ -111,6 +112,121 @@ export function ConfigurationSettings() {
               onSelect={() => updateSettings({ workMode: option.id })}
             />
           ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Codex runtime"
+        description="Default approval, sandbox, planning, and tool behavior used when starting new Codex-backed runs."
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="space-y-1 text-xs">
+            <span className="font-medium text-foreground">Reasoning effort</span>
+            <select
+              value={settings.codexRuntime.reasoningEffort}
+              onChange={(event) =>
+                updateSettings({
+                  codexRuntime: {
+                    ...settings.codexRuntime,
+                    reasoningEffort: event.currentTarget
+                      .value as typeof settings.codexRuntime.reasoningEffort,
+                  },
+                })
+              }
+              className="h-8 w-full rounded-md border border-border bg-background px-2"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">Extra high</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs">
+            <span className="font-medium text-foreground">Approval policy</span>
+            <select
+              value={settings.codexRuntime.approvalPolicy}
+              onChange={(event) =>
+                updateSettings({
+                  codexRuntime: {
+                    ...settings.codexRuntime,
+                    approvalPolicy: event.currentTarget
+                      .value as typeof settings.codexRuntime.approvalPolicy,
+                  },
+                })
+              }
+              className="h-8 w-full rounded-md border border-border bg-background px-2"
+            >
+              <option value="untrusted">Untrusted</option>
+              <option value="on-request">On request</option>
+              <option value="on-failure">On failure</option>
+              <option value="never">Never ask</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs">
+            <span className="font-medium text-foreground">Sandbox mode</span>
+            <select
+              value={settings.codexRuntime.sandboxMode}
+              onChange={(event) =>
+                updateSettings({
+                  codexRuntime: {
+                    ...settings.codexRuntime,
+                    sandboxMode: event.currentTarget
+                      .value as typeof settings.codexRuntime.sandboxMode,
+                  },
+                })
+              }
+              className="h-8 w-full rounded-md border border-border bg-background px-2"
+            >
+              <option value="read-only">Read only</option>
+              <option value="workspace-write">Workspace write</option>
+              <option value="danger-full-access">Full access</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-border bg-card/30 p-3 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={settings.codexRuntime.workspaceWriteNetwork}
+              onChange={(event) =>
+                updateSettings({
+                  codexRuntime: {
+                    ...settings.codexRuntime,
+                    workspaceWriteNetwork: event.currentTarget.checked,
+                  },
+                })
+              }
+            />
+            Allow network in workspace-write mode
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-border bg-card/30 p-3 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={settings.codexRuntime.planModeByDefault}
+              onChange={(event) =>
+                updateSettings({
+                  codexRuntime: {
+                    ...settings.codexRuntime,
+                    planModeByDefault: event.currentTarget.checked,
+                  },
+                })
+              }
+            />
+            Start new complex tasks in plan mode
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-border bg-card/30 p-3 text-xs text-foreground sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={settings.codexRuntime.webSearchEnabled}
+              onChange={(event) =>
+                updateSettings({
+                  codexRuntime: {
+                    ...settings.codexRuntime,
+                    webSearchEnabled: event.currentTarget.checked,
+                  },
+                })
+              }
+            />
+            Allow web search when current information is required
+          </label>
         </div>
       </Section>
 

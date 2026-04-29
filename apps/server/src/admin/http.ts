@@ -50,6 +50,7 @@ import { UserContextResolver } from "../identity/Services/UserContextResolver.ts
 import { UserRepository } from "../identity/Services/UserRepository.ts";
 import { ServerAuth } from "../auth/Services/ServerAuth.ts";
 import { HttpServerRequest } from "effect/unstable/http";
+import { resolveRedirectUri } from "../identity/browserGoogleOAuth.ts";
 
 const SERVER_START_MILLIS = Date.now();
 
@@ -164,6 +165,13 @@ const buildServerInfo: Effect.Effect<AdminServerInfo, never, ServerConfig | Cont
       dockerAvailable,
       googleConfigured:
         typeof config.googleClientId === "string" && config.googleClientId.length > 0,
+      googleRedirectUri:
+        typeof config.googleClientId === "string" && config.googleClientId.length > 0
+          ? resolveRedirectUri({
+              publicUrl: config.serverPublicUrl,
+              requestOrigin: config.serverPublicUrl ?? "http://127.0.0.1",
+            })
+          : null,
       githubConfigured:
         typeof config.githubClientId === "string" &&
         config.githubClientId.length > 0 &&

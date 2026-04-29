@@ -103,8 +103,10 @@ import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
+import { applyCodexRuntimeModelDefaults } from "../../lib/codexRuntimeSettings";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
+const CTRL_ENTER_GUARD_PROMPT_CHARS = 280;
 
 const runtimeModeConfig: Record<
   RuntimeMode,
@@ -130,6 +132,10 @@ const runtimeModeConfig: Record<
 const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
+
+function shouldRequireModifiedEnterForPrompt(prompt: string): boolean {
+  return prompt.includes("\n") || prompt.trim().length >= CTRL_ENTER_GUARD_PROMPT_CHARS;
+}
 
 const extendReplacementRangeForTrailingSpace = (
   text: string,
@@ -605,8 +611,12 @@ export const ChatComposer = memo(
       [selectedProvider],
     );
     const selectedModelSelection = useMemo<ModelSelection>(
-      () => createModelSelection(selectedProvider, selectedModel, selectedModelOptionsForDispatch),
-      [selectedModel, selectedModelOptionsForDispatch, selectedProvider],
+      () =>
+        applyCodexRuntimeModelDefaults(
+          createModelSelection(selectedProvider, selectedModel, selectedModelOptionsForDispatch),
+          settings,
+        ),
+      [selectedModel, selectedModelOptionsForDispatch, selectedProvider, settings],
     );
     const selectedModelForPicker = selectedModel;
     const modelOptionsByProvider = useMemo<
@@ -1516,6 +1526,14 @@ export const ChatComposer = memo(
         }
       }
       if (key === "Enter" && !event.shiftKey) {
+        if (
+          settings.requireCtrlEnter &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          shouldRequireModifiedEnterForPrompt(promptRef.current)
+        ) {
+          return false;
+        }
         void onSend();
         return true;
       }

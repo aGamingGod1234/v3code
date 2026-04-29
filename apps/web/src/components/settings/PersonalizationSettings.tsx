@@ -1,17 +1,10 @@
-// Personalization settings panel.
-//
-//   * Custom prompts CRUD — wired to useSettings.customPrompts. Each prompt
-//     gets per-prompt enable/disable. Length limits and delimiter safety are
-//     enforced both here and in the schema.
-//   * Dictation hotkey capture — UI works; recording wiring is stubbed and
-//     labelled "Coming soon" (per Phase 1 honesty rule).
-
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { ImportChatDialog } from "../chat/ImportChatDialog";
 
 const NAME_MAX = 60;
 const CONTENT_MAX = 4000;
@@ -34,10 +27,35 @@ const blankDraft = (): CustomPromptDraft => ({
 });
 
 export function PersonalizationSettings() {
-  const customPrompts = useSettings((s) => s.customPrompts);
+  const { customPrompts, dictation } = useSettings((s) => ({
+    customPrompts: s.customPrompts,
+    dictation: s.dictation,
+  }));
   const { updateSettings } = useUpdateSettings();
   const [editing, setEditing] = useState<CustomPromptDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [capturingHotkey, setCapturingHotkey] = useState(false);
+  const speechSupported =
+    typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  useEffect(() => {
+    if (!capturingHotkey) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      const keys = [
+        event.ctrlKey ? "Ctrl" : "",
+        event.metaKey ? "Meta" : "",
+        event.altKey ? "Alt" : "",
+        event.shiftKey ? "Shift" : "",
+        event.key.length === 1 ? event.key.toUpperCase() : event.key,
+      ].filter(Boolean);
+      updateSettings({ dictation: { ...dictation, hotkey: keys.join("+") } });
+      setCapturingHotkey(false);
+    };
+    window.addEventListener("keydown", onKeyDown, { once: true });
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [capturingHotkey, dictation, updateSettings]);
 
   const totalEnabledLength = useMemo(
     () =>
@@ -272,12 +290,77 @@ export function PersonalizationSettings() {
         <header>
           <h3 className="text-sm font-semibold text-foreground">Dictation</h3>
           <p className="text-xs text-muted-foreground">
-            Hotkey capture works. Recording is wired in a follow-up.
+            Configure voice input availability and the keyboard shortcut used by the composer.
           </p>
         </header>
-        <div className="rounded-md border border-dashed border-border/60 bg-card/30 px-3 py-2 text-xs text-muted-foreground">
-          Coming soon. The composer dictation pipeline lands in a later phase.
+        <div className="space-y-3 rounded-lg border border-border bg-card/40 p-3">
+          <label className="flex items-start gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={dictation.enabled}
+              onChange={(event) =>
+                updateSettings({
+                  dictation: { ...dictation, enabled: event.currentTarget.checked },
+                })
+              }
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-medium text-foreground">Enable dictation</span>
+              <span className="block text-xs text-muted-foreground">
+                {speechSupported
+                  ? "This browser exposes speech recognition."
+                  : "Speech recognition is not available in this browser runtime."}
+              </span>
+            </span>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-foreground">Hotkey</span>
+              <button
+                type="button"
+                onClick={() => setCapturingHotkey(true)}
+                className="h-8 w-full rounded-md border border-border bg-background px-2 text-left font-mono"
+              >
+                {capturingHotkey ? "Press keys..." : dictation.hotkey}
+              </button>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-foreground">Provider</span>
+              <select
+                value={dictation.provider}
+                onChange={(event) =>
+                  updateSettings({
+                    dictation: {
+                      ...dictation,
+                      provider: event.currentTarget.value as typeof dictation.provider,
+                    },
+                  })
+                }
+                className="h-8 w-full rounded-md border border-border bg-background px-2"
+              >
+                <option value="web-speech">Web Speech API</option>
+                <option value="server">Server transcription endpoint</option>
+              </select>
+            </label>
+          </div>
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <header>
+          <h3 className="text-sm font-semibold text-foreground">Chat import</h3>
+          <p className="text-xs text-muted-foreground">
+            Scan Codex, Claude, Anthropic Console, or a selected transcript folder.
+          </p>
+        </header>
+        <ImportChatDialog
+          trigger={
+            <Button type="button" size="sm" variant="outline" data-tour-id="import-chat-button">
+              Import chat
+            </Button>
+          }
+        />
       </section>
     </div>
   );

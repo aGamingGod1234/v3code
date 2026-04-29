@@ -4,6 +4,7 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
 import {
   ClaudeModelOptions,
+  CodexReasoningEffort,
   CodexModelOptions,
   CursorModelOptions,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
@@ -65,6 +66,96 @@ export type FollowUpBehavior = typeof FollowUpBehavior.Type;
 export const CodeReviewStyle = Schema.Literals(["inline", "detached"]);
 export type CodeReviewStyle = typeof CodeReviewStyle.Type;
 
+export const InterfaceProfile = Schema.Literals(["v3", "codex", "claude", "cursor", "windsurf"]);
+export type InterfaceProfile = typeof InterfaceProfile.Type;
+
+export const RuntimeApprovalPolicy = Schema.Literals([
+  "untrusted",
+  "on-request",
+  "on-failure",
+  "never",
+]);
+export type RuntimeApprovalPolicy = typeof RuntimeApprovalPolicy.Type;
+
+export const RuntimeSandboxMode = Schema.Literals([
+  "read-only",
+  "workspace-write",
+  "danger-full-access",
+]);
+export type RuntimeSandboxMode = typeof RuntimeSandboxMode.Type;
+
+export const CodexRuntimeSettings = Schema.Struct({
+  reasoningEffort: CodexReasoningEffort.pipe(
+    Schema.withDecodingDefault(Effect.succeed("medium" as const)),
+  ),
+  approvalPolicy: RuntimeApprovalPolicy.pipe(
+    Schema.withDecodingDefault(Effect.succeed("on-request" as const)),
+  ),
+  sandboxMode: RuntimeSandboxMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed("workspace-write" as const)),
+  ),
+  workspaceWriteNetwork: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  planModeByDefault: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  webSearchEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type CodexRuntimeSettings = typeof CodexRuntimeSettings.Type;
+
+export const McpServerTransport = Schema.Literals(["stdio", "sse", "http"]);
+export type McpServerTransport = typeof McpServerTransport.Type;
+
+export const McpServerSettings = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  transport: McpServerTransport.pipe(Schema.withDecodingDefault(Effect.succeed("stdio" as const))),
+  command: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  args: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  url: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  env: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  disabledTools: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  timeoutSeconds: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(30))),
+});
+export type McpServerSettings = typeof McpServerSettings.Type;
+
+export const WorktreeSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  baseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  defaultBaseBranch: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("main"))),
+  maxPerRepository: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(4))),
+  cleanupStaleOnStartup: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type WorktreeSettings = typeof WorktreeSettings.Type;
+
+export const BrowserUseSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  mode: Schema.Literals(["headed", "headless"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("headed" as const)),
+  ),
+  isolatedProfile: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  requirePerRunApproval: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  domainAllowlist: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  cookiePolicy: Schema.Literals(["isolated", "reuse-current"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("isolated" as const)),
+  ),
+});
+export type BrowserUseSettings = typeof BrowserUseSettings.Type;
+
+export const DictationSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  hotkey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("Ctrl+Shift+D"))),
+  provider: Schema.Literals(["web-speech", "server"]).pipe(
+    Schema.withDecodingDefault(Effect.succeed("web-speech" as const)),
+  ),
+});
+export type DictationSettings = typeof DictationSettings.Type;
+
+export const UsageSettings = Schema.Struct({
+  retentionDays: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(90))),
+  exportCsvIncludesPrompts: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  pricingTableUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+});
+export type UsageSettings = typeof UsageSettings.Type;
+
 export const CustomPrompt = Schema.Struct({
   id: TrimmedNonEmptyString,
   name: TrimmedString.pipe(
@@ -121,6 +212,15 @@ export const ClientSettingsSchema = Schema.Struct({
 
   // Phase 1 Codex-style configuration. Only fields wired to runtime behaviour
   // are persisted — unwired toggles must NOT live here.
+  interfaceProfile: InterfaceProfile.pipe(
+    Schema.withDecodingDefault(Effect.succeed("v3" as const)),
+  ),
+  codexRuntime: CodexRuntimeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  mcpServers: Schema.Array(McpServerSettings).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  worktrees: WorktreeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  browserUse: BrowserUseSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  dictation: DictationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  usage: UsageSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   workMode: WorkMode.pipe(Schema.withDecodingDefault(Effect.succeed("coding" as const))),
   permissions: PermissionsSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   requireCtrlEnter: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),

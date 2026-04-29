@@ -13,7 +13,6 @@ import { useAccountState } from "../../hooks/useAccountState";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
-import { V3ConnectGitHubButton } from "../../v3/ui/ConnectGitHubButton";
 import {
   SettingsPageContainer,
   SettingsRow,
@@ -755,7 +754,11 @@ function SavedBackendListRow({
   );
 }
 
-export function ConnectionsSettings() {
+export function ConnectionsSettings({
+  showChatImport = true,
+}: {
+  readonly showChatImport?: boolean;
+}) {
   const desktopBridge = window.desktopBridge;
   const account = useAccountState();
   const v3ServerNodeUrlOverride = useSettings((settings) => settings.v3ServerNodeUrlOverride);
@@ -1309,26 +1312,6 @@ export function ConnectionsSettings() {
 
       <SettingsSection title="V3 connections">
         <SettingsRow
-          title="GitHub"
-          description={
-            account.isSignedIn
-              ? "Connect a GitHub account so V3 can browse repos and validate the stored token before Cloud env handoff lands."
-              : "Sign in with Google before connecting GitHub for this server node."
-          }
-          status={
-            account.isSignedIn ? null : (
-              <span className="text-xs text-muted-foreground">Google sign-in required</span>
-            )
-          }
-          control={
-            account.isSignedIn ? (
-              <div className="flex w-full items-center justify-end sm:w-auto">
-                <V3ConnectGitHubButton />
-              </div>
-            ) : null
-          }
-        />
-        <SettingsRow
           title="Server node URL override"
           description="Force this client to talk to a specific V3 server node instead of the one auto-discovered from Drive App Data, the desktop bootstrap, or env defaults. Useful when testing a staging server or routing through a custom hostname; leave blank to let V3 pick automatically."
           status={
@@ -1537,21 +1520,23 @@ export function ConnectionsSettings() {
         ) : null}
       </SettingsSection>
 
-      <SettingsSection title="Chat import">
-        <SettingsRow
-          title="Import existing transcripts"
-          description="Bring chats from Codex CLI, Claude Code, or the Anthropic Console into V3. Skills and MCP servers referenced in the transcript are auto-detected — installed ones are flagged as enabled, missing ones are surfaced for manual install."
-          control={
-            <ImportChatDialog
-              trigger={
-                <Button size="xs" variant="outline" data-tour-id="import-chat-button">
-                  Import chat
-                </Button>
-              }
-            />
-          }
-        />
-      </SettingsSection>
+      {showChatImport ? (
+        <SettingsSection title="Chat import">
+          <SettingsRow
+            title="Import existing transcripts"
+            description="Bring chats from Codex CLI, Claude Code, or the Anthropic Console into V3. Skills and MCP servers referenced in the transcript are auto-detected — installed ones are flagged as enabled, missing ones are surfaced for manual install."
+            control={
+              <ImportChatDialog
+                trigger={
+                  <Button size="xs" variant="outline" data-tour-id="import-chat-button">
+                    Import chat
+                  </Button>
+                }
+              />
+            }
+          />
+        </SettingsSection>
+      ) : null}
     </SettingsPageContainer>
   );
 }

@@ -1,26 +1,22 @@
-// Appearance settings panel:
-//   * Light / dark / system toggle (existing behaviour)
-//   * Named theme picker — V3 Code, Codex/Claude/Cursor/Windsurf-inspired
-//   * Accent override (#rgb / #rrggbb / #rrggbbaa) with reset
-
 import { useState } from "react";
 
-import { Button } from "../ui/button";
+import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useAccentOverride, useTheme, useThemeName } from "../../hooks/useTheme";
 import { THEME_LABEL, THEME_NAMES, type ThemeName } from "../../themes/themeNames";
 import { THEME_SWATCHES } from "../../themes/themePalettes";
+import { Button } from "../ui/button";
 
 const ACCENT_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
 function ThemeSwatchPreview({
-  name,
-  mode,
   active,
+  mode,
+  name,
   onSelect,
 }: {
-  readonly name: ThemeName;
-  readonly mode: "light" | "dark";
   readonly active: boolean;
+  readonly mode: "light" | "dark";
+  readonly name: ThemeName;
   readonly onSelect: () => void;
 }) {
   const swatch = THEME_SWATCHES[name][mode];
@@ -53,11 +49,14 @@ function ThemeSwatchPreview({
 }
 
 export function AppearanceSettings() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const { themeName, setThemeName } = useThemeName();
+  const { resolvedTheme, setTheme, theme } = useTheme();
+  const { setThemeName, themeName } = useThemeName();
   const { accentOverride, setAccent } = useAccentOverride();
+  const interfaceProfile = useSettings((settings) => settings.interfaceProfile);
+  const { updateSettings } = useUpdateSettings();
   const [accentText, setAccentText] = useState(accentOverride ?? "");
   const [accentError, setAccentError] = useState<string | null>(null);
+  const selectedProfile = (themeName || interfaceProfile) as ThemeName;
 
   return (
     <div className="space-y-8">
@@ -65,7 +64,7 @@ export function AppearanceSettings() {
         <header>
           <h3 className="text-sm font-semibold text-foreground">Mode</h3>
           <p className="text-xs text-muted-foreground">
-            Light/dark/system toggles the existing palette. Theme overrides are layered on top.
+            Light, dark, or system controls the base surface. Interface profiles layer on top.
           </p>
         </header>
         <div className="flex gap-2">
@@ -86,9 +85,10 @@ export function AppearanceSettings() {
 
       <section className="space-y-3">
         <header>
-          <h3 className="text-sm font-semibold text-foreground">Theme</h3>
+          <h3 className="text-sm font-semibold text-foreground">Interface profile</h3>
           <p className="text-xs text-muted-foreground">
-            Inspired palettes. CSS variables only — no layout, spacing, or component changes.
+            Changes the app shell, spacing, composer surface, pane chrome, and colour system.
+            Provider-like profiles are legally distinct recreations of their workflows.
           </p>
         </header>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -97,8 +97,11 @@ export function AppearanceSettings() {
               key={name}
               name={name}
               mode={resolvedTheme}
-              active={themeName === name}
-              onSelect={() => setThemeName(name)}
+              active={selectedProfile === name}
+              onSelect={() => {
+                setThemeName(name);
+                updateSettings({ interfaceProfile: name });
+              }}
             />
           ))}
         </div>
@@ -108,8 +111,8 @@ export function AppearanceSettings() {
         <header>
           <h3 className="text-sm font-semibold text-foreground">Accent override</h3>
           <p className="text-xs text-muted-foreground">
-            Overrides the theme's primary colour. Picks up after the selected theme; reset to return
-            to the theme default.
+            Overrides the profile primary colour. Resetting removes the override and restores the
+            selected profile.
           </p>
         </header>
         <div className="flex flex-wrap items-center gap-3">

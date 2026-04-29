@@ -1,3 +1,57 @@
+## [2026-04-29] - Settings, OAuth, Provider-Style UI, and Live Control Repair
+
+### What Was Implemented
+
+- Reworked Settings into scroll-safe page containers and removed the duplicate user-facing GitHub sign-in surface from the legacy Connections page.
+- Added Codex-style runtime configuration fields for provider/model defaults, reasoning effort, approval policy, sandbox mode, workspace network, plan mode, web search, terminal/editor destination, notifications, custom prompts, MCP, worktrees, browser use, dictation, usage, and pricing.
+- Wired runtime settings into chat/thread startup so Codex reasoning effort, approval policy, sandbox mode, runtime mode, and plan-mode defaults flow into provider session startup instead of only persisting in local UI state.
+- Replaced palette-only theme selection with persisted `interfaceProfile` support and added provider-inspired app-shell styling hooks for V3, Codex-like, Claude-like, Cursor-like, and Windsurf-like profiles.
+- Repaired GitHub sign-in routing so server-node/web mode uses the account-scoped server OAuth flow, while desktop Device Flow remains a local-only fallback.
+- Confirmed `/login` uses the existing Google OAuth authorize/callback endpoints and exposed the expected Google redirect URI in the admin server summary for setup verification.
+- Added real settings panels for MCP Servers, Worktrees, Browser Use, Usage, Configuration, Personalization, Appearance, Git, and Environments; removed `StubPanel` and added an audit test that fails on visible `Coming soon`/stub regressions.
+- Promoted the admin surface into `/control`, improved live-chat/device page responsiveness, and preserved the existing multi-chat single/left-right/up-down/four-quadrant pane support.
+- Built the Windows NSIS installer and copied the fresh installer/update metadata into the `release.exe` artifact folder.
+
+### Files Modified
+
+- `packages/contracts/src/settings.ts` - added normalized runtime, interface profile, MCP, worktree, browser-use, dictation, usage, and pricing settings schemas.
+- `packages/contracts/src/orchestration.ts` - added approval policy and sandbox mode to turn-start command contracts.
+- `apps/server/src/codexAppServerManager.ts` - applied approval/sandbox overrides when starting or resuming Codex app-server sessions.
+- `apps/server/src/orchestration/decider.ts` - carries runtime overrides through turn-start events.
+- `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts` - forwards runtime overrides into provider session startup.
+- `apps/server/src/provider/Layers/CodexAdapter.ts` - passes runtime overrides into the Codex manager.
+- `apps/server/src/admin/http.ts` and `packages/contracts/src/admin.ts` - report Google OAuth redirect URI in admin setup data.
+- `apps/web/src/lib/codexRuntimeSettings.ts` - shared UI/runtime mapping for Codex settings.
+- `apps/web/src/components/ChatView.tsx`, `apps/web/src/components/chat/ChatComposer.tsx`, `apps/web/src/lib/startThreadFromFolder.ts`, `apps/web/src/components/HomeComposer.tsx`, and `apps/web/src/components/multiChat/MultiChatWorkspace.tsx` - consume runtime settings during compose, draft creation, and thread startup.
+- `apps/web/src/components/settings/*.tsx` and `apps/web/src/routes/settings.*.tsx` - rebuilt settings tabs, removed stubs, and applied the shared scroll container.
+- `apps/web/src/hooks/useTheme.ts`, `apps/web/src/index.css`, and `apps/web/src/themes/*.ts` - added interface profile persistence and profile-level UI styling.
+- `apps/web/src/v3/ui/ConnectGitHubButton.tsx` - prefers server OAuth and labels desktop Device Flow as local-only fallback.
+- `apps/web/src/routes/admin.tsx`, `apps/web/src/routes/control.tsx`, and `apps/web/src/routeTree.gen.ts` - added the Control Center route and refreshed route generation.
+- `apps/web/src/components/settings/settingsAudit.test.ts` - regression guard for stubs and duplicate GitHub sign-in surfaces.
+
+### Assumptions Made (flag these for review)
+
+- Provider-inspired profiles must stay legally distinct and use layout/density/color behavior rather than copied proprietary assets, icons, names, or fonts.
+- The existing server Google OAuth endpoints remain the production web login source of truth.
+- Desktop Device Flow remains useful for local-only GitHub access when the account-scoped server OAuth config is unavailable.
+- Settings that do not yet have a backend runtime endpoint should show concrete device/configuration status and save only schema-backed configuration, not fake enabled states.
+
+### Known Issues / Deferred
+
+- MCP server CRUD is schema/UI-ready, but full import from Codex/Claude config files and provider-session injection still needs backend implementation.
+- Worktree settings persist safety policy and display status, but full list/create/bind/delete APIs are not implemented in this pass.
+- Browser-use settings are real persisted controls with permission semantics, but actual browser runtime integration still depends on the desktop/cloud browser provider wiring.
+- Dictation captures hotkeys and reports Web Speech API support, but native desktop speech input is not implemented.
+- Usage export currently uses local/projected client data; server-side day/model/provider/device aggregation still needs persistent usage ingestion.
+- DOM/mobile browser verification and Mini PC deployment were not performed in this pass.
+
+### Suggested Next Steps
+
+- Add backend MCP/worktree/browser-use APIs and wire them into provider session startup and control-center actions.
+- Add server-side usage event aggregation so the Usage page can report all devices/environments instead of local projections.
+- Run the responsive DOM verification matrix against a local dev server and the production Mini PC before pushing the website deployment.
+- Create and publish a GitHub release using `release/V3-Code-0.0.25-x64.exe` after repository credentials and release tag are confirmed.
+
 ## [2026-04-29] - Multi-Agent Workspace, Cloud Login/Admin, Windows Release
 
 ### What Was Implemented

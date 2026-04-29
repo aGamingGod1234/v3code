@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { Button } from "../components/ui/button";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
+import { IS_CLOUD_MODE } from "../build-flags";
 import { isElectron } from "../env";
 
 function RestoreDefaultsButton({ onRestored }: { onRestored: () => void }) {
@@ -89,7 +90,7 @@ function SettingsRouteLayout() {
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ context, location }) => {
     if (context.authGateState.status !== "authenticated") {
-      throw redirect({ to: "/pair", replace: true });
+      throw redirect({ to: IS_CLOUD_MODE ? "/login" : "/pair", replace: true });
     }
 
     if (location.pathname === "/settings") {

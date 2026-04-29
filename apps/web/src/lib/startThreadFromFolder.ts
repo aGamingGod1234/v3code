@@ -1,10 +1,11 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
   type DeviceId,
   type EnvironmentId,
+  type ModelSelection,
   type ProjectId,
+  type ProviderInteractionMode,
+  type RuntimeMode,
   type ThreadId,
 } from "@v3tools/contracts";
 
@@ -12,6 +13,12 @@ import { readEnvironmentApi } from "../environmentApi";
 import { inferProjectTitleFromPath, normalizeProjectPathForComparison } from "./projectPaths";
 import { newCommandId, newMessageId, newProjectId, newThreadId } from "./utils";
 import type { Project } from "../types";
+import type { UnifiedSettings } from "@v3tools/contracts/settings";
+import {
+  applyCodexRuntimeModelDefaults,
+  interactionModeFromCodexSettings,
+  runtimeModeFromCodexSettings,
+} from "./codexRuntimeSettings";
 
 const THREAD_TITLE_MAX_LENGTH = 80;
 
@@ -30,6 +37,7 @@ export interface ResolveProjectFromFolderInput {
 export interface StartThreadFromFolderInput extends ResolveProjectFromFolderInput {
   readonly prompt: string;
   readonly hostDeviceId?: DeviceId | null;
+  readonly settings: UnifiedSettings;
 }
 
 export interface StartThreadFromFolderResult extends FolderProjectRef {
@@ -99,6 +107,15 @@ export async function startThreadFromFolder(
   const threadId = newThreadId();
   const createdAt = new Date().toISOString();
   const title = prompt.slice(0, THREAD_TITLE_MAX_LENGTH) || "New thread";
+  const modelSelection: ModelSelection = applyCodexRuntimeModelDefaults(
+    {
+      provider: "codex",
+      model: DEFAULT_MODEL_BY_PROVIDER.codex,
+    },
+    input.settings,
+  );
+  const runtimeMode: RuntimeMode = runtimeModeFromCodexSettings(input.settings);
+  const interactionMode: ProviderInteractionMode = interactionModeFromCodexSettings(input.settings);
   await api.orchestration.dispatchCommand({
     type: "thread.turn.start",
     commandId: newCommandId(),
@@ -109,24 +126,20 @@ export async function startThreadFromFolder(
       text: prompt,
       attachments: [],
     },
-    modelSelection: {
-      provider: "codex",
-      model: DEFAULT_MODEL_BY_PROVIDER.codex,
-    },
+    modelSelection,
     titleSeed: title,
-    runtimeMode: DEFAULT_RUNTIME_MODE,
-    interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+    approvalPolicy: input.settings.codexRuntime.approvalPolicy,
+    sandboxMode: input.settings.codexRuntime.sandboxMode,
+    runtimeMode,
+    interactionMode,
     bootstrap: {
       createThread: {
         projectId: project.projectId,
         title,
         ...(input.hostDeviceId !== undefined ? { hostDeviceId: input.hostDeviceId } : {}),
-        modelSelection: {
-          provider: "codex",
-          model: DEFAULT_MODEL_BY_PROVIDER.codex,
-        },
-        runtimeMode: DEFAULT_RUNTIME_MODE,
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        modelSelection,
+        runtimeMode,
+        interactionMode,
         branch: null,
         worktreePath: null,
         createdAt,

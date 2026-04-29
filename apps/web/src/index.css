@@ -136,12 +136,12 @@
 /* No protected branding, icons, or logos are reproduced.                 */
 /* ----------------------------------------------------------------------- */
 
-:root[data-theme="codex-inspired"] {
+:root[data-theme="codex"] {
   --radius: 0.5rem;
   --primary: oklch(0.62 0.18 145);
   --ring: oklch(0.62 0.18 145);
 }
-:root[data-theme="codex-inspired"].dark {
+:root[data-theme="codex"].dark {
   --primary: oklch(0.7 0.18 145);
   --ring: oklch(0.7 0.18 145);
   --background: oklch(0.18 0.005 250);
@@ -149,14 +149,14 @@
   --popover: oklch(0.21 0.005 250);
 }
 
-:root[data-theme="claude-inspired"] {
+:root[data-theme="claude"] {
   --radius: 0.75rem;
   --primary: oklch(0.65 0.16 35);
   --ring: oklch(0.65 0.16 35);
   --background: oklch(0.985 0.005 80);
   --card: oklch(1 0 0);
 }
-:root[data-theme="claude-inspired"].dark {
+:root[data-theme="claude"].dark {
   --primary: oklch(0.72 0.16 35);
   --ring: oklch(0.72 0.16 35);
   --background: oklch(0.21 0.01 60);
@@ -164,12 +164,12 @@
   --popover: oklch(0.24 0.01 60);
 }
 
-:root[data-theme="cursor-inspired"] {
+:root[data-theme="cursor"] {
   --radius: 0.5rem;
   --primary: oklch(0.62 0.22 285);
   --ring: oklch(0.62 0.22 285);
 }
-:root[data-theme="cursor-inspired"].dark {
+:root[data-theme="cursor"].dark {
   --primary: oklch(0.7 0.22 285);
   --ring: oklch(0.7 0.22 285);
   --background: oklch(0.16 0.01 280);
@@ -177,18 +177,89 @@
   --popover: oklch(0.2 0.01 280);
 }
 
-:root[data-theme="windsurf-inspired"] {
+:root[data-theme="windsurf"] {
   --radius: 0.875rem;
   --primary: oklch(0.65 0.16 200);
   --ring: oklch(0.65 0.16 200);
   --background: oklch(0.99 0.005 200);
 }
-:root[data-theme="windsurf-inspired"].dark {
+:root[data-theme="windsurf"].dark {
   --primary: oklch(0.72 0.16 200);
   --ring: oklch(0.72 0.16 200);
   --background: oklch(0.2 0.015 220);
   --card: oklch(0.24 0.015 220);
   --popover: oklch(0.24 0.015 220);
+}
+
+:root[data-interface-profile="codex"] [data-slot="sidebar-inner"],
+:root[data-interface-profile="codex"] [data-slot="sidebar-inset"] {
+  --profile-density-pad: 0.75rem;
+}
+
+:root[data-interface-profile="codex"] textarea,
+:root[data-interface-profile="codex"] input,
+:root[data-interface-profile="codex"] button {
+  border-radius: 0.5rem;
+}
+
+:root[data-interface-profile="claude"] [data-slot="sidebar-inner"],
+:root[data-interface-profile="claude"] [data-slot="sidebar-inset"] {
+  background-color: color-mix(in oklab, var(--background) 92%, var(--primary) 8%);
+}
+
+:root[data-interface-profile="cursor"] [data-slot="sidebar-inner"],
+:root[data-interface-profile="cursor"] [data-slot="sidebar-inset"] {
+  --radius: 0.375rem;
+}
+
+:root[data-interface-profile="cursor"] textarea,
+:root[data-interface-profile="cursor"] input,
+:root[data-interface-profile="cursor"] button {
+  border-radius: 0.375rem;
+}
+
+:root[data-interface-profile="windsurf"] [data-slot="sidebar-inner"],
+:root[data-interface-profile="windsurf"] [data-slot="sidebar-inset"] {
+  background-color: color-mix(in oklab, var(--background) 90%, var(--primary) 10%);
+}
+
+:root[data-interface-profile="codex"] [data-slot="sidebar"],
+:root[data-interface-profile="codex"] [data-slot="sidebar-inset"] {
+  background-color: var(--background);
+}
+
+:root[data-interface-profile="codex"] [data-chat-composer-footer="true"] {
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--card) 76%, var(--background));
+}
+
+:root[data-interface-profile="claude"] [data-slot="sidebar"],
+:root[data-interface-profile="claude"] [data-slot="sheet-popup"],
+:root[data-interface-profile="claude"] [data-slot="dialog-popup"] {
+  border-radius: 0.875rem;
+}
+
+:root[data-interface-profile="claude"] .chat-markdown {
+  font-size: 0.95rem;
+  line-height: 1.72;
+}
+
+:root[data-interface-profile="cursor"] [data-slot="sidebar"] {
+  border-right-color: color-mix(in srgb, var(--border) 70%, var(--primary));
+}
+
+:root[data-interface-profile="cursor"] [data-chat-composer-footer="true"] {
+  min-height: 2.5rem;
+}
+
+:root[data-interface-profile="windsurf"] [data-chat-composer-footer="true"] {
+  background: color-mix(in srgb, var(--primary) 8%, var(--card));
+}
+
+:root[data-interface-profile="windsurf"] [data-slot="sidebar"],
+:root[data-interface-profile="windsurf"] [data-slot="dialog-popup"],
+:root[data-interface-profile="windsurf"] [data-slot="sheet-popup"] {
+  border-radius: 1rem;
 }
 
 body {

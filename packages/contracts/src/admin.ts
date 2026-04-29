@@ -18,6 +18,7 @@ export const AdminServerInfo = Schema.Struct({
   postgresConnected: Schema.Boolean,
   dockerAvailable: Schema.Boolean,
   googleConfigured: Schema.Boolean,
+  googleRedirectUri: Schema.NullOr(Schema.String),
   githubConfigured: Schema.Boolean,
   publicUrl: Schema.NullOr(Schema.String),
   uptimeSeconds: Schema.Int,

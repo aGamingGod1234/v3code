@@ -1,13 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { StubPanel } from "../components/settings/StubPanel";
+import { SettingsPageContainer } from "../components/settings/settingsLayout";
+import { WorktreesSettings } from "../components/settings/WorktreesSettings";
 
 export const Route = createFileRoute("/settings/worktrees")({
   component: () => (
-    <StubPanel
-      title="Worktrees"
-      description="Manage parallel git worktrees so the agent can iterate on multiple branches in isolation."
-      bullets={["Create + delete worktrees", "Per-thread worktree binding"]}
-    />
+    <SettingsPageContainer>
+      <WorktreesSettings />
+    </SettingsPageContainer>
   ),
 });

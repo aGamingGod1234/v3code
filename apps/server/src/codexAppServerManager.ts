@@ -17,6 +17,8 @@ import {
   type ProviderTurnStartResult,
   RuntimeMode,
   ProviderInteractionMode,
+  type ProviderApprovalPolicy,
+  type ProviderSandboxMode,
 } from "@v3tools/contracts";
 import { normalizeModelSlug } from "@v3tools/shared/model";
 import { Effect, Context } from "effect";
@@ -125,6 +127,8 @@ export interface CodexAppServerStartSessionInput {
   readonly binaryPath: string;
   readonly homePath?: string;
   readonly runtimeMode: RuntimeMode;
+  readonly approvalPolicy?: ProviderApprovalPolicy;
+  readonly sandboxMode?: ProviderSandboxMode;
 }
 
 export interface CodexThreadTurnSnapshot {
@@ -289,27 +293,44 @@ The \`request_user_input\` tool is unavailable in Default mode. If you call it w
 In Default mode, strongly prefer making reasonable assumptions and executing the user's request rather than stopping to ask questions. If you absolutely must ask a question because the answer cannot be discovered from local context and a reasonable assumption would be risky, ask the user directly with a concise plain-text question. Never write a multiple choice question as a textual assistant message.
 </collaboration_mode>`;
 
-function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
-  readonly approvalPolicy: "untrusted" | "on-request" | "never";
-  readonly sandbox: "read-only" | "workspace-write" | "danger-full-access";
+function mapCodexRuntimeMode(
+  runtimeMode: RuntimeMode,
+  overrides?: {
+    readonly approvalPolicy?: ProviderApprovalPolicy;
+    readonly sandboxMode?: ProviderSandboxMode;
+  },
+): {
+  readonly approvalPolicy: ProviderApprovalPolicy;
+  readonly sandbox: ProviderSandboxMode;
 } {
-  switch (runtimeMode) {
-    case "approval-required":
-      return {
-        approvalPolicy: "untrusted",
-        sandbox: "read-only",
-      };
-    case "auto-accept-edits":
-      return {
-        approvalPolicy: "on-request",
-        sandbox: "workspace-write",
-      };
-    case "full-access":
-      return {
-        approvalPolicy: "never",
-        sandbox: "danger-full-access",
-      };
+  const mapped = (() => {
+    switch (runtimeMode) {
+      case "approval-required":
+        return {
+          approvalPolicy: "untrusted" as const,
+          sandbox: "read-only" as const,
+        };
+      case "auto-accept-edits":
+        return {
+          approvalPolicy: "on-request" as const,
+          sandbox: "workspace-write" as const,
+        };
+      case "full-access":
+        return {
+          approvalPolicy: "never" as const,
+          sandbox: "danger-full-access" as const,
+        };
+    }
+  })();
+
+  if (!overrides) {
+    return mapped;
   }
+
+  return {
+    approvalPolicy: overrides.approvalPolicy ?? mapped.approvalPolicy,
+    sandbox: overrides.sandboxMode ?? mapped.sandbox,
+  };
 }
 
 /**
@@ -552,7 +573,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         model: normalizedModel ?? null,
         ...(input.serviceTier !== undefined ? { serviceTier: input.serviceTier } : {}),
         cwd: input.cwd ?? null,
-        ...mapCodexRuntimeMode(input.runtimeMode ?? "full-access"),
+        ...mapCodexRuntimeMode(input.runtimeMode ?? "full-access", {
+          ...(input.approvalPolicy !== undefined ? { approvalPolicy: input.approvalPolicy } : {}),
+          ...(input.sandboxMode !== undefined ? { sandboxMode: input.sandboxMode } : {}),
+        }),
       };
 
       const threadStartParams = {

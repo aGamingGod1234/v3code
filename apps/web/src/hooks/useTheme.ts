@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-import { DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "../themes/themeNames";
+import {
+  DEFAULT_THEME_NAME,
+  LEGACY_THEME_NAME_MAP,
+  isThemeName,
+  type ThemeName,
+} from "../themes/themeNames";
 
 type Theme = "light" | "dark" | "system";
 type ThemeSnapshot = {
@@ -11,7 +16,8 @@ type ThemeSnapshot = {
 };
 
 const STORAGE_KEY = "t3code:theme";
-const THEME_NAME_STORAGE_KEY = "v3code:themeName";
+const LEGACY_THEME_NAME_STORAGE_KEY = "v3code:themeName";
+const THEME_NAME_STORAGE_KEY = "v3code:interfaceProfile";
 const ACCENT_STORAGE_KEY = "v3code:accentOverride";
 const ACCENT_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const MEDIA_QUERY = "(prefers-color-scheme: dark)";
@@ -50,7 +56,14 @@ function getStored(): Theme {
 function getStoredThemeName(): ThemeName {
   if (!hasThemeStorage()) return DEFAULT_THEME_NAME;
   const raw = localStorage.getItem(THEME_NAME_STORAGE_KEY);
-  return isThemeName(raw) ? raw : DEFAULT_THEME_NAME;
+  if (isThemeName(raw)) return raw;
+  const legacyRaw = localStorage.getItem(LEGACY_THEME_NAME_STORAGE_KEY);
+  if (legacyRaw && LEGACY_THEME_NAME_MAP[legacyRaw]) {
+    const migrated = LEGACY_THEME_NAME_MAP[legacyRaw];
+    localStorage.setItem(THEME_NAME_STORAGE_KEY, migrated);
+    return migrated;
+  }
+  return DEFAULT_THEME_NAME;
 }
 
 function getStoredAccent(): string | null {
@@ -114,6 +127,7 @@ function applyThemeName(name: ThemeName) {
   const root = document.documentElement;
   if (typeof root.setAttribute !== "function") return;
   root.setAttribute("data-theme", name);
+  root.setAttribute("data-interface-profile", name);
 }
 
 function applyAccentOverride(accent: string | null) {
@@ -215,7 +229,12 @@ function subscribe(listener: () => void): () => void {
 
   // Listen for storage changes from other tabs
   const handleStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY || e.key === THEME_NAME_STORAGE_KEY || e.key === ACCENT_STORAGE_KEY) {
+    if (
+      e.key === STORAGE_KEY ||
+      e.key === THEME_NAME_STORAGE_KEY ||
+      e.key === LEGACY_THEME_NAME_STORAGE_KEY ||
+      e.key === ACCENT_STORAGE_KEY
+    ) {
       applyTheme(getStored(), true);
       emitChange();
     }

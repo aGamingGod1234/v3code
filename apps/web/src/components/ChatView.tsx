@@ -80,8 +80,6 @@ import {
   resolvePlanFollowUpSubmission,
 } from "../proposedPlan";
 import {
-  DEFAULT_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
   type ChatMessage,
@@ -180,6 +178,11 @@ import { useMeshDeviceSnapshot } from "~/rpc/meshState";
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
 import { RightPanelSheet } from "./RightPanelSheet";
+import {
+  applyCodexRuntimeModelDefaults,
+  interactionModeFromCodexSettings,
+  runtimeModeFromCodexSettings,
+} from "../lib/codexRuntimeSettings";
 import {
   appendComposerTerminalContext,
   focusComposerHandleAtEnd,
@@ -442,9 +445,11 @@ export default function ChatView(props: ChatViewProps) {
       }),
     [activeThread?.hostDeviceId, currentDeviceId, meshDeviceSnapshot.devices],
   );
-  const runtimeMode = composerRuntimeMode ?? activeThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
+  const defaultRuntimeMode = runtimeModeFromCodexSettings(settings);
+  const defaultInteractionMode = interactionModeFromCodexSettings(settings);
+  const runtimeMode = composerRuntimeMode ?? activeThread?.runtimeMode ?? defaultRuntimeMode;
   const interactionMode =
-    composerInteractionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE;
+    composerInteractionMode ?? activeThread?.interactionMode ?? defaultInteractionMode;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
@@ -644,8 +649,8 @@ export default function ChatView(props: ChatViewProps) {
       setLogicalProjectDraftThreadId(logicalProjectKey, activeProjectRef, nextDraftId, {
         threadId: nextThreadId,
         createdAt: new Date().toISOString(),
-        runtimeMode: DEFAULT_RUNTIME_MODE,
-        interactionMode: DEFAULT_INTERACTION_MODE,
+        runtimeMode: defaultRuntimeMode,
+        interactionMode: defaultInteractionMode,
         hostDeviceId: currentDeviceId ?? null,
         ...input,
       });
@@ -658,6 +663,8 @@ export default function ChatView(props: ChatViewProps) {
     [
       activeProject,
       currentDeviceId,
+      defaultInteractionMode,
+      defaultRuntimeMode,
       draftId,
       getDraftSession,
       getDraftSessionByLogicalProjectKey,
@@ -2235,12 +2242,15 @@ export default function ChatView(props: ChatViewProps) {
         }
       }
       const title = truncate(titleSeed);
-      const threadCreateModelSelection = createModelSelection(
-        ctxSelectedProvider,
-        ctxSelectedModel ||
-          activeProject.defaultModelSelection?.model ||
-          DEFAULT_MODEL_BY_PROVIDER.codex,
-        ctxSelectedModelSelection.options,
+      const threadCreateModelSelection = applyCodexRuntimeModelDefaults(
+        createModelSelection(
+          ctxSelectedProvider,
+          ctxSelectedModel ||
+            activeProject.defaultModelSelection?.model ||
+            DEFAULT_MODEL_BY_PROVIDER.codex,
+          ctxSelectedModelSelection.options,
+        ),
+        settings,
       );
 
       // Auto-title from first message
@@ -2307,6 +2317,8 @@ export default function ChatView(props: ChatViewProps) {
         },
         modelSelection: ctxSelectedModelSelection,
         titleSeed: title,
+        approvalPolicy: settings.codexRuntime.approvalPolicy,
+        sandboxMode: settings.codexRuntime.sandboxMode,
         runtimeMode,
         interactionMode,
         ...(bootstrap ? { bootstrap } : {}),
@@ -2620,6 +2632,8 @@ export default function ChatView(props: ChatViewProps) {
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: activeThread.title,
+          approvalPolicy: settings.codexRuntime.approvalPolicy,
+          sandboxMode: settings.codexRuntime.sandboxMode,
           runtimeMode,
           interactionMode: nextInteractionMode,
           ...(nextInteractionMode === "default" && activeProposedPlan
@@ -2667,6 +2681,8 @@ export default function ChatView(props: ChatViewProps) {
       setThreadError,
       composerRef,
       environmentId,
+      settings.codexRuntime.approvalPolicy,
+      settings.codexRuntime.sandboxMode,
     ],
   );
 
@@ -2745,6 +2761,8 @@ export default function ChatView(props: ChatViewProps) {
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: nextThreadTitle,
+          approvalPolicy: settings.codexRuntime.approvalPolicy,
+          sandboxMode: settings.codexRuntime.sandboxMode,
           runtimeMode,
           interactionMode: "default",
           sourceProposedPlan: {
@@ -2798,6 +2816,8 @@ export default function ChatView(props: ChatViewProps) {
     runtimeMode,
     composerRef,
     environmentId,
+    settings.codexRuntime.approvalPolicy,
+    settings.codexRuntime.sandboxMode,
   ]);
 
   const onProviderModelSelect = useCallback(

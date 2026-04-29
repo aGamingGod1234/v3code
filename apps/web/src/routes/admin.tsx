@@ -64,19 +64,19 @@ export const Route = createFileRoute("/admin")({
 
 type Tab = "overview" | "live-chats" | "devices" | "sessions" | "event-log" | "containers" | "logs";
 
-function V3AdminPage() {
+export function V3AdminPage() {
   const [tab, setTab] = useState<Tab>("overview");
   return (
-    <div className="mx-auto flex h-dvh max-w-6xl flex-col gap-4 overflow-hidden px-6 py-6 text-foreground">
-      <header className="flex items-center justify-between border-b border-border/70 pb-3">
+    <div className="mx-auto flex h-dvh max-w-6xl flex-col gap-4 overflow-hidden px-3 py-4 text-foreground sm:px-6 sm:py-6">
+      <header className="flex items-center justify-between gap-3 border-b border-border/70 pb-3">
         <div>
-          <h1 className="text-xl font-semibold">V3 server node admin</h1>
+          <h1 className="text-xl font-semibold">V3 Control Center</h1>
           <p className="text-xs text-muted-foreground">
-            Read-only view of the process hosting this V3 mesh.
+            Monitor and control live chats, devices, sessions, cloud environments, and server logs.
           </p>
         </div>
       </header>
-      <nav className="flex gap-2 border-b border-border/50 pb-2 text-sm">
+      <nav className="flex gap-2 overflow-x-auto border-b border-border/50 pb-2 text-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {(
           [
             { value: "overview", label: "Overview", Icon: ActivityIcon },
@@ -220,11 +220,12 @@ function OverviewTab() {
         <StatCard
           label="Docker"
           value={server.dockerAvailable ? "Available" : "Not installed"}
-          hint="Required by P8 Cloud env."
+          hint="Required by cloud environments."
         />
         <StatCard
           label="Google sign-in"
           value={server.googleConfigured ? "Configured" : "Missing"}
+          hint={server.googleRedirectUri ?? "OAuth redirect URI unavailable"}
         />
         <StatCard label="GitHub OAuth" value={server.githubConfigured ? "Configured" : "Missing"} />
       </div>
@@ -677,7 +678,7 @@ function ContainersTab() {
       <div className="flex flex-col items-center gap-2 py-8 text-center text-xs text-muted-foreground">
         <ContainerIcon className="size-8 text-muted-foreground/40" />
         <p>Docker is not available on this server node.</p>
-        <p>Cloud env chats ship in P8 — check back once that lands.</p>
+        <p>Install and start Docker to enable cloud environment chats on this server node.</p>
       </div>
     );
   }

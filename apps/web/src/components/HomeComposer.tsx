@@ -10,6 +10,7 @@ import { pushRecentFolder, readRecentFolders, removeRecentFolder } from "../lib/
 import { startThreadFromFolder } from "../lib/startThreadFromFolder";
 import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { buildThreadRouteParams } from "../threadRoutes";
+import { useSettings } from "../hooks/useSettings";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { toastManager } from "./ui/toast";
@@ -27,6 +28,7 @@ export function HomeComposer() {
   const navigate = useNavigate();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const desktopBridge = window.desktopBridge;
+  const settings = useSettings();
   const projects = useStore(useShallow((store) => selectProjectsAcrossEnvironments(store)));
   const [recents, setRecents] = useState<string[]>(() => readRecentFolders());
   const [selectedFolder, setSelectedFolder] = useState<string | null>(() => {
@@ -146,6 +148,7 @@ export function HomeComposer() {
         primaryEnvironmentId,
         projects,
         prompt: trimmedPrompt,
+        settings,
       });
       rememberFolder(created.cwd);
       setPrompt("");
@@ -162,7 +165,16 @@ export function HomeComposer() {
     } finally {
       setBusy(false);
     }
-  }, [busy, navigate, primaryEnvironmentId, projects, prompt, rememberFolder, selectedFolder]);
+  }, [
+    busy,
+    navigate,
+    primaryEnvironmentId,
+    projects,
+    prompt,
+    rememberFolder,
+    selectedFolder,
+    settings,
+  ]);
 
   const headline = `What should we build in ${folderName(selectedFolder)}?`;
 

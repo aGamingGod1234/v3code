@@ -5,6 +5,8 @@ import {
   type ModelSelection,
   type OrchestrationEvent,
   ProviderKind,
+  type ProviderApprovalPolicy,
+  type ProviderSandboxMode,
   type OrchestrationSession,
   ThreadId,
   type ProviderSession,
@@ -301,6 +303,8 @@ const make = Effect.gen(function* () {
     createdAt: string,
     options?: {
       readonly modelSelection?: ModelSelection;
+      readonly approvalPolicy?: ProviderApprovalPolicy;
+      readonly sandboxMode?: ProviderSandboxMode;
     },
   ) {
     const readModel = yield* orchestrationEngine.getReadModel();
@@ -348,6 +352,10 @@ const make = Effect.gen(function* () {
         ...(preferredProvider ? { provider: preferredProvider } : {}),
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         modelSelection: desiredModelSelection,
+        ...(options?.approvalPolicy !== undefined
+          ? { approvalPolicy: options.approvalPolicy }
+          : {}),
+        ...(options?.sandboxMode !== undefined ? { sandboxMode: options.sandboxMode } : {}),
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: desiredRuntimeMode,
       });
@@ -435,6 +443,8 @@ const make = Effect.gen(function* () {
     readonly messageText: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
+    readonly approvalPolicy?: ProviderApprovalPolicy;
+    readonly sandboxMode?: ProviderSandboxMode;
     readonly interactionMode?: "default" | "plan";
     readonly createdAt: string;
   }) {
@@ -444,11 +454,11 @@ const make = Effect.gen(function* () {
         new Error(`Thread '${input.threadId}' was not found in read model.`),
       );
     }
-    yield* ensureSessionForThread(
-      input.threadId,
-      input.createdAt,
-      input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {},
-    );
+    yield* ensureSessionForThread(input.threadId, input.createdAt, {
+      ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+      ...(input.approvalPolicy !== undefined ? { approvalPolicy: input.approvalPolicy } : {}),
+      ...(input.sandboxMode !== undefined ? { sandboxMode: input.sandboxMode } : {}),
+    });
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
@@ -682,6 +692,12 @@ const make = Effect.gen(function* () {
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }
+        : {}),
+      ...(event.payload.approvalPolicy !== undefined
+        ? { approvalPolicy: event.payload.approvalPolicy }
+        : {}),
+      ...(event.payload.sandboxMode !== undefined
+        ? { sandboxMode: event.payload.sandboxMode }
         : {}),
       interactionMode: event.payload.interactionMode,
       createdAt: event.payload.createdAt,

@@ -17,7 +17,7 @@ export interface ThemeSwatchSet {
 }
 
 export const THEME_SWATCHES: Record<ThemeName, ThemeSwatchSet> = {
-  v3code: {
+  v3: {
     light: {
       background: "oklch(1 0 0)",
       foreground: "oklch(0.27 0.02 250)",
@@ -31,7 +31,7 @@ export const THEME_SWATCHES: Record<ThemeName, ThemeSwatchSet> = {
       card: "oklch(0.24 0.005 250)",
     },
   },
-  "codex-inspired": {
+  codex: {
     light: {
       background: "oklch(1 0 0)",
       foreground: "oklch(0.27 0.02 250)",
@@ -45,7 +45,7 @@ export const THEME_SWATCHES: Record<ThemeName, ThemeSwatchSet> = {
       card: "oklch(0.21 0.005 250)",
     },
   },
-  "claude-inspired": {
+  claude: {
     light: {
       background: "oklch(0.985 0.005 80)",
       foreground: "oklch(0.27 0.02 60)",
@@ -59,7 +59,7 @@ export const THEME_SWATCHES: Record<ThemeName, ThemeSwatchSet> = {
       card: "oklch(0.24 0.01 60)",
     },
   },
-  "cursor-inspired": {
+  cursor: {
     light: {
       background: "oklch(1 0 0)",
       foreground: "oklch(0.27 0.02 280)",
@@ -73,7 +73,7 @@ export const THEME_SWATCHES: Record<ThemeName, ThemeSwatchSet> = {
       card: "oklch(0.2 0.01 280)",
     },
   },
-  "windsurf-inspired": {
+  windsurf: {
     light: {
       background: "oklch(0.99 0.005 200)",
       foreground: "oklch(0.27 0.02 220)",

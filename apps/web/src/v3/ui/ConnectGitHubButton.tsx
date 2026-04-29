@@ -21,10 +21,7 @@ import {
   disconnectGitHub,
   fetchGitHubClientConfig,
   fetchGitHubConnectionStatus,
-  preferDesktopGitHubFlow,
   startConnectGitHub,
-  startConnectGitHubDesktop,
-  V3GitHubConnectError,
 } from "../auth/connectGitHub";
 import {
   disconnectGitHub as desktopDisconnectGitHub,
@@ -93,34 +90,8 @@ export function V3ConnectGitHubButton({
 
   const handleConnect = useCallback(async () => {
     if (!config?.available) return;
-    if (!preferDesktopGitHubFlow()) {
-      startConnectGitHub();
-      return;
-    }
-    setBusy(true);
-    try {
-      const scopes = config.scopes.length > 0 ? config.scopes : "repo read:user user:email";
-      const result = await startConnectGitHubDesktop(scopes);
-      toastManager.add({
-        type: "success",
-        title: "GitHub connected",
-        description: `Signed in as ${result.username}.`,
-      });
-      await refresh();
-    } catch (error) {
-      if (error instanceof V3GitHubConnectError && error.code === "user-cancelled") {
-        // Silent — user closed the browser tab.
-        return;
-      }
-      toastManager.add({
-        type: "error",
-        title: "Could not connect GitHub",
-        description: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setBusy(false);
-    }
-  }, [config?.available, config?.scopes, refresh]);
+    startConnectGitHub();
+  }, [config?.available]);
 
   const handleDisconnect = useCallback(async () => {
     if (!status?.connected) return;

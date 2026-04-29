@@ -1,10 +1,3 @@
-// Git settings panel. Phase 1 surfaces:
-//   * GitHub sign-in (renders the Connect button).
-//   * GitHub OAuth Client ID override — pushes the resolved ID into the
-//     Electron main process via desktopBridge.github.setClientIdOverride.
-// The full server-node URL + remote-environments split-out from Connections
-// is a follow-up; for now Connections still hosts those.
-
 import { useEffect, useState } from "react";
 
 import { Button } from "../ui/button";
