@@ -21,7 +21,6 @@ export default mergeConfig(
     },
     test: {
       include: ["src/components/**/*.browser.tsx"],
-      dangerouslyIgnoreUnhandledErrors: true,
       fileParallelism: false,
       setupFiles: ["src/test/browserSetup.ts"],
       browser: {

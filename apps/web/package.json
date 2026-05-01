@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "routes:generate": "bun x --bun @tanstack/router-cli generate",
     "test": "vitest run --passWithNoTests --testTimeout=15000",
-    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "test:browser": "bun scripts/run-browser-tests.ts",
     "test:browser:install": "playwright install --with-deps chromium"
   },
   "dependencies": {

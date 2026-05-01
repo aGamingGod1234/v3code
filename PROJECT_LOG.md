@@ -189,7 +189,7 @@
 - Prebundled `react-dom/client` for Vite browser tests so dependency optimization does not reload the Vitest browser connection mid-run.
 - Added browser-test setup that suppresses Chromium's known ResizeObserver loop notification so it does not close the Vitest browser RPC connection in CI.
 - Serialized Vitest browser spec files to avoid CI-only browser RPC closure while heavy ChatView browser tests run concurrently with other mocked browser specs.
-- Scoped Vitest's unhandled-error ignore to the browser-only test config because CI completed all browser assertions and then failed on a teardown-time browser RPC mock rejection.
+- Split browser specs into separate Vitest browser processes to avoid CI failing the entire browser suite on a teardown-time browser RPC mock rejection after all assertions pass.
 
 ### Files Modified
 
@@ -208,7 +208,8 @@
 - `apps/web/src/components/ChatMarkdown.browser.tsx` - completes the native API fixture shape used by shared browser tests.
 - `apps/web/vite.config.ts` - prebundles the React DOM browser entry used by Vitest browser rendering.
 - `apps/web/vitest.browser.config.ts` - loads the browser-test setup file before browser specs and runs browser spec files serially.
-- `apps/web/vitest.browser.config.ts` - ignores browser-runner teardown unhandled errors after assertions complete.
+- `apps/web/scripts/run-browser-tests.ts` - discovers browser spec files and runs each in its own Vitest browser process.
+- `apps/web/package.json` - routes `test:browser` through the per-file browser runner.
 - `apps/web/src/test/browserSetup.ts` - filters the known ResizeObserver loop notification during browser tests.
 - `PROJECT_LOG.md` - records the Android and browser CI repair.
 
