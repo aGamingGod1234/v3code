@@ -177,6 +177,7 @@
 ### What Was Implemented
 
 - Imported Capacitor Android `variables.gradle` from the project-level Gradle file so `compileSdkVersion`, `minSdkVersion`, and `targetSdkVersion` are available to the app module during CI.
+- Fixed Android adaptive launcher icon foreground references so resource linking can find the existing drawable vector.
 - Updated the browser WebSocket RPC harness for the mesh chat/presence/prompt streams and multiple browser clients.
 - Updated ChatView browser fixtures to send mesh chat snapshots and route mesh prompt dispatch through the existing orchestration assertions.
 - Made desktop bootstrap reads tolerate partial desktop bridge objects.
@@ -187,6 +188,8 @@
 ### Files Modified
 
 - `apps/mobile/android/build.gradle` - loads Android SDK version variables for CI Gradle builds.
+- `apps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` - points the adaptive icon foreground at the existing drawable resource.
+- `apps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml` - points the round adaptive icon foreground at the existing drawable resource.
 - `apps/web/test/wsRpcHarness.ts` - supports per-client RPC server instances and mesh stream methods in browser tests.
 - `apps/web/src/components/ChatView.browser.tsx` - updates browser test fixtures for mesh chat snapshots and prompt dispatch.
 - `apps/web/src/components/KeybindingsToast.browser.tsx` - passes the active browser WebSocket client into the shared harness.
