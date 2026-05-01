@@ -259,7 +259,7 @@ const worker = setupWorker(
     client.addEventListener("message", (event) => {
       const rawData = event.data;
       if (typeof rawData !== "string") return;
-      void rpcHarness.onMessage(rawData);
+      void rpcHarness.onMessage(rawData, client);
     });
   }),
   ...createAuthenticatedSessionHandlers(() => fixture.serverConfig.auth),

@@ -3,6 +3,7 @@ import "../index.css";
 
 import {
   EventId,
+  MESH_WS_METHODS,
   ORCHESTRATION_WS_METHODS,
   EnvironmentId,
   type EnvironmentApi,
@@ -820,6 +821,11 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
   if (tag === WS_METHODS.shellOpenInEditor) {
     return null;
   }
+  if (tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+    return {
+      sequence: fixture.snapshot.snapshotSequence + 1,
+    };
+  }
   if (tag === WS_METHODS.terminalOpen) {
     return {
       threadId: typeof body.threadId === "string" ? body.threadId : THREAD_ID,
@@ -848,7 +854,7 @@ const worker = setupWorker(
     client.addEventListener("message", (event) => {
       const rawData = event.data;
       if (typeof rawData !== "string") return;
-      void rpcHarness.onMessage(rawData);
+      void rpcHarness.onMessage(rawData, client);
     });
   }),
   ...createAuthenticatedSessionHandlers(() => fixture.serverConfig.auth),
@@ -1397,6 +1403,21 @@ describe("ChatView timeline estimator parity (full app)", () => {
                     snapshotSequence: fixture.snapshot.snapshotSequence,
                     thread,
                   },
+                },
+              ]
+            : [];
+        }
+        if (request._tag === MESH_WS_METHODS.subscribeChat) {
+          const thread = fixture.snapshot.threads.find((entry) => entry.id === request.threadId);
+          return thread
+            ? [
+                {
+                  kind: "snapshot",
+                  snapshot: {
+                    snapshotSequence: fixture.snapshot.snapshotSequence,
+                    thread,
+                  },
+                  latestStreamVersion: fixture.snapshot.snapshotSequence,
                 },
               ]
             : [];

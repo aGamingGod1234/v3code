@@ -30,11 +30,11 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
   return {
     dialogs: {
       pickFolder: async (options) => {
-        if (!window.desktopBridge) return null;
+        if (!window.desktopBridge?.pickFolder) return null;
         return window.desktopBridge.pickFolder(options);
       },
       confirm: async (message) => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.confirm) {
           return window.desktopBridge.confirm(message);
         }
         return window.confirm(message);
@@ -43,7 +43,7 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openExternal: async (url) => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.openExternal) {
           const opened = await window.desktopBridge.openExternal(url);
           if (!opened) {
             throw new Error("Unable to open link.");
@@ -59,7 +59,7 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
         items: readonly ContextMenuItem<T>[],
         position?: { x: number; y: number },
       ): Promise<T | null> => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.showContextMenu) {
           return window.desktopBridge.showContextMenu(items, position) as Promise<T | null>;
         }
         return showContextMenuFallback(items, position);
@@ -67,43 +67,43 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
     },
     persistence: {
       getClientSettings: async () => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.getClientSettings) {
           return window.desktopBridge.getClientSettings();
         }
         return readBrowserClientSettings();
       },
       setClientSettings: async (settings) => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.setClientSettings) {
           return window.desktopBridge.setClientSettings(settings);
         }
         writeBrowserClientSettings(settings);
       },
       getSavedEnvironmentRegistry: async () => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.getSavedEnvironmentRegistry) {
           return window.desktopBridge.getSavedEnvironmentRegistry();
         }
         return readBrowserSavedEnvironmentRegistry();
       },
       setSavedEnvironmentRegistry: async (records) => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.setSavedEnvironmentRegistry) {
           return window.desktopBridge.setSavedEnvironmentRegistry(records);
         }
         writeBrowserSavedEnvironmentRegistry(records);
       },
       getSavedEnvironmentSecret: async (environmentId) => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.getSavedEnvironmentSecret) {
           return window.desktopBridge.getSavedEnvironmentSecret(environmentId);
         }
         return readBrowserSavedEnvironmentSecret(environmentId);
       },
       setSavedEnvironmentSecret: async (environmentId, secret) => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.setSavedEnvironmentSecret) {
           return window.desktopBridge.setSavedEnvironmentSecret(environmentId, secret);
         }
         return writeBrowserSavedEnvironmentSecret(environmentId, secret);
       },
       removeSavedEnvironmentSecret: async (environmentId) => {
-        if (window.desktopBridge) {
+        if (window.desktopBridge?.removeSavedEnvironmentSecret) {
           return window.desktopBridge.removeSavedEnvironmentSecret(environmentId);
         }
         removeBrowserSavedEnvironmentSecret(environmentId);

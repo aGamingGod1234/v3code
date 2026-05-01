@@ -13,6 +13,8 @@ import {
   type ServerConfig,
 } from "@v3tools/contracts";
 import { DateTime } from "effect";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
@@ -113,7 +115,7 @@ const authAccessHarness = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../environments/runtime", () => {
+function createRuntimeMock() {
   const primaryConnection = {
     kind: "primary" as const,
     knownEnvironment: {
@@ -167,7 +169,14 @@ vi.mock("../../environments/runtime", () => {
       selector: (state: { byId: Record<string, never> }) => unknown,
     ) => selector({ byId: {} }),
   };
-});
+}
+
+vi.mock("../../environments/runtime", createRuntimeMock);
+vi.mock("~/environments/runtime", createRuntimeMock);
+
+vi.mock("../chat/ImportChatDialog", () => ({
+  ImportChatDialog: ({ trigger }: { readonly trigger: ReactElement }) => trigger,
+}));
 
 function createBaseServerConfig(): ServerConfig {
   return {
@@ -412,6 +421,21 @@ const createDesktopBridgeStub = (overrides?: {
   };
 };
 
+function renderSettingsPanel(element: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AppAtomRegistryProvider>{element}</AppAtomRegistryProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe("GeneralSettingsPanel observability", () => {
   let mounted:
     | (Awaited<ReturnType<typeof render>> & {
@@ -488,11 +512,7 @@ describe("GeneralSettingsPanel observability", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <ConnectionsSettings />
-      </AppAtomRegistryProvider>,
-    );
+    mounted = await renderSettingsPanel(<ConnectionsSettings />);
 
     await expect.element(page.getByText("Manage local backend")).toBeInTheDocument();
     await expect.element(page.getByLabelText("Enable network access")).toBeDisabled();
@@ -513,11 +533,7 @@ describe("GeneralSettingsPanel observability", () => {
   it("shows diagnostics inside About with a single logs-folder action", async () => {
     setServerConfigSnapshot(createBaseServerConfig());
 
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
+    mounted = await renderSettingsPanel(<GeneralSettingsPanel />);
 
     await expect.element(page.getByText("About")).toBeInTheDocument();
     await expect.element(page.getByText("Diagnostics")).toBeInTheDocument();
@@ -627,11 +643,7 @@ describe("GeneralSettingsPanel observability", () => {
 
     setServerConfigSnapshot(createBaseServerConfig());
 
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <ConnectionsSettings />
-      </AppAtomRegistryProvider>,
-    );
+    mounted = await renderSettingsPanel(<ConnectionsSettings />);
 
     await expect.element(page.getByText("Authorized clients")).toBeInTheDocument();
     await expect.element(page.getByText("Revoke others")).toBeInTheDocument();
@@ -720,11 +732,7 @@ describe("GeneralSettingsPanel observability", () => {
 
     setServerConfigSnapshot(createBaseServerConfig());
 
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <ConnectionsSettings />
-      </AppAtomRegistryProvider>,
-    );
+    mounted = await renderSettingsPanel(<ConnectionsSettings />);
 
     await expect.element(page.getByText("Julius iPhone")).toBeInTheDocument();
     await page.getByRole("button", { name: "Revoke others", exact: true }).click();
@@ -739,11 +747,7 @@ describe("GeneralSettingsPanel observability", () => {
 
     setServerConfigSnapshot(createBaseServerConfig());
 
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <ConnectionsSettings />
-      </AppAtomRegistryProvider>,
-    );
+    mounted = await renderSettingsPanel(<ConnectionsSettings />);
 
     const networkAccessToggle = page.getByLabelText("Enable network access");
     await expect.element(networkAccessToggle).not.toBeDisabled();
@@ -764,6 +768,10 @@ describe("GeneralSettingsPanel observability", () => {
   it("opens the logs folder in the preferred editor", async () => {
     const openInEditor = vi.fn<LocalApi["shell"]["openInEditor"]>().mockResolvedValue(undefined);
     window.nativeApi = {
+      persistence: {
+        getClientSettings: vi.fn(async () => null),
+        setClientSettings: vi.fn(async () => undefined),
+      },
       shell: {
         openInEditor,
       },
@@ -771,11 +779,7 @@ describe("GeneralSettingsPanel observability", () => {
 
     setServerConfigSnapshot(createBaseServerConfig());
 
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
+    mounted = await renderSettingsPanel(<GeneralSettingsPanel />);
 
     const openLogsButton = page.getByText("Open logs folder");
     await openLogsButton.click();
@@ -786,11 +790,7 @@ describe("GeneralSettingsPanel observability", () => {
   it("shows an OpenCode server URL field in provider settings", async () => {
     setServerConfigSnapshot(createBaseServerConfig());
 
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
+    mounted = await renderSettingsPanel(<GeneralSettingsPanel />);
 
     await page.getByLabelText("Toggle OpenCode details").click();
 

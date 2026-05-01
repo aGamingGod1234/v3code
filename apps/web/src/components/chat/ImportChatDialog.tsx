@@ -33,6 +33,7 @@ import {
   type DesktopTranscriptEntry,
   type DesktopTranscriptListing,
   type DesktopTranscriptScannedRoot,
+  type EnvironmentId,
   type MeshImportChatResult,
   type ParsedChat,
 } from "@v3tools/contracts";
@@ -78,6 +79,14 @@ const ENTRY_FORMAT_LABEL: Record<DesktopTranscriptEntry["format"], string> = {
 };
 
 const PAGE_SIZE = 100;
+
+function readPrimaryEnvironmentIdForImport(): EnvironmentId | null {
+  try {
+    return getPrimaryEnvironmentConnection().environmentId;
+  } catch {
+    return null;
+  }
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -625,7 +634,7 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
   // If the user has multiple projects, they can move the chat afterwards via
   // the existing "move to project" flow. If there are zero projects, the
   // dialog warns and disables submit.
-  const primaryEnvironmentId = getPrimaryEnvironmentConnection().environmentId;
+  const primaryEnvironmentId = open ? readPrimaryEnvironmentIdForImport() : null;
   const projectsInPrimary = useStore(
     useShallow((state) => selectProjectsForEnvironment(state, primaryEnvironmentId)),
   );
@@ -685,7 +694,7 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
       void navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(
-          scopeThreadRef(primaryEnvironmentId, response.targetThreadId),
+          scopeThreadRef(connection.environmentId, response.targetThreadId),
         ),
       });
     } catch (cause) {
@@ -697,7 +706,7 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
     } finally {
       setSubmitting(false);
     }
-  }, [navigate, pending, primaryEnvironmentId, targetProject]);
+  }, [navigate, pending, targetProject]);
 
   return (
     <Dialog

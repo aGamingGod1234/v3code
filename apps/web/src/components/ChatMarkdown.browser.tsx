@@ -4,13 +4,28 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-const { openInPreferredEditorMock, readLocalApiMock } = vi.hoisted(() => ({
-  openInPreferredEditorMock: vi.fn(async () => "vscode"),
-  readLocalApiMock: vi.fn(() => ({
-    server: { getConfig: vi.fn(async () => ({ availableEditors: ["vscode"] })) },
-    shell: { openInEditor: vi.fn(async () => undefined) },
-  })),
-}));
+const { openInPreferredEditorMock, readLocalApiMock, serverGetConfigMock, shellOpenInEditorMock } =
+  vi.hoisted(() => ({
+    openInPreferredEditorMock: vi.fn(
+      async (
+        api: { shell: { openInEditor: (path: string, editor: string) => Promise<void> } },
+        targetPath: string,
+      ) => {
+        await api.shell.openInEditor(targetPath, "vscode");
+        return "vscode";
+      },
+    ),
+    serverGetConfigMock: vi.fn(async () => ({ availableEditors: ["vscode"] })),
+    shellOpenInEditorMock: vi.fn(async () => undefined),
+    readLocalApiMock: vi.fn(() => ({
+      persistence: {
+        getClientSettings: vi.fn(async () => null),
+        setClientSettings: vi.fn(async () => undefined),
+      },
+      server: { getConfig: serverGetConfigMock },
+      shell: { openInEditor: shellOpenInEditorMock },
+    })),
+  }));
 
 vi.mock("../editorPreferences", () => ({
   openInPreferredEditor: openInPreferredEditorMock,
@@ -29,11 +44,15 @@ describe("ChatMarkdown", () => {
   afterEach(() => {
     openInPreferredEditorMock.mockClear();
     readLocalApiMock.mockClear();
+    serverGetConfigMock.mockClear();
+    shellOpenInEditorMock.mockClear();
     localStorage.clear();
     document.body.innerHTML = "";
+    Reflect.deleteProperty(window, "nativeApi");
   });
 
   it("rewrites file uri hrefs into direct paths before rendering", async () => {
+    window.nativeApi = readLocalApiMock() as unknown as NonNullable<typeof window.nativeApi>;
     const filePath =
       "/Users/yashsingh/p/sco/claude-code-extract/src/utils/permissions/PermissionRule.ts";
     const screen = await render(
@@ -48,7 +67,7 @@ describe("ChatMarkdown", () => {
       await link.click();
 
       await vi.waitFor(() => {
-        expect(openInPreferredEditorMock).toHaveBeenCalledWith(expect.anything(), filePath);
+        expect(shellOpenInEditorMock).toHaveBeenCalledWith(filePath, "vscode");
       });
     } finally {
       await screen.unmount();
@@ -56,6 +75,7 @@ describe("ChatMarkdown", () => {
   });
 
   it("keeps line anchors working after rewriting file uri hrefs", async () => {
+    window.nativeApi = readLocalApiMock() as unknown as NonNullable<typeof window.nativeApi>;
     const filePath =
       "/Users/yashsingh/p/sco/claude-code-extract/src/utils/permissions/PermissionRule.ts";
     const screen = await render(
@@ -70,7 +90,7 @@ describe("ChatMarkdown", () => {
       await link.click();
 
       await vi.waitFor(() => {
-        expect(openInPreferredEditorMock).toHaveBeenCalledWith(expect.anything(), `${filePath}:1`);
+        expect(shellOpenInEditorMock).toHaveBeenCalledWith(`${filePath}:1`, "vscode");
       });
     } finally {
       await screen.unmount();
@@ -78,6 +98,7 @@ describe("ChatMarkdown", () => {
   });
 
   it("shows column information inline when present", async () => {
+    window.nativeApi = readLocalApiMock() as unknown as NonNullable<typeof window.nativeApi>;
     const filePath =
       "/Users/yashsingh/p/sco/claude-code-extract/src/utils/permissions/PermissionRule.ts";
     const screen = await render(
@@ -92,10 +113,7 @@ describe("ChatMarkdown", () => {
       await link.click();
 
       await vi.waitFor(() => {
-        expect(openInPreferredEditorMock).toHaveBeenCalledWith(
-          expect.anything(),
-          `${filePath}:1:7`,
-        );
+        expect(shellOpenInEditorMock).toHaveBeenCalledWith(`${filePath}:1:7`, "vscode");
       });
     } finally {
       await screen.unmount();

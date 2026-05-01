@@ -171,3 +171,44 @@
 ### Suggested Next Steps
 
 - Push the repaired `main` changes and rerun the `Release` workflow to verify GitHub Actions is green.
+
+## [2026-05-01] - Main CI Android and Browser Repair
+
+### What Was Implemented
+
+- Imported Capacitor Android `variables.gradle` from the project-level Gradle file so `compileSdkVersion`, `minSdkVersion`, and `targetSdkVersion` are available to the app module during CI.
+- Updated the browser WebSocket RPC harness for the mesh chat/presence/prompt streams and multiple browser clients.
+- Updated ChatView browser fixtures to send mesh chat snapshots and route mesh prompt dispatch through the existing orchestration assertions.
+- Made desktop bootstrap reads tolerate partial desktop bridge objects.
+- Made LocalApi desktop bridge persistence and shell helpers fall back per method instead of assuming every bridge method exists.
+- Made the import-chat dialog avoid resolving a primary environment while closed.
+- Hardened SettingsPanels and ChatMarkdown browser fixtures against cross-file partial `nativeApi` state.
+
+### Files Modified
+
+- `apps/mobile/android/build.gradle` - loads Android SDK version variables for CI Gradle builds.
+- `apps/web/test/wsRpcHarness.ts` - supports per-client RPC server instances and mesh stream methods in browser tests.
+- `apps/web/src/components/ChatView.browser.tsx` - updates browser test fixtures for mesh chat snapshots and prompt dispatch.
+- `apps/web/src/components/KeybindingsToast.browser.tsx` - passes the active browser WebSocket client into the shared harness.
+- `apps/web/src/environments/primary/auth.ts` - safely reads optional desktop bootstrap credentials.
+- `apps/web/src/environments/primary/target.ts` - safely reads optional desktop bootstrap target data.
+- `apps/web/src/localApi.ts` - falls back when partial desktop bridges omit optional methods.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - defers primary environment lookup until the dialog is open.
+- `apps/web/src/components/settings/SettingsPanels.browser.tsx` - wraps settings fixtures in query context and mocks aliased runtime imports.
+- `apps/web/src/components/ChatMarkdown.browser.tsx` - completes the native API fixture shape used by shared browser tests.
+- `PROJECT_LOG.md` - records the Android and browser CI repair.
+
+### Assumptions Made (flag these for review)
+
+- The CI Android runners provide a valid Android SDK, so the local Gradle error after project evaluation is environmental rather than a repository failure.
+- The mesh stream methods are the intended browser test surface for current ChatView runtime behavior.
+
+### Known Issues / Deferred
+
+- Local `:app:assembleDebug` cannot complete on this Windows machine because no Android SDK path is configured.
+- `bun lint` still reports 26 warnings but exits with 0 errors.
+- Browser tests still print existing router-context, ResizeObserver, and RPC subscription warning noise while exiting successfully.
+
+### Suggested Next Steps
+
+- Watch the new `main` push GitHub Actions run and confirm both CI and mobile smoke jobs complete successfully.
