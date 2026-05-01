@@ -40,7 +40,7 @@ const authAccessHarness = vi.hoisted(() => {
     }
   };
 
-  return {
+  const authAccessHarness = {
     reset() {
       snapshot = {
         pairingLinks: [],
@@ -113,22 +113,21 @@ const authAccessHarness = vi.hoisted(() => {
       };
     },
   };
-});
 
-function createRuntimeMock() {
+  const environmentId = "environment-local";
   const primaryConnection = {
     kind: "primary" as const,
     knownEnvironment: {
       id: "environment-local",
       label: "Local environment",
       source: "manual" as const,
-      environmentId: EnvironmentId.make("environment-local"),
+      environmentId,
       target: {
         httpBaseUrl: "http://localhost:3000",
         wsBaseUrl: "ws://localhost:3000",
       },
     },
-    environmentId: EnvironmentId.make("environment-local"),
+    environmentId,
     client: {
       server: {
         subscribeAuthAccess: (listener: Parameters<typeof authAccessHarness.subscribe>[0]) =>
@@ -140,7 +139,7 @@ function createRuntimeMock() {
     dispose: async () => undefined,
   };
 
-  return {
+  const environmentRuntimeMock = {
     getEnvironmentHttpBaseUrl: () => "http://localhost:3000",
     getSavedEnvironmentRecord: () => null,
     getSavedEnvironmentRuntimeState: () => null,
@@ -169,10 +168,32 @@ function createRuntimeMock() {
       selector: (state: { byId: Record<string, never> }) => unknown,
     ) => selector({ byId: {} }),
   };
-}
 
-vi.mock("../../environments/runtime", createRuntimeMock);
-vi.mock("~/environments/runtime", createRuntimeMock);
+  Object.assign(globalThis, {
+    __settingsPanelsEnvironmentRuntimeMock: environmentRuntimeMock,
+  });
+
+  return authAccessHarness;
+});
+
+vi.mock(
+  "../../environments/runtime",
+  () =>
+    (
+      globalThis as typeof globalThis & {
+        __settingsPanelsEnvironmentRuntimeMock: Record<string, unknown>;
+      }
+    ).__settingsPanelsEnvironmentRuntimeMock,
+);
+vi.mock(
+  "~/environments/runtime",
+  () =>
+    (
+      globalThis as typeof globalThis & {
+        __settingsPanelsEnvironmentRuntimeMock: Record<string, unknown>;
+      }
+    ).__settingsPanelsEnvironmentRuntimeMock,
+);
 
 vi.mock("../chat/ImportChatDialog", () => ({
   ImportChatDialog: ({ trigger }: { readonly trigger: ReactElement }) => trigger,

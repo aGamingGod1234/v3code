@@ -178,18 +178,21 @@
 
 - Imported Capacitor Android `variables.gradle` from the project-level Gradle file so `compileSdkVersion`, `minSdkVersion`, and `targetSdkVersion` are available to the app module during CI.
 - Fixed Android adaptive launcher icon foreground references so resource linking can find the existing drawable vector.
+- Fixed the Android splash-screen animated icon reference so resource linking no longer looks for a missing `mipmap` foreground resource.
 - Updated the browser WebSocket RPC harness for the mesh chat/presence/prompt streams and multiple browser clients.
 - Updated ChatView browser fixtures to send mesh chat snapshots and route mesh prompt dispatch through the existing orchestration assertions.
 - Made desktop bootstrap reads tolerate partial desktop bridge objects.
 - Made LocalApi desktop bridge persistence and shell helpers fall back per method instead of assuming every bridge method exists.
 - Made the import-chat dialog avoid resolving a primary environment while closed.
 - Hardened SettingsPanels and ChatMarkdown browser fixtures against cross-file partial `nativeApi` state.
+- Hoisted the SettingsPanels browser runtime mock so Vitest browser mode can resolve the mock factory reliably in CI.
 
 ### Files Modified
 
 - `apps/mobile/android/build.gradle` - loads Android SDK version variables for CI Gradle builds.
 - `apps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` - points the adaptive icon foreground at the existing drawable resource.
 - `apps/mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml` - points the round adaptive icon foreground at the existing drawable resource.
+- `apps/mobile/android/app/src/main/res/values/styles.xml` - points the splash-screen animated icon at the existing drawable resource.
 - `apps/web/test/wsRpcHarness.ts` - supports per-client RPC server instances and mesh stream methods in browser tests.
 - `apps/web/src/components/ChatView.browser.tsx` - updates browser test fixtures for mesh chat snapshots and prompt dispatch.
 - `apps/web/src/components/KeybindingsToast.browser.tsx` - passes the active browser WebSocket client into the shared harness.
@@ -197,7 +200,7 @@
 - `apps/web/src/environments/primary/target.ts` - safely reads optional desktop bootstrap target data.
 - `apps/web/src/localApi.ts` - falls back when partial desktop bridges omit optional methods.
 - `apps/web/src/components/chat/ImportChatDialog.tsx` - defers primary environment lookup until the dialog is open.
-- `apps/web/src/components/settings/SettingsPanels.browser.tsx` - wraps settings fixtures in query context and mocks aliased runtime imports.
+- `apps/web/src/components/settings/SettingsPanels.browser.tsx` - wraps settings fixtures in query context, mocks aliased runtime imports, and keeps the runtime mock browser-safe.
 - `apps/web/src/components/ChatMarkdown.browser.tsx` - completes the native API fixture shape used by shared browser tests.
 - `PROJECT_LOG.md` - records the Android and browser CI repair.
 
