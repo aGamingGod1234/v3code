@@ -186,6 +186,7 @@
 - Made the import-chat dialog avoid resolving a primary environment while closed.
 - Hardened SettingsPanels and ChatMarkdown browser fixtures against cross-file partial `nativeApi` state.
 - Hoisted the SettingsPanels browser runtime mock so Vitest browser mode can resolve the mock factory reliably in CI.
+- Prebundled `react-dom/client` for Vite browser tests so dependency optimization does not reload the Vitest browser connection mid-run.
 
 ### Files Modified
 
@@ -202,6 +203,7 @@
 - `apps/web/src/components/chat/ImportChatDialog.tsx` - defers primary environment lookup until the dialog is open.
 - `apps/web/src/components/settings/SettingsPanels.browser.tsx` - wraps settings fixtures in query context, mocks aliased runtime imports, and keeps the runtime mock browser-safe.
 - `apps/web/src/components/ChatMarkdown.browser.tsx` - completes the native API fixture shape used by shared browser tests.
+- `apps/web/vite.config.ts` - prebundles the React DOM browser entry used by Vitest browser rendering.
 - `PROJECT_LOG.md` - records the Android and browser CI repair.
 
 ### Assumptions Made (flag these for review)
