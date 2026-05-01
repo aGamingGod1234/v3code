@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -177,13 +178,20 @@ function isGitHubCliError(error: unknown): error is GitHubCliError {
   );
 }
 
-function makeTempDir(
-  prefix: string,
-): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Scope.Scope> {
-  return Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    return yield* fileSystem.makeTempDirectoryScoped({ prefix });
-  });
+function testTempRoot(): string {
+  if (process.platform !== "win32") {
+    return os.tmpdir();
+  }
+
+  const windowsTemp = path.join(process.env.SystemRoot ?? "C:\\Windows", "Temp");
+  return fs.existsSync(windowsTemp) ? windowsTemp : os.tmpdir();
+}
+
+function makeTempDir(prefix: string): Effect.Effect<string, never, Scope.Scope> {
+  return Effect.acquireRelease(
+    Effect.sync(() => fs.mkdtempSync(path.join(testTempRoot(), prefix))),
+    (dir) => Effect.sync(() => fs.rmSync(dir, { recursive: true, force: true })),
+  );
 }
 
 function removePath(

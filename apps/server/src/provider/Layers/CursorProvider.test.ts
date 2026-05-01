@@ -26,7 +26,8 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mockAgentPath = path.join(__dirname, "../../../scripts/acp-mock-agent.ts");
-const bunExe = process.platform === "win32" ? "bun.cmd" : "bun";
+const bunExe = process.platform === "win32" ? "bun.exe" : "bun";
+const WRAPPER_SIGTERM_EXIT_REASON = "wrapper:SIGTERM";
 
 async function makeMockAgentWrapper(extraEnv?: Record<string, string>) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "cursor-provider-mock-"));
@@ -53,7 +54,6 @@ function logWrapperExit(reason) {
 const child = spawn(${JSON.stringify(bunExe)}, [${JSON.stringify(mockAgentPath)}, ...process.argv.slice(2)], {
   env: process.env,
   stdio: "inherit",
-  shell: process.platform === "win32",
 });
 process.once("SIGTERM", () => {
   logWrapperExit("SIGTERM");
@@ -98,6 +98,10 @@ async function waitForFileContent(filePath: string, attempts = 40): Promise<stri
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`Timed out waiting for file content at ${filePath}`);
+}
+
+function countExitReason(exitLog: string, reason: string): number {
+  return exitLog.split(/\r?\n/).filter((line) => line === reason).length;
 }
 
 const parameterizedGpt54ConfigOptions = [
@@ -523,7 +527,7 @@ describe("discoverCursorModelsViaAcp", () => {
     );
 
     const exitLog = await waitForFileContent(exitLogPath);
-    expect(exitLog).toContain("SIGTERM");
+    expect(exitLog).toContain(WRAPPER_SIGTERM_EXIT_REASON);
   });
 });
 
@@ -569,7 +573,7 @@ describe("discoverCursorModelCapabilitiesViaAcp", () => {
     ]);
 
     const exitLog = await waitForFileContent(exitLogPath);
-    expect(exitLog.match(/SIGTERM/g)?.length ?? 0).toBe(4);
+    expect(countExitReason(exitLog, WRAPPER_SIGTERM_EXIT_REASON)).toBe(4);
   });
 });
 

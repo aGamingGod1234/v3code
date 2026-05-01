@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -21,13 +22,20 @@ const GitCoreTestLayer = GitCoreLive.pipe(
 );
 const TestLayer = Layer.mergeAll(NodeServices.layer, GitCoreTestLayer);
 
-function makeTmpDir(
-  prefix = "git-test-",
-): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Scope.Scope> {
-  return Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    return yield* fileSystem.makeTempDirectoryScoped({ prefix });
-  });
+function testTempRoot(): string {
+  if (process.platform !== "win32") {
+    return os.tmpdir();
+  }
+
+  const windowsTemp = path.join(process.env.SystemRoot ?? "C:\\Windows", "Temp");
+  return existsSync(windowsTemp) ? windowsTemp : os.tmpdir();
+}
+
+function makeTmpDir(prefix = "git-test-"): Effect.Effect<string, never, Scope.Scope> {
+  return Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(path.join(testTempRoot(), prefix))),
+    (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
+  );
 }
 
 function writeTextFile(

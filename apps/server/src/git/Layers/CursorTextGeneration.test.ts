@@ -17,7 +17,7 @@ import { ServerSettingsService } from "../../serverSettings.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mockAgentPath = path.join(__dirname, "../../../scripts/acp-mock-agent.ts");
-const bunExe = process.platform === "win32" ? "bun.cmd" : "bun";
+const bunExe = process.platform === "win32" ? "bun.exe" : "bun";
 
 const CursorTextGenerationTestLayer = CursorTextGenerationLive.pipe(
   Layer.provideMerge(ServerSettingsService.layerTest()),
@@ -60,7 +60,6 @@ function logWrapperExit(reason) {
 const child = spawn(${JSON.stringify(bunExe)}, [${JSON.stringify(mockAgentPath)}], {
   env: process.env,
   stdio: "inherit",
-  shell: process.platform === "win32",
 });
 process.once("exit", (code) => {
   logWrapperExit(\`exit:\${code}\`);

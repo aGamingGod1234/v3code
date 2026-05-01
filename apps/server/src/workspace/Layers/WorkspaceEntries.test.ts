@@ -1,8 +1,9 @@
 import fsPromises from "node:fs/promises";
+import * as nodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, afterEach, describe, expect, vi } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, PlatformError } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, PlatformError } from "effect";
 
 import { ServerConfig } from "../../config.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
@@ -23,14 +24,28 @@ const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(NodeServices.layer),
 );
 
+const FilesystemOnlyTestLayer = Layer.empty.pipe(
+  Layer.provideMerge(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
+  Layer.provideMerge(WorkspacePathsLive),
+  Layer.provide(
+    ServerConfig.layerTest(process.cwd(), {
+      prefix: "t3-workspace-entries-filesystem-test-",
+    }),
+  ),
+  Layer.provideMerge(NodeServices.layer),
+);
+
 const makeTempDir = Effect.fn(function* (opts?: { prefix?: string; git?: boolean }) {
   const fileSystem = yield* FileSystem.FileSystem;
-  const gitCore = yield* GitCore;
+  const gitCore = yield* Effect.serviceOption(GitCore);
   const dir = yield* fileSystem.makeTempDirectoryScoped({
     prefix: opts?.prefix ?? "t3code-workspace-entries-",
   });
   if (opts?.git) {
-    yield* gitCore.initRepo({ cwd: dir });
+    if (Option.isNone(gitCore)) {
+      throw new Error("GitCore is required to initialize a git test repository.");
+    }
+    yield* gitCore.value.initRepo({ cwd: dir });
   }
   return dir;
 });
@@ -72,6 +87,25 @@ const appendSeparator = (input: string) =>
   input.endsWith("/") || input.endsWith("\\")
     ? input
     : `${input}${process.platform === "win32" ? "\\" : "/"}`;
+
+function normalizeTestPath(input: string): string {
+  const resolved = nodePath.resolve(input);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isSameTestPath(left: unknown, right: string): boolean {
+  return typeof left === "string" && normalizeTestPath(left) === normalizeTestPath(right);
+}
+
+function isAtOrInsideTestPath(target: unknown, root: string): boolean {
+  if (typeof target !== "string") return false;
+  const normalizedTarget = normalizeTestPath(target);
+  const normalizedRoot = normalizeTestPath(root);
+  return (
+    normalizedTarget === normalizedRoot ||
+    normalizedTarget.startsWith(appendSeparator(normalizedRoot))
+  );
+}
 
 it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
   afterEach(() => {
@@ -215,36 +249,6 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
       }),
     );
 
-    it.effect("deduplicates concurrent index builds for the same cwd", () =>
-      Effect.gen(function* () {
-        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-concurrent-build-" });
-        yield* writeTextFile(cwd, "src/components/Composer.tsx");
-
-        let rootReadCount = 0;
-        const originalReaddir = fsPromises.readdir.bind(fsPromises);
-        vi.spyOn(fsPromises, "readdir").mockImplementation((async (
-          ...args: Parameters<typeof fsPromises.readdir>
-        ) => {
-          if (args[0] === cwd) {
-            rootReadCount += 1;
-            await new Promise((resolve) => setTimeout(resolve, 20));
-          }
-          return originalReaddir(...args);
-        }) as typeof fsPromises.readdir);
-
-        yield* Effect.all(
-          [
-            searchWorkspaceEntries({ cwd, query: "", limit: 100 }),
-            searchWorkspaceEntries({ cwd, query: "comp", limit: 100 }),
-            searchWorkspaceEntries({ cwd, query: "src", limit: 100 }),
-          ],
-          { concurrency: "unbounded" },
-        );
-
-        expect(rootReadCount).toBe(1);
-      }),
-    );
-
     it.effect("limits concurrent directory reads while walking the filesystem", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTempDir({ prefix: "t3code-workspace-read-concurrency-" });
@@ -261,7 +265,7 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
           ...args: Parameters<typeof fsPromises.readdir>
         ) => {
           const target = args[0];
-          if (typeof target === "string" && target.startsWith(cwd)) {
+          if (isAtOrInsideTestPath(target, cwd)) {
             activeReads += 1;
             peakReads = Math.max(peakReads, activeReads);
             await new Promise((resolve) => setTimeout(resolve, 4));
@@ -361,4 +365,40 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
       }),
     );
   });
+});
+
+it.layer(FilesystemOnlyTestLayer)("WorkspaceEntriesLive filesystem indexing", (it) => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.effect("deduplicates concurrent index builds for the same cwd", () =>
+    Effect.gen(function* () {
+      const cwd = yield* makeTempDir({ prefix: "t3code-workspace-concurrent-build-" });
+      yield* writeTextFile(cwd, "src/components/Composer.tsx");
+
+      let rootReadCount = 0;
+      const originalReaddir = fsPromises.readdir.bind(fsPromises);
+      vi.spyOn(fsPromises, "readdir").mockImplementation((async (
+        ...args: Parameters<typeof fsPromises.readdir>
+      ) => {
+        if (isSameTestPath(args[0], cwd)) {
+          rootReadCount += 1;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return originalReaddir(...args);
+      }) as typeof fsPromises.readdir);
+
+      yield* Effect.all(
+        [
+          searchWorkspaceEntries({ cwd, query: "", limit: 100 }),
+          searchWorkspaceEntries({ cwd, query: "comp", limit: 100 }),
+          searchWorkspaceEntries({ cwd, query: "src", limit: 100 }),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      expect(rootReadCount).toBe(1);
+    }),
+  );
 });

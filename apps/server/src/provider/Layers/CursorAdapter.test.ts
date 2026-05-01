@@ -16,7 +16,8 @@ import { makeCursorAdapterLive } from "./CursorAdapter.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mockAgentPath = path.join(__dirname, "../../../scripts/acp-mock-agent.ts");
-const bunExe = process.platform === "win32" ? "bun.cmd" : "bun";
+const bunExe = process.platform === "win32" ? "bun.exe" : "bun";
+const WRAPPER_SIGTERM_EXIT_REASON = "wrapper:SIGTERM";
 
 async function writeNodeWrapper(dir: string, name: string, script: string): Promise<string> {
   const scriptPath = path.join(dir, `${name}.mjs`);
@@ -61,7 +62,6 @@ function logWrapperExit(reason) {
 const child = spawn(${JSON.stringify(bunExe)}, [${JSON.stringify(mockAgentPath)}, ...process.argv.slice(2)], {
   env: process.env,
   stdio: "inherit",
-  shell: process.platform === "win32",
 });
 process.once("SIGTERM", () => {
   logWrapperExit("SIGTERM");
@@ -149,6 +149,10 @@ async function waitForFileContent(filePath: string, attempts = 40) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`Timed out waiting for file content at ${filePath}`);
+}
+
+function countExitReason(exitLog: string, reason: string): number {
+  return exitLog.split(/\r?\n/).filter((line) => line === reason).length;
 }
 
 const cursorAdapterTestLayer = it.layer(
@@ -277,7 +281,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* adapter.stopSession(threadId);
 
       const exitLog = yield* Effect.promise(() => waitForFileContent(exitLogPath));
-      assert.include(exitLog, "SIGTERM");
+      assert.include(exitLog, WRAPPER_SIGTERM_EXIT_REASON);
     }),
   );
 
@@ -332,7 +336,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         yield* adapter.stopSession(threadId);
 
         const exitLog = yield* Effect.promise(() => waitForFileContent(exitLogPath));
-        assert.equal(exitLog.match(/SIGTERM/g)?.length ?? 0, 2);
+        assert.equal(countExitReason(exitLog, WRAPPER_SIGTERM_EXIT_REASON), 2);
       }),
   );
 

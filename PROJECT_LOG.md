@@ -139,3 +139,35 @@
 ### Suggested Next Steps
 
 - Add an end-to-end HTTP route test around the full server router once the test harness can cheaply construct `ServerConfig` in `server-node` mode.
+
+## [2026-05-01] - Main Release CI Test Repair
+
+### What Was Implemented
+
+- Fixed Cursor ACP shutdown tests so they count wrapper process exits instead of every nested mock-agent `SIGTERM` entry.
+- Made Cursor ACP test wrappers invoke `bun.exe` directly on Windows instead of routing `bun.cmd` through a shell.
+- Isolated the WorkspaceEntries filesystem cache-dedup test from the Git-backed index path.
+- Made GitCore and GitManager temp directories use a Windows system temp root when the user temp directory is itself inside a Git worktree.
+
+### Files Modified
+
+- `apps/server/src/provider/Layers/CursorAdapter.test.ts` - tightened ACP wrapper exit assertions and made mock wrapper spawning Windows-safe.
+- `apps/server/src/provider/Layers/CursorProvider.test.ts` - tightened ACP probe exit assertions and made mock wrapper spawning Windows-safe.
+- `apps/server/src/git/Layers/CursorTextGeneration.test.ts` - made Cursor text-generation mock wrapper spawning Windows-safe.
+- `apps/server/src/workspace/Layers/WorkspaceEntries.test.ts` - moved the filesystem cache-dedup assertion to a filesystem-only layer and normalized path comparisons.
+- `apps/server/src/git/Layers/GitCore.test.ts` - creates scoped test repositories outside user temp worktrees on Windows.
+- `apps/server/src/git/Layers/GitManager.test.ts` - creates scoped test repositories outside user temp worktrees on Windows.
+- `PROJECT_LOG.md` - records the CI repair and verification.
+
+### Assumptions Made (flag these for review)
+
+- The current failing GitHub Actions scope is the scheduled `Release` workflow on `main`.
+- Counting `wrapper:SIGTERM` is the intended assertion for ACP runtime wrapper cleanup; nested mock-agent signal logs are incidental test-fixture noise.
+
+### Known Issues / Deferred
+
+- `bun lint` still reports 26 pre-existing warnings, but exits with 0 errors.
+
+### Suggested Next Steps
+
+- Push the repaired `main` changes and rerun the `Release` workflow to verify GitHub Actions is green.
