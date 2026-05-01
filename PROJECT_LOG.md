@@ -190,6 +190,7 @@
 - Added browser-test setup that suppresses Chromium's known ResizeObserver loop notification so it does not close the Vitest browser RPC connection in CI.
 - Serialized Vitest browser spec files to avoid CI-only browser RPC closure while heavy ChatView browser tests run concurrently with other mocked browser specs.
 - Split browser specs into separate Vitest browser processes to avoid CI failing the entire browser suite on a teardown-time browser RPC mock rejection after all assertions pass.
+- Passed the configured npm publish token into the release workflow's CLI publish step and added an explicit missing-secret check.
 
 ### Files Modified
 
@@ -210,6 +211,7 @@
 - `apps/web/vitest.browser.config.ts` - loads the browser-test setup file before browser specs and runs browser spec files serially.
 - `apps/web/scripts/run-browser-tests.ts` - discovers browser spec files and runs each in its own Vitest browser process.
 - `apps/web/package.json` - routes `test:browser` through the per-file browser runner.
+- `.github/workflows/release.yml` - supplies `NODE_AUTH_TOKEN` to npm publish and fails clearly when `NPM_TOKEN` is not configured.
 - `apps/web/src/test/browserSetup.ts` - filters the known ResizeObserver loop notification during browser tests.
 - `PROJECT_LOG.md` - records the Android and browser CI repair.
 

@@ -383,7 +383,18 @@ jobs:
       - name: Build CLI package
         run: bun run build --filter=@v3tools/web --filter=t3
 
+      - name: Verify npm publish token
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "::error::NPM_TOKEN is required to publish the CLI package to npm."
+            exit 1
+          fi
+
       - name: Publish CLI package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node apps/server/scripts/cli.ts publish --tag "${{ needs.preflight.outputs.cli_dist_tag }}" --app-version "${{ needs.preflight.outputs.version }}" --verbose
 
   release:
