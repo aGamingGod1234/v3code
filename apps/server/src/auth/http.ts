@@ -11,7 +11,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 
 import { AuthError, ServerAuth } from "./Services/ServerAuth.ts";
 import { SessionCredentialService } from "./Services/SessionCredentialService.ts";
-import { deriveAuthClientMetadata } from "./utils.ts";
+import { checkRateLimit, deriveAuthClientMetadata, rateLimitKeyFromRequest } from "./utils.ts";
 
 export const respondToAuthError = (error: AuthError) =>
   Effect.gen(function* () {
@@ -62,6 +62,12 @@ export const authBootstrapRouteLayer = HttpRouter.add(
   "/api/auth/bootstrap",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
+    if (!checkRateLimit(`bootstrap:${rateLimitKeyFromRequest(request)}`)) {
+      return yield* new AuthError({
+        message: "Too many bootstrap attempts. Try again in a minute.",
+        status: 429,
+      });
+    }
     const serverAuth = yield* ServerAuth;
     const sessions = yield* SessionCredentialService;
     const payload = yield* HttpServerRequest.schemaBodyJson(AuthBootstrapInput).pipe(
@@ -95,6 +101,12 @@ export const authBearerBootstrapRouteLayer = HttpRouter.add(
   "/api/auth/bootstrap/bearer",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
+    if (!checkRateLimit(`bootstrap-bearer:${rateLimitKeyFromRequest(request)}`)) {
+      return yield* new AuthError({
+        message: "Too many bootstrap attempts. Try again in a minute.",
+        status: 429,
+      });
+    }
     const serverAuth = yield* ServerAuth;
     const payload = yield* HttpServerRequest.schemaBodyJson(AuthBootstrapInput).pipe(
       Effect.mapError(
@@ -138,6 +150,11 @@ export const authPairingCredentialRouteLayer = HttpRouter.add(
     const request = yield* HttpServerRequest.HttpServerRequest;
     const session = yield* serverAuth.authenticateHttpRequest(request);
     if (session.role !== "owner") {
+      yield* Effect.logWarning("auth: non-owner attempted pairing-token creation", {
+        sessionId: session.sessionId,
+        role: session.role,
+        ip: rateLimitKeyFromRequest(request),
+      });
       return yield* new AuthError({
         message: "Only owner sessions can create pairing credentials.",
         status: 403,
@@ -175,6 +192,12 @@ const authenticateOwnerSession = Effect.gen(function* () {
   const serverAuth = yield* ServerAuth;
   const session = yield* serverAuth.authenticateHttpRequest(request);
   if (session.role !== "owner") {
+    yield* Effect.logWarning("auth: non-owner attempted owner-only route", {
+      sessionId: session.sessionId,
+      role: session.role,
+      path: request.url,
+      ip: rateLimitKeyFromRequest(request),
+    });
     return yield* new AuthError({
       message: "Only owner sessions can manage network access.",
       status: 403,

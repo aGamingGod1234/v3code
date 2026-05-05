@@ -29,10 +29,31 @@ export interface GitHubFlowEnvelope {
 const base64url = (input: Buffer): string =>
   input.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
+// Distinct error class so callers (verifyGitHubFlowEnvelope) can map
+// invalid-base64 failures to a specific "decode-failed" reason rather than
+// reporting them as generic JSON parse errors.
+export class Base64UrlDecodeError extends Error {
+  override readonly name = "Base64UrlDecodeError";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 const base64urlDecode = (input: string): Buffer => {
   const pad = input.length % 4 === 2 ? "==" : input.length % 4 === 3 ? "=" : "";
   const normalized = input.replace(/-/g, "+").replace(/_/g, "/") + pad;
-  return Buffer.from(normalized, "base64");
+  const decoded = Buffer.from(normalized, "base64");
+  // Round-trip guard: reject inputs that don't re-encode to the same value
+  // (Buffer.from silently strips invalid characters; this catches that).
+  const reencoded = decoded
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  if (reencoded !== input.replace(/=+$/, "")) {
+    throw new Base64UrlDecodeError("base64url-decode: input contained invalid characters");
+  }
+  return decoded;
 };
 
 export const generateGitHubFlowNonce = (): string => base64url(Crypto.randomBytes(NONCE_BYTES));
@@ -83,6 +104,12 @@ export const verifyGitHubFlowEnvelope = (
   try {
     parsed = JSON.parse(base64urlDecode(payloadB64).toString("utf8"));
   } catch (cause) {
+    if (cause instanceof Base64UrlDecodeError) {
+      throw new GitHubFlowVerificationError(
+        "decode-failed",
+        `Envelope payload base64url decode failed: ${cause.message}`,
+      );
+    }
     throw new GitHubFlowVerificationError(
       "decode-failed",
       `Envelope payload is not valid JSON: ${(cause as Error).message}`,
