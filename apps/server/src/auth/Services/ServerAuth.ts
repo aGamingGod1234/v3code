@@ -27,7 +27,7 @@ export interface AuthenticatedSession {
 
 export class AuthError extends Data.TaggedError("AuthError")<{
   readonly message: string;
-  readonly status?: 400 | 401 | 403 | 404 | 409 | 410 | 500 | 502 | 503;
+  readonly status?: 400 | 401 | 403 | 404 | 409 | 410 | 429 | 500 | 502 | 503;
   readonly cause?: unknown;
 }> {}
 

@@ -343,6 +343,50 @@ export const makeServerAuth = Effect.gen(function* () {
 
   const authenticateWebSocketUpgrade: ServerAuthShape["authenticateWebSocketUpgrade"] = (request) =>
     Effect.gen(function* () {
+      // Same-origin defence: if a browser sends an Origin header on the
+      // WebSocket Upgrade, require it to match the request Host. Non-browser
+      // clients (Electron renderers via cookie+token, mobile, curl) typically
+      // omit Origin, so this only blocks cross-origin browser CSRF.
+      const originHeader = request.headers["origin"];
+      const hostHeader = request.headers["host"];
+      if (typeof originHeader === "string" && originHeader.length > 0) {
+        // Reject if Origin is set but Host is missing/empty — we cannot
+        // safely compare without both, and a browser CORS Upgrade should
+        // always include Host.
+        if (typeof hostHeader !== "string" || hostHeader.length === 0) {
+          return yield* new AuthError({
+            message: "WebSocket Upgrade rejected: missing Host.",
+            status: 400,
+          });
+        }
+        let originHost: string | null = null;
+        try {
+          originHost = new URL(originHeader).host;
+        } catch {
+          // Malformed Origin header is rejected.
+          return yield* new AuthError({
+            message: "Invalid WebSocket Origin.",
+            status: 403,
+          });
+        }
+        // Normalize both sides: lowercase, drop default port for the
+        // request's protocol so :80 / :443 compares equal to the bare host.
+        const protocolHint = request.headers["x-forwarded-proto"]?.toString().toLowerCase();
+        const isTls = protocolHint === "https" || protocolHint === "wss";
+        const normalize = (host: string): string => {
+          const lower = host.toLowerCase();
+          if (isTls && lower.endsWith(":443")) return lower.slice(0, -4);
+          if (!isTls && lower.endsWith(":80")) return lower.slice(0, -3);
+          return lower;
+        };
+        if (normalize(originHost) !== normalize(hostHeader)) {
+          return yield* new AuthError({
+            message: "Cross-origin WebSocket Upgrade rejected.",
+            status: 403,
+          });
+        }
+      }
+
       const requestUrl = HttpServerRequest.toURL(request);
       if (Option.isSome(requestUrl)) {
         const websocketToken = requestUrl.value.searchParams.get(WEBSOCKET_TOKEN_QUERY_PARAM);

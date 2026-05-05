@@ -116,6 +116,97 @@ function readRemoteAddressFromSource(source: unknown): string | undefined {
   return normalizeIpAddress(candidate.socket?.remoteAddress ?? candidate.remoteAddress);
 }
 
+// Fixed-window in-memory rate limiter keyed by client IP. Bootstrap and
+// bearer routes are unauthenticated chokepoints, so brute-force attacks
+// against bootstrap credentials must be slowed at the HTTP boundary.
+// The window resets every RATE_LIMIT_WINDOW_MS for each key (not strictly
+// sliding) — sufficient for chokepoint defence, deliberately simple.
+// Memory bound: at most one entry per IP, oldest entries evicted lazily
+// when the bucket map grows past RATE_LIMIT_BUCKETS_SOFT_CAP.
+interface RateLimitBucket {
+  readonly windowStartMs: number;
+  count: number;
+}
+const RATE_LIMIT_BUCKETS = new Map<string, RateLimitBucket>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX_PER_WINDOW = 10; // 10 attempts/min/IP
+const RATE_LIMIT_BUCKETS_SOFT_CAP = 5_000;
+const RATE_LIMIT_BUCKETS_EVICT_BATCH = 1_000;
+
+function evictOldestBuckets(): void {
+  // Maps preserve insertion order, so iterating gives oldest first. Use
+  // an iterator instead of allocating an Array.from snapshot of the keys.
+  const iter = RATE_LIMIT_BUCKETS.keys();
+  for (let i = 0; i < RATE_LIMIT_BUCKETS_EVICT_BATCH; i += 1) {
+    const next = iter.next();
+    if (next.done) break;
+    RATE_LIMIT_BUCKETS.delete(next.value);
+  }
+}
+
+// Vitest sets `process.env.VITEST = "true"` for any test run, so server
+// integration tests don't trip the chokepoint cap when bootstrapping the
+// test runtime many times in sequence. Operators can also set
+// `V3CODE_DISABLE_RATE_LIMIT=1` explicitly (useful for ad-hoc load testing).
+function isRateLimitDisabled(): boolean {
+  if (process.env["VITEST"] === "true") return true;
+  const flag = process.env["V3CODE_DISABLE_RATE_LIMIT"];
+  return flag === "1" || flag?.toLowerCase() === "true";
+}
+
+export function checkRateLimit(key: string, nowMs: number = Date.now()): boolean {
+  if (isRateLimitDisabled()) return true;
+  const bucket = RATE_LIMIT_BUCKETS.get(key);
+  if (!bucket || nowMs - bucket.windowStartMs >= RATE_LIMIT_WINDOW_MS) {
+    // New window: drop the previous bucket so re-insertion places this
+    // key at the end of insertion order (LRU-like for eviction).
+    if (bucket) RATE_LIMIT_BUCKETS.delete(key);
+    RATE_LIMIT_BUCKETS.set(key, { windowStartMs: nowMs, count: 1 });
+    if (RATE_LIMIT_BUCKETS.size > RATE_LIMIT_BUCKETS_SOFT_CAP) {
+      evictOldestBuckets();
+    }
+    return true;
+  }
+  if (bucket.count >= RATE_LIMIT_MAX_PER_WINDOW) {
+    return false;
+  }
+  bucket.count += 1;
+  return true;
+}
+
+// Visible for tests only — never call from runtime code.
+export function __resetRateLimiterForTests(): void {
+  RATE_LIMIT_BUCKETS.clear();
+}
+
+// True when the operator has opted in to honouring `X-Forwarded-For` (i.e.
+// the server is genuinely behind a trusted reverse proxy that strips
+// client-supplied XFF headers and appends a real one). Default off — direct
+// trust of XFF is a documented rate-limit-bypass vector.
+function shouldHonourForwardedFor(): boolean {
+  const flag = process.env["V3CODE_TRUST_FORWARDED_FOR"];
+  return typeof flag === "string" && (flag === "1" || flag.toLowerCase() === "true");
+}
+
+export function rateLimitKeyFromRequest(request: HttpServerRequest.HttpServerRequest): string {
+  // Always start from the socket peer address — that's the only attribution
+  // we can authenticate without a trusted proxy in front.
+  const socketIp = normalizeIpAddress(readRemoteAddressFromSource(request.source));
+
+  if (shouldHonourForwardedFor()) {
+    // When the operator has explicitly opted in (i.e. they own the proxy in
+    // front and it appends to XFF), use the FIRST entry — that is the
+    // original client address documented for X-Forwarded-For. Operators who
+    // haven't deployed a stripping proxy must leave V3CODE_TRUST_FORWARDED_FOR
+    // unset; otherwise this is a spoofable bypass.
+    const forwarded = normalizeNonEmptyString(request.headers["x-forwarded-for"]);
+    const xff = forwarded ? normalizeIpAddress(forwarded.split(",")[0]?.trim()) : undefined;
+    if (xff) return xff;
+  }
+
+  return socketIp ?? "anonymous";
+}
+
 export function deriveAuthClientMetadata(input: {
   readonly request: HttpServerRequest.HttpServerRequest;
   readonly label?: string;
