@@ -4,6 +4,7 @@ import { ConfigProvider, Effect, Option } from "effect";
 
 import {
   resolveBuildOptions,
+  resolveDesktopAppId,
   resolveDesktopBuildIconAssets,
   resolveDesktopProductName,
   resolveDesktopUpdateChannel,
@@ -21,6 +22,14 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   it("switches desktop packaging product names to nightly for nightly builds", () => {
     assert.equal(resolveDesktopProductName("0.0.17"), "V3 Code");
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "V3 Code (Nightly)");
+  });
+
+  it("uses a distinct desktop app id for nightly builds", () => {
+    assert.equal(resolveDesktopAppId("0.0.17"), "com.agaminggod.v3code");
+    assert.equal(
+      resolveDesktopAppId("0.0.17-nightly.20260413.42"),
+      "com.agaminggod.v3code.nightly",
+    );
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {

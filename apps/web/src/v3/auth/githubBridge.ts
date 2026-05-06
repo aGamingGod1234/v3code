@@ -4,6 +4,7 @@
 
 import type {
   GitHubAuthStatus,
+  GitHubDeviceFlowClientConfig,
   GitHubDeviceFlowStart,
   GitHubDeviceFlowStatus,
   GitHubTokenValidation,
@@ -25,6 +26,11 @@ export const isGitHubBridgeAvailable = (): boolean =>
 export const setClientIdOverride = async (clientId: string | null): Promise<void> => {
   await requireBridge().setClientIdOverride({ clientId });
 };
+
+export const getGitHubClientConfig = async (
+  clientIdOverride?: string | null,
+): Promise<GitHubDeviceFlowClientConfig> =>
+  requireBridge().getClientConfig({ clientIdOverride: clientIdOverride ?? null });
 
 export const startDeviceFlow = async (input: {
   readonly scopes: ReadonlyArray<string>;

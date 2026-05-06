@@ -393,7 +393,7 @@ export const getSharedV3GoogleAuthFlow = (): V3GoogleAuthFlow => {
     // require it on the token exchange even with PKCE; the factory builds
     // a flow without it if the bundle wasn't compiled with credentials.
     const { EMBEDDED_GOOGLE_CLIENT_SECRET } =
-      require("./embeddedAuthConfig.example.ts") as typeof import("./embeddedAuthConfig.example.ts");
+      require("./embeddedAuthConfig.ts") as typeof import("./embeddedAuthConfig.ts");
     sharedFlow = createV3GoogleAuthFlow({
       openExternal: (url) => shell.openExternal(url),
       fetch: globalThis.fetch.bind(globalThis),

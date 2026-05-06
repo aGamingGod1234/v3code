@@ -17,13 +17,14 @@ export class AcpProcessExitedError extends Schema.TaggedErrorClass<AcpProcessExi
   "AcpProcessExitedError",
   {
     code: Schema.optional(Schema.Number),
+    stderr: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message() {
-    return this.code === undefined
-      ? "ACP process exited"
-      : `ACP process exited with code ${this.code}`;
+    const base =
+      this.code === undefined ? "ACP process exited" : `ACP process exited with code ${this.code}`;
+    return this.stderr ? `${base}: ${this.stderr}` : base;
   }
 }
 

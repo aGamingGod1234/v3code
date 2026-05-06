@@ -12,6 +12,7 @@ import { QueryClient, useQueryClient } from "@tanstack/react-query";
 
 import { APP_DISPLAY_NAME } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
+import { AutoFallbackCoordinator } from "../components/AutoFallbackCoordinator";
 import { ConfigureServerBanner } from "../components/chat/ConfigureServerBanner";
 import { CommandPalette } from "../components/CommandPalette";
 import {
@@ -109,6 +110,7 @@ function RootRouteView() {
         <MeshStateBootstrap />
         <EnvironmentConnectionManagerBootstrap />
         <EventRouter />
+        <AutoFallbackCoordinator />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
         <WebSocketConnectionSurface>

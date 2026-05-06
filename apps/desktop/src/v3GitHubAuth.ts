@@ -25,14 +25,17 @@ import { app, ipcMain, safeStorage } from "electron";
 import type {
   GitHubAuthBootstrapState,
   GitHubAuthStatus,
+  GitHubDeviceFlowClientConfig,
   GitHubDeviceFlowStart,
   GitHubDeviceFlowState,
   GitHubDeviceFlowStatus,
   GitHubTokenValidation,
 } from "@v3tools/contracts";
+import { EMBEDDED_GITHUB_CLIENT_ID } from "./embeddedAuthConfig.ts";
 
 export const V3_GITHUB_AUTH_CHANNELS = {
   SET_CLIENT_ID_OVERRIDE: "desktop:v3-github-set-client-id-override",
+  GET_CLIENT_CONFIG: "desktop:v3-github-get-client-config",
   START_DEVICE_FLOW: "desktop:v3-github-start-device-flow",
   GET_DEVICE_FLOW_STATUS: "desktop:v3-github-get-device-flow-status",
   CANCEL_DEVICE_FLOW: "desktop:v3-github-cancel-device-flow",
@@ -110,7 +113,11 @@ interface MainState {
 }
 
 const state: MainState = {
-  buildTimeClientId: process.env.V3CODE_GITHUB_PUBLIC_CLIENT_ID || null,
+  buildTimeClientId:
+    process.env.V3CODE_GITHUB_PUBLIC_CLIENT_ID ||
+    process.env.V3CODE_GITHUB_CLIENT_ID ||
+    EMBEDDED_GITHUB_CLIENT_ID ||
+    null,
   rendererClientIdOverride: null,
   inFlight: new Map(),
   cachedStatus: null,
@@ -219,10 +226,25 @@ const refreshCachedStatus = async (): Promise<GitHubAuthStatus> => {
 // --- Client ID resolution -------------------------------------------------
 
 const resolveClientId = (override?: string | null): string | null => {
-  if (typeof override === "string" && override.trim().length > 0) return override.trim();
-  if (state.rendererClientIdOverride) return state.rendererClientIdOverride;
-  if (state.buildTimeClientId) return state.buildTimeClientId;
-  return null;
+  return resolveClientIdWithSource(override).clientId;
+};
+
+const resolveClientIdWithSource = (
+  override?: string | null,
+): {
+  readonly clientId: string | null;
+  readonly source: GitHubDeviceFlowClientConfig["source"];
+} => {
+  if (typeof override === "string" && override.trim().length > 0) {
+    return { clientId: override.trim(), source: "override" };
+  }
+  if (state.rendererClientIdOverride) {
+    return { clientId: state.rendererClientIdOverride, source: "override" };
+  }
+  if (state.buildTimeClientId) {
+    return { clientId: state.buildTimeClientId, source: "build-time" };
+  }
+  return { clientId: null, source: "missing" };
 };
 
 // --- Device Flow polling --------------------------------------------------
@@ -484,6 +506,16 @@ export const startDeviceFlow = async (input: {
   };
 };
 
+export const getClientConfig = (input?: {
+  readonly clientIdOverride?: string | null;
+}): GitHubDeviceFlowClientConfig => {
+  const resolution = resolveClientIdWithSource(input?.clientIdOverride);
+  return {
+    configured: resolution.clientId !== null,
+    source: resolution.source,
+  };
+};
+
 export const getDeviceFlowStatus = (input: {
   readonly deviceCodeHandle: string;
 }): GitHubDeviceFlowStatus => {
@@ -575,6 +607,13 @@ export const registerV3GitHubAuthIpc = (): void => {
     setClientIdOverride({
       clientId: typeof clientId === "string" || clientId === null ? clientId : null,
     });
+  });
+  ipcMain.handle(V3_GITHUB_AUTH_CHANNELS.GET_CLIENT_CONFIG, async (_event, raw: unknown) => {
+    const clientIdOverride =
+      typeof (raw as { clientIdOverride?: unknown } | null)?.clientIdOverride === "string"
+        ? (raw as { clientIdOverride: string }).clientIdOverride
+        : null;
+    return getClientConfig({ clientIdOverride });
   });
   ipcMain.handle(V3_GITHUB_AUTH_CHANNELS.START_DEVICE_FLOW, async (_event, raw: unknown) => {
     const obj = (raw ?? {}) as { scopes?: unknown; clientIdOverride?: unknown };

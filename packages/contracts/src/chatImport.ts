@@ -11,11 +11,26 @@ import { Schema } from "effect";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 // ---------------------------------------------------------------------------
-// Format
+// Provider and parser status
 // ---------------------------------------------------------------------------
+
+export const ChatImportProvider = Schema.Literals([
+  "codex",
+  "claude",
+  "anthropic-console",
+  "gemini-cli",
+  "cursor",
+  "windsurf",
+  "opencode",
+  "custom",
+]);
+export type ChatImportProvider = typeof ChatImportProvider.Type;
 
 export const ChatImportFormat = Schema.Literals(["codex", "claude", "anthropic-console"]);
 export type ChatImportFormat = typeof ChatImportFormat.Type;
+
+export const ChatImportParserStatus = Schema.Literals(["ready", "unsupported", "unknown"]);
+export type ChatImportParserStatus = typeof ChatImportParserStatus.Type;
 
 // ---------------------------------------------------------------------------
 // Parsed message

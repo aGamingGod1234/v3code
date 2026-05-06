@@ -25,14 +25,19 @@ export function ConfigureServerBanner() {
           {deviceCount} devices are linked to this Google account, but Drive App Data does not yet
           advertise a shared V3 server URL. Finish setup on one device to turn on cross-device sync.
         </AlertDescription>
-        <AlertAction className="flex flex-wrap gap-2">
-          <Button size="xs" onClick={() => void navigate({ to: "/setup" })}>
+        <AlertAction className="gap-2">
+          <Button className="min-w-32" size="xs" onClick={() => void navigate({ to: "/setup" })}>
             Configure server
           </Button>
-          <Button size="xs" variant="outline" onClick={() => dismissForNow()}>
+          <Button className="min-w-32" size="xs" variant="outline" onClick={() => dismissForNow()}>
             Remind me later
           </Button>
-          <Button size="xs" variant="ghost" onClick={() => dismissPermanently()}>
+          <Button
+            className="min-w-32"
+            size="xs"
+            variant="ghost"
+            onClick={() => dismissPermanently()}
+          >
             Keep single-device
           </Button>
         </AlertAction>

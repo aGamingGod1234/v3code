@@ -97,6 +97,13 @@ describe("detectChatImportFormat", () => {
     expect(detectChatImportFormat("")).toBeNull();
     expect(detectChatImportFormat("   \n\n  ")).toBeNull();
   });
+
+  it("does not guess unsupported JSON or JSONL as importable formats", () => {
+    expect(detectChatImportFormat(JSON.stringify([{ id: "not-a-chat" }]))).toBeNull();
+    expect(
+      detectChatImportFormat(`${JSON.stringify({ event: "queued", payload: {} })}\n`),
+    ).toBeNull();
+  });
 });
 
 describe("parseCodexSession", () => {

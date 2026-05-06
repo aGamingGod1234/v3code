@@ -53,7 +53,7 @@ describe("listLocal", () => {
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]?.format).toBe("codex");
     const preview = await __testing.readPreview(sessionId, result.entries[0]!.transcriptId);
-    expect(preview.previewLine).toContain("user_message");
+    expect(preview.previewLine).toContain("Hi");
     __testing.closeSession(sessionId);
   });
 
@@ -73,7 +73,7 @@ describe("listLocal", () => {
     );
     await writeFile(Path.join(home, ".claude", "projects", "myproj", "junk.txt"), "ignored");
     const { sessionId } = __testing.openSession(home);
-    const result = await __testing.listLocal(sessionId, home);
+    const result = await __testing.listLocal(sessionId, home, "claude");
     expect(result.entries.map((entry) => Path.basename(entry.displayPath)).toSorted()).toEqual([
       "s1.jsonl",
       "s2.jsonl",
@@ -84,8 +84,8 @@ describe("listLocal", () => {
 
   it("sorts newest first by modifiedAt", async () => {
     const home = await makeFakeHome();
-    const oldPath = Path.join(home, ".codex", "sessions", "old.jsonl");
-    const newPath = Path.join(home, ".codex", "sessions", "new.jsonl");
+    const oldPath = Path.join(home, ".codex", "sessions", "2026", "01", "01", "old.jsonl");
+    const newPath = Path.join(home, ".codex", "sessions", "2026", "01", "02", "new.jsonl");
     await writeFile(oldPath, "{}\n");
     await writeFile(newPath, "{}\n");
     // Force the older file to look older by stamping its mtime.
@@ -112,7 +112,7 @@ describe("readTranscript", () => {
 
   it("reads a transcript inside ~/.codex/sessions", async () => {
     const home = await makeFakeHome();
-    const transcript = Path.join(home, ".codex", "sessions", "abc.jsonl");
+    const transcript = Path.join(home, ".codex", "sessions", "2026", "04", "26", "abc.jsonl");
     await writeFile(transcript, `{"id":"x"}\n`);
     const { sessionId } = __testing.openSession(home);
     const listing = await __testing.listLocal(sessionId, home);

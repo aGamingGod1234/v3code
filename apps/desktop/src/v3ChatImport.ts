@@ -5,6 +5,7 @@
 // preload bridge.
 
 import { ipcMain } from "electron";
+import type { DesktopTranscriptScanProvider } from "@v3tools/contracts";
 
 import {
   closeSession,
@@ -39,13 +40,50 @@ const requireSessionInput = (raw: unknown): { sessionId: string } => {
   return { sessionId };
 };
 
-const requireScanFolderInput = (raw: unknown): { sessionId: string; folderPath: string } => {
+const isScanProvider = (value: unknown): value is DesktopTranscriptScanProvider =>
+  value === "codex" ||
+  value === "claude" ||
+  value === "anthropic-console" ||
+  value === "gemini-cli" ||
+  value === "cursor" ||
+  value === "windsurf" ||
+  value === "opencode" ||
+  value === "custom";
+
+const readOptionalProvider = (
+  raw: Record<string, unknown>,
+): DesktopTranscriptScanProvider | undefined => {
+  const provider = raw.provider;
+  if (provider === undefined) return undefined;
+  if (!isScanProvider(provider)) {
+    throw new Error("provider must be a supported chat import provider.");
+  }
+  return provider;
+};
+
+const requireListLocalInput = (
+  raw: unknown,
+): { sessionId: string; provider?: DesktopTranscriptScanProvider } => {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("Expected an input object with sessionId.");
+  }
+  const input = raw as Record<string, unknown>;
+  const sessionId = requireString(input.sessionId, "sessionId");
+  const provider = readOptionalProvider(input);
+  return provider === undefined ? { sessionId } : { sessionId, provider };
+};
+
+const requireScanFolderInput = (
+  raw: unknown,
+): { sessionId: string; folderPath: string; provider?: DesktopTranscriptScanProvider } => {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("Expected an input object with sessionId and folderPath.");
   }
-  const sessionId = requireString((raw as { sessionId?: unknown }).sessionId, "sessionId");
-  const folderPath = requireString((raw as { folderPath?: unknown }).folderPath, "folderPath");
-  return { sessionId, folderPath };
+  const input = raw as Record<string, unknown>;
+  const sessionId = requireString(input.sessionId, "sessionId");
+  const folderPath = requireString(input.folderPath, "folderPath");
+  const provider = readOptionalProvider(input);
+  return provider === undefined ? { sessionId, folderPath } : { sessionId, folderPath, provider };
 };
 
 const requireTranscriptInput = (raw: unknown): { sessionId: string; transcriptId: string } => {
@@ -63,12 +101,12 @@ const requireTranscriptInput = (raw: unknown): { sessionId: string; transcriptId
 export const registerV3ChatImportIpc = (): void => {
   ipcMain.handle(V3_CHAT_IMPORT_CHANNELS.OPEN_SESSION, async () => openSession());
   ipcMain.handle(V3_CHAT_IMPORT_CHANNELS.LIST_LOCAL, async (_event, raw: unknown) => {
-    const { sessionId } = requireSessionInput(raw);
-    return listLocal(sessionId);
+    const { sessionId, provider } = requireListLocalInput(raw);
+    return listLocal(sessionId, undefined, provider);
   });
   ipcMain.handle(V3_CHAT_IMPORT_CHANNELS.SCAN_FOLDER, async (_event, raw: unknown) => {
-    const { sessionId, folderPath } = requireScanFolderInput(raw);
-    return scanFolder(sessionId, folderPath);
+    const { sessionId, folderPath, provider } = requireScanFolderInput(raw);
+    return scanFolder(sessionId, folderPath, provider);
   });
   ipcMain.handle(V3_CHAT_IMPORT_CHANNELS.READ_PREVIEW, async (_event, raw: unknown) => {
     const { sessionId, transcriptId } = requireTranscriptInput(raw);

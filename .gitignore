@@ -22,7 +22,7 @@ release.exe/
 apps/web/.playwright
 apps/web/playwright-report
 apps/web/src/components/__screenshots__
-apps/desktop/src/embeddedAuthConfig.ts
+apps/desktop/src/embeddedAuthConfig.local.ts
 .vitest-*
 __screenshots__/
 .tanstack

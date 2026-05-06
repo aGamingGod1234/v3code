@@ -174,7 +174,7 @@ export function GitHubDeviceCodeDialog({
         </DialogHeader>
         <DialogPanel className="space-y-4">
           {startError ? (
-            <div className="rounded-md border border-error/40 bg-error/10 p-3 text-xs text-error-foreground">
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
               {startError}
             </div>
           ) : null}

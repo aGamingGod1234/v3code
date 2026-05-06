@@ -45,6 +45,7 @@ const V3_WIZARD_WRITE_CONFIG_CHANNEL = "desktop:v3-wizard-write-config";
 const V3_WIZARD_GENERATE_KEY_CHANNEL = "desktop:v3-wizard-generate-key";
 const V3_SPAWN_DISCOVERY_GET_OPTIONS_CHANNEL = "desktop:v3-spawn-discovery-get-options";
 const V3_GITHUB_SET_CLIENT_ID_OVERRIDE_CHANNEL = "desktop:v3-github-set-client-id-override";
+const V3_GITHUB_GET_CLIENT_CONFIG_CHANNEL = "desktop:v3-github-get-client-config";
 const V3_GITHUB_START_DEVICE_FLOW_CHANNEL = "desktop:v3-github-start-device-flow";
 const V3_GITHUB_GET_DEVICE_FLOW_STATUS_CHANNEL = "desktop:v3-github-get-device-flow-status";
 const V3_GITHUB_CANCEL_DEVICE_FLOW_CHANNEL = "desktop:v3-github-cancel-device-flow";
@@ -148,6 +149,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   github: {
     setClientIdOverride: (input) =>
       ipcRenderer.invoke(V3_GITHUB_SET_CLIENT_ID_OVERRIDE_CHANNEL, input),
+    getClientConfig: (input) => ipcRenderer.invoke(V3_GITHUB_GET_CLIENT_CONFIG_CHANNEL, input),
     startDeviceFlow: (input) => ipcRenderer.invoke(V3_GITHUB_START_DEVICE_FLOW_CHANNEL, input),
     getDeviceFlowStatus: (input) =>
       ipcRenderer.invoke(V3_GITHUB_GET_DEVICE_FLOW_STATUS_CHANNEL, input),

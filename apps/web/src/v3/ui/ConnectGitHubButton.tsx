@@ -25,12 +25,17 @@ import {
 } from "../auth/connectGitHub";
 import {
   disconnectGitHub as desktopDisconnectGitHub,
+  getGitHubClientConfig as fetchDesktopGitHubClientConfig,
   getGitHubStatus as fetchDesktopGitHubStatus,
   getManualRevokeUrl,
   isGitHubBridgeAvailable,
 } from "../auth/githubBridge";
 import { GitHubDeviceCodeDialog } from "./GitHubDeviceCodeDialog";
-import type { GitHubAuthStatus, GitHubConnectionStatus } from "@v3tools/contracts";
+import type {
+  GitHubAuthStatus,
+  GitHubConnectionStatus,
+  GitHubDeviceFlowClientConfig,
+} from "@v3tools/contracts";
 
 interface ConnectGitHubButtonProps {
   readonly className?: string;
@@ -51,6 +56,8 @@ export function V3ConnectGitHubButton({
   const [config, setConfig] = useState<ConfigSnapshot | null>(null);
   const [status, setStatus] = useState<GitHubConnectionStatus | null>(null);
   const [desktopStatus, setDesktopStatus] = useState<GitHubAuthStatus | null>(null);
+  const [desktopClientConfig, setDesktopClientConfig] =
+    useState<GitHubDeviceFlowClientConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [deviceFlowOpen, setDeviceFlowOpen] = useState(false);
   const desktopFlowAvailable = isGitHubBridgeAvailable();
@@ -72,14 +79,19 @@ export function V3ConnectGitHubButton({
       }
       if (desktopFlowAvailable) {
         try {
-          const next = await fetchDesktopGitHubStatus();
-          setDesktopStatus(next);
+          const [nextStatus, nextConfig] = await Promise.all([
+            fetchDesktopGitHubStatus(),
+            fetchDesktopGitHubClientConfig(clientIdOverride),
+          ]);
+          setDesktopStatus(nextStatus);
+          setDesktopClientConfig(nextConfig);
         } catch {
           setDesktopStatus(null);
+          setDesktopClientConfig(null);
         }
       }
     },
-    [desktopFlowAvailable],
+    [clientIdOverride, desktopFlowAvailable],
   );
 
   useEffect(() => {
@@ -195,6 +207,26 @@ export function V3ConnectGitHubButton({
             >
               <LogOutIcon className="size-3.5" />
             </button>
+          </div>
+        );
+      }
+      if (!desktopClientConfig?.configured) {
+        return (
+          <div
+            className={cn(
+              "flex max-w-sm items-start gap-2 rounded-xl border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-foreground",
+              className,
+            )}
+            title="Set a GitHub OAuth public client ID in Settings > Git, or provide V3CODE_GITHUB_PUBLIC_CLIENT_ID."
+          >
+            <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning-foreground" />
+            <div className="min-w-0">
+              <div className="font-medium">GitHub OAuth Client ID required</div>
+              <div className="text-muted-foreground">
+                Add a public client ID in Settings &gt; Git. V3 will not start the device flow
+                without one.
+              </div>
+            </div>
           </div>
         );
       }

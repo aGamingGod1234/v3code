@@ -560,6 +560,12 @@ export function resolveDesktopProductName(version: string): string {
     : (desktopPackageJson.productName ?? "V3 Code");
 }
 
+export function resolveDesktopAppId(version: string): string {
+  return resolveDesktopUpdateChannel(version) === "nightly"
+    ? "com.agaminggod.v3code.nightly"
+    : "com.agaminggod.v3code";
+}
+
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   platform: typeof BuildPlatform.Type,
   target: string,
@@ -569,7 +575,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   mockUpdateServerPort: number | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: "com.agaminggod.v3code",
+    appId: resolveDesktopAppId(version),
     productName: resolveDesktopProductName(version),
     artifactName: "V3-Code-${version}-${arch}.${ext}",
     directories: {

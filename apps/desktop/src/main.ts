@@ -90,7 +90,7 @@ import {
   EMBEDDED_GITHUB_CLIENT_SECRET,
   EMBEDDED_GOOGLE_CLIENT_ID,
   EMBEDDED_GOOGLE_CLIENT_SECRET,
-} from "./embeddedAuthConfig.example.ts";
+} from "./embeddedAuthConfig.ts";
 
 syncShellEnvironment();
 
@@ -181,9 +181,18 @@ const desktopAppBranding: DesktopAppBranding = resolveDesktopAppBranding({
   appVersion: app.getVersion(),
 });
 const APP_DISPLAY_NAME = desktopAppBranding.displayName;
-const APP_USER_MODEL_ID = isDevelopment ? "com.agaminggod.v3code.dev" : "com.agaminggod.v3code";
-const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "v3code-dev.desktop" : "v3code.desktop";
-const LINUX_WM_CLASS = isDevelopment ? "v3code-dev" : "v3code";
+const isNightlyBuild = desktopAppBranding.stageLabel === "Nightly";
+const APP_USER_MODEL_ID = isDevelopment
+  ? "com.agaminggod.v3code.dev"
+  : isNightlyBuild
+    ? "com.agaminggod.v3code.nightly"
+    : "com.agaminggod.v3code";
+const LINUX_DESKTOP_ENTRY_NAME = isDevelopment
+  ? "v3code-dev.desktop"
+  : isNightlyBuild
+    ? "v3code-nightly.desktop"
+    : "v3code.desktop";
+const LINUX_WM_CLASS = isDevelopment ? "v3code-dev" : isNightlyBuild ? "v3code-nightly" : "v3code";
 const USER_DATA_DIR_NAME = isDevelopment ? "v3code-dev" : "v3code";
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
@@ -1077,6 +1086,8 @@ function resolveResourcePath(fileName: string): string | null {
   const candidates = [
     Path.join(__dirname, "../resources", fileName),
     Path.join(__dirname, "../prod-resources", fileName),
+    Path.join(ROOT_DIR, "apps", "desktop", "resources", fileName),
+    Path.join(ROOT_DIR, "apps", "desktop", "prod-resources", fileName),
     Path.join(process.resourcesPath, "resources", fileName),
     Path.join(process.resourcesPath, fileName),
   ];

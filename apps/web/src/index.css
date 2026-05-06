@@ -138,13 +138,20 @@
 
 :root[data-theme="codex"] {
   --radius: 0.5rem;
-  --primary: oklch(0.62 0.18 145);
-  --ring: oklch(0.62 0.18 145);
+  --primary: oklch(0.31 0.006 250);
+  --primary-foreground: oklch(0.985 0.003 250);
+  --ring: oklch(0.48 0.006 250);
+  --background: oklch(0.985 0.003 250);
+  --app-chrome-background: var(--background);
+  --card: oklch(0.995 0.002 250);
+  --popover: oklch(0.995 0.002 250);
 }
 :root[data-theme="codex"].dark {
-  --primary: oklch(0.7 0.18 145);
-  --ring: oklch(0.7 0.18 145);
+  --primary: oklch(0.86 0.006 250);
+  --primary-foreground: oklch(0.18 0.005 250);
+  --ring: oklch(0.7 0.006 250);
   --background: oklch(0.18 0.005 250);
+  --app-chrome-background: var(--background);
   --card: oklch(0.21 0.005 250);
   --popover: oklch(0.21 0.005 250);
 }
