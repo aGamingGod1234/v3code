@@ -1,3 +1,51 @@
+## [2026-05-07] - Settings Search, GitHub OAuth, Appearance, and Desktop Icon Fixes
+
+### What Was Implemented
+
+- Replaced the Git settings sign-in action with the existing GitHub OAuth redirect/desktop loopback flow instead of the legacy Device Flow dialog.
+- Kept the legacy GitHub public client ID setting in place for development/device-flow fallback use.
+- Built a Windows x64 release installer for `0.0.25-v3.20260507.settings-github-oauth-search`.
+- Added Git LFS tracking for release `.exe` artifacts so the installer can be included without exceeding GitHub's normal blob limit.
+- Added a settings sidebar search bar with cross-section results and Ctrl+F-style match highlighting.
+- Moved settings navigation metadata into a shared settings navigation module so the sidebar and search index use the same route types.
+- Updated the Codex-like appearance preview swatch to match the neutral Codex CSS tokens instead of green.
+- Changed the composer shortcut copy and chips to show Ctrl+Enter only.
+- Loaded desktop window icons through `nativeImage` so runtime windows receive the V3 icon instead of falling back to Electron defaults.
+
+### Files Modified
+
+- `apps/web/src/v3/ui/ConnectGitHubButton.tsx` - switched connection handling to OAuth redirect/desktop loopback and removed Device Flow UI branching.
+- `apps/web/src/components/settings/GitSettings.tsx` - wired GitHub sign-in to the new OAuth button behavior while retaining the legacy client ID setting.
+- `apps/web/src/components/settings/SettingsSidebarNav.tsx` - added the search input, result list, and highlighted result rendering above the General tab.
+- `apps/web/src/components/settings/settingsNavigation.ts` - added shared settings route/navigation metadata.
+- `apps/web/src/components/settings/settingsSearch.ts` - added the cross-section settings search index and ranking logic.
+- `apps/web/src/components/settings/ConfigurationSettings.tsx` - changed the composer shortcut display to Ctrl+Enter.
+- `apps/web/src/themes/themePalettes.ts` - aligned the Codex-like swatch with neutral Codex theme values.
+- `apps/desktop/src/main.ts` - resolved desktop icons as `nativeImage` instances before passing them to BrowserWindow.
+- `scripts/build-desktop-artifact.ts` - preserved the unsigned Windows build fallback that avoids electron-builder's symlink-sensitive winCodeSign extraction path.
+- `.gitattributes` - added Git LFS tracking for release `.exe` artifacts.
+- `release/V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe` - added the new Windows x64 installer artifact through Git LFS.
+- `release/V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe.blockmap` - added the installer blockmap.
+- `release/latest.yml` - added update metadata for the new installer.
+- `PROJECT_LOG.md` - recorded this implementation.
+
+### Assumptions Made (flag these for review)
+
+- The visible GitHub sign-in control should prefer OAuth everywhere and only leave Device Flow settings for legacy/development fallback.
+- The settings search should be a sidebar search index across settings pages, with matching terms highlighted in result titles and descriptions.
+- Runtime BrowserWindow icon assignment is enough to fix the visible desktop/taskbar window icon in the local app.
+
+### Known Issues / Deferred
+
+- Search indexing is static settings metadata, so highly dynamic provider/device names are represented by their setting categories rather than every runtime value.
+- Unsigned Windows installer builds still skip electron-builder executable resource editing because the local non-admin shell cannot extract winCodeSign's Darwin symlinks; a signed/admin release build is still needed to verify embedded executable metadata.
+- Windows may continue to show cached taskbar or pinned shortcut icons until the shortcut/icon cache is refreshed or a freshly built app is installed.
+
+### Suggested Next Steps
+
+- Add a browser-level screenshot pass for the settings sidebar search once the dev server is running.
+- Verify a fresh Windows desktop artifact after `bun run dist:desktop:win:x64`.
+
 ## [2026-05-06] - V3 UI, Import, GitHub, Usage, and Fallback Fixes
 
 ### What Was Implemented

@@ -1,17 +1,11 @@
-// V3 — Connect GitHub button for settings surfaces.
+// V3 GitHub connect control for settings surfaces.
 //
-// Renders states:
-//   * "device-flow available" — desktop bridge + a public client ID is
-//     resolvable; primary "Connect GitHub" button opens the device-code dialog.
-//   * "client-id missing" — desktop bridge present but no client ID has been
-//     set (build-time bundle empty AND Settings → Git override blank);
-//     button text guides the user to fix it.
-//   * "connected" — chip showing the GitHub login + scope list + a
-//     "Disconnect" action.
-//   * "browser redirect path" — when the operator HAS configured server-side
-//     OAuth, fall back to the original /api/auth/github/* redirect flow.
+// The primary path is GitHub OAuth:
+// - desktop uses the Electron bridge to open the user's browser and complete
+//   the loopback OAuth flow;
+// - web uses the server-hosted /api/auth/github/authorize redirect.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangleIcon, GithubIcon, LoaderIcon, LogOutIcon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
@@ -21,25 +15,17 @@ import {
   disconnectGitHub,
   fetchGitHubClientConfig,
   fetchGitHubConnectionStatus,
+  preferDesktopGitHubFlow,
   startConnectGitHub,
+  startConnectGitHubDesktop,
+  V3GitHubConnectError,
 } from "../auth/connectGitHub";
-import {
-  disconnectGitHub as desktopDisconnectGitHub,
-  getGitHubClientConfig as fetchDesktopGitHubClientConfig,
-  getGitHubStatus as fetchDesktopGitHubStatus,
-  getManualRevokeUrl,
-  isGitHubBridgeAvailable,
-} from "../auth/githubBridge";
-import { GitHubDeviceCodeDialog } from "./GitHubDeviceCodeDialog";
-import type {
-  GitHubAuthStatus,
-  GitHubConnectionStatus,
-  GitHubDeviceFlowClientConfig,
-} from "@v3tools/contracts";
+import type { GitHubConnectionStatus } from "@v3tools/contracts";
+
+const DEFAULT_GITHUB_SCOPES: ReadonlyArray<string> = ["repo", "read:user", "user:email"];
 
 interface ConnectGitHubButtonProps {
   readonly className?: string;
-  readonly clientIdOverride?: string | null;
   readonly scopes?: ReadonlyArray<string>;
 }
 
@@ -48,51 +34,31 @@ interface ConfigSnapshot {
   readonly scopes: string;
 }
 
-export function V3ConnectGitHubButton({
-  className,
-  clientIdOverride = null,
-  scopes,
-}: ConnectGitHubButtonProps) {
+export function V3ConnectGitHubButton({ className, scopes }: ConnectGitHubButtonProps) {
   const [config, setConfig] = useState<ConfigSnapshot | null>(null);
   const [status, setStatus] = useState<GitHubConnectionStatus | null>(null);
-  const [desktopStatus, setDesktopStatus] = useState<GitHubAuthStatus | null>(null);
-  const [desktopClientConfig, setDesktopClientConfig] =
-    useState<GitHubDeviceFlowClientConfig | null>(null);
   const [busy, setBusy] = useState(false);
-  const [deviceFlowOpen, setDeviceFlowOpen] = useState(false);
-  const desktopFlowAvailable = isGitHubBridgeAvailable();
-  const requestedScopes = scopes && scopes.length > 0 ? scopes : ["read:user"];
-
-  const refresh = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const [configResult, statusResult] = await Promise.all([
-          fetchGitHubClientConfig(signal),
-          fetchGitHubConnectionStatus(signal).catch(() => null),
-        ]);
-        setConfig({ available: configResult.available, scopes: configResult.scopes });
-        setStatus(statusResult);
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") return;
-        setConfig({ available: false, scopes: "" });
-        setStatus(null);
-      }
-      if (desktopFlowAvailable) {
-        try {
-          const [nextStatus, nextConfig] = await Promise.all([
-            fetchDesktopGitHubStatus(),
-            fetchDesktopGitHubClientConfig(clientIdOverride),
-          ]);
-          setDesktopStatus(nextStatus);
-          setDesktopClientConfig(nextConfig);
-        } catch {
-          setDesktopStatus(null);
-          setDesktopClientConfig(null);
-        }
-      }
-    },
-    [clientIdOverride, desktopFlowAvailable],
+  const desktopOAuthAvailable = preferDesktopGitHubFlow();
+  const requestedScopes = useMemo(
+    () => (scopes && scopes.length > 0 ? scopes : DEFAULT_GITHUB_SCOPES),
+    [scopes],
   );
+  const requestedScopeString = useMemo(() => requestedScopes.join(" "), [requestedScopes]);
+
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const [configResult, statusResult] = await Promise.all([
+        fetchGitHubClientConfig(signal),
+        fetchGitHubConnectionStatus(signal).catch(() => null),
+      ]);
+      setConfig({ available: configResult.available, scopes: configResult.scopes });
+      setStatus(statusResult);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      setConfig({ available: false, scopes: "" });
+      setStatus(null);
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -101,9 +67,37 @@ export function V3ConnectGitHubButton({
   }, [refresh]);
 
   const handleConnect = useCallback(async () => {
-    if (!config?.available) return;
-    startConnectGitHub();
-  }, [config?.available]);
+    setBusy(true);
+    try {
+      if (desktopOAuthAvailable) {
+        const result = await startConnectGitHubDesktop(requestedScopeString);
+        toastManager.add({
+          type: "success",
+          title: "GitHub connected",
+          description: `Connected @${result.username}.`,
+        });
+        await refresh();
+        setBusy(false);
+        return;
+      }
+
+      if (!config?.available) {
+        toastManager.add({
+          type: "error",
+          title: "GitHub sign-in not configured",
+          description:
+            "Set V3CODE_GITHUB_CLIENT_ID and V3CODE_GITHUB_CLIENT_SECRET on the server node.",
+        });
+        setBusy(false);
+        return;
+      }
+
+      startConnectGitHub();
+    } catch (error) {
+      toastManager.add(getConnectErrorToast(error));
+      setBusy(false);
+    }
+  }, [config?.available, desktopOAuthAvailable, refresh, requestedScopeString]);
 
   const handleDisconnect = useCallback(async () => {
     if (!status?.connected) return;
@@ -136,141 +130,7 @@ export function V3ConnectGitHubButton({
         )}
       >
         <GithubIcon className="size-3.5" />
-        <span>Loading GitHub status…</span>
-      </div>
-    );
-  }
-
-  if (!config.available) {
-    if (desktopFlowAvailable) {
-      // Desktop bridge is present — drive the Device Flow path. This works
-      // entirely client-side from the desktop app; no operator config needed.
-      if (desktopStatus?.connected) {
-        return (
-          <div
-            className={cn(
-              "flex flex-wrap items-center gap-2 rounded-xl border bg-background/85 px-3 py-2 text-xs text-foreground",
-              desktopStatus.partial ? "border-warning/35 bg-warning/10" : "border-border/70",
-              className,
-            )}
-            title={
-              desktopStatus.partial
-                ? "Signed in locally — server handoff failed. Repo browsing from this device works; cloud environment handoff is unavailable."
-                : "Connected via GitHub Device Flow."
-            }
-          >
-            {desktopStatus.partial ? (
-              <AlertTriangleIcon className="size-3.5 text-warning-foreground" />
-            ) : null}
-            <GithubIcon className="size-3.5" />
-            <span className="truncate font-medium">
-              {desktopStatus.login ?? "Connected"}
-              {desktopStatus.partial ? " (local-only)" : ""}
-            </span>
-            {desktopStatus.scopes.length > 0 ? (
-              <span className="truncate text-muted-foreground">
-                ({desktopStatus.scopes.join(", ")})
-              </span>
-            ) : null}
-            <button
-              type="button"
-              aria-label="Revoke on GitHub"
-              onClick={() => {
-                void getManualRevokeUrl().then((url) => {
-                  if (window.desktopBridge?.openExternal) {
-                    void window.desktopBridge.openExternal(url);
-                  } else {
-                    window.open(url, "_blank", "noopener");
-                  }
-                });
-              }}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-              title="Open GitHub settings to revoke this app's grant"
-            >
-              <RefreshCwIcon className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              aria-label="Disconnect GitHub"
-              onClick={() => {
-                void desktopDisconnectGitHub()
-                  .then(() => refresh())
-                  .then(() =>
-                    toastManager.add({
-                      type: "success",
-                      title: "Disconnected GitHub",
-                      description: "Local token cleared. Use the link icon to revoke on GitHub.",
-                    }),
-                  );
-              }}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <LogOutIcon className="size-3.5" />
-            </button>
-          </div>
-        );
-      }
-      if (!desktopClientConfig?.configured) {
-        return (
-          <div
-            className={cn(
-              "flex max-w-sm items-start gap-2 rounded-xl border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-foreground",
-              className,
-            )}
-            title="Set a GitHub OAuth public client ID in Settings > Git, or provide V3CODE_GITHUB_PUBLIC_CLIENT_ID."
-          >
-            <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning-foreground" />
-            <div className="min-w-0">
-              <div className="font-medium">GitHub OAuth Client ID required</div>
-              <div className="text-muted-foreground">
-                Add a public client ID in Settings &gt; Git. V3 will not start the device flow
-                without one.
-              </div>
-            </div>
-          </div>
-        );
-      }
-      return (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setDeviceFlowOpen(true)}
-            className={cn("gap-2", className)}
-          >
-            <GithubIcon className="size-3.5" />
-            Connect GitHub
-          </Button>
-          <GitHubDeviceCodeDialog
-            open={deviceFlowOpen}
-            scopes={requestedScopes}
-            clientIdOverride={clientIdOverride}
-            onOpenChange={setDeviceFlowOpen}
-            onSuccess={() => {
-              void refresh();
-              toastManager.add({
-                type: "success",
-                title: "GitHub connected",
-                description: "Sign-in completed via Device Flow.",
-              });
-            }}
-          />
-        </>
-      );
-    }
-    // Web build with no operator config and no desktop bridge — there's no
-    // way to obtain a token here.
-    return (
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground",
-          className,
-        )}
-        title="Operator has not configured V3CODE_GITHUB_CLIENT_ID and V3CODE_GITHUB_CLIENT_SECRET."
-      >
-        <GithubIcon className="size-3.5" />
-        <span>GitHub sign-in not configured</span>
+        <span>Loading GitHub status...</span>
       </div>
     );
   }
@@ -351,6 +211,21 @@ export function V3ConnectGitHubButton({
     );
   }
 
+  if (!desktopOAuthAvailable && !config.available) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground",
+          className,
+        )}
+        title="Operator has not configured V3CODE_GITHUB_CLIENT_ID and V3CODE_GITHUB_CLIENT_SECRET."
+      >
+        <GithubIcon className="size-3.5" />
+        <span>GitHub sign-in not configured</span>
+      </div>
+    );
+  }
+
   return (
     <Button
       type="button"
@@ -367,7 +242,33 @@ export function V3ConnectGitHubButton({
       ) : (
         <GithubIcon className="size-3.5" />
       )}
-      {busy ? "Waiting for browser…" : "Connect GitHub"}
+      {busy ? "Opening GitHub..." : "Connect GitHub"}
     </Button>
   );
+}
+
+function getConnectErrorToast(error: unknown): Parameters<typeof toastManager.add>[0] {
+  if (error instanceof V3GitHubConnectError) {
+    if (error.code === "user-cancelled") {
+      return {
+        type: "info",
+        title: "GitHub sign-in cancelled",
+        description: "The OAuth browser flow was closed before it completed.",
+      };
+    }
+    if (error.code === "not-configured") {
+      return {
+        type: "error",
+        title: "GitHub OAuth is not configured",
+        description:
+          "The desktop build needs embedded GitHub OAuth client credentials to start sign-in.",
+      };
+    }
+  }
+
+  return {
+    type: "error",
+    title: "Could not connect GitHub",
+    description: error instanceof Error ? error.message : String(error),
+  };
 }

@@ -2124,11 +2124,19 @@ function registerIpcHandlers(): void {
   });
 }
 
-function getIconOption(): { icon: string } | Record<string, never> {
-  if (process.platform === "darwin") return {}; // macOS uses .icns from app bundle
+function resolveWindowIcon(): Electron.NativeImage | null {
+  if (process.platform === "darwin") return null; // macOS uses .icns from app bundle
   const ext = process.platform === "win32" ? "ico" : "png";
   const iconPath = resolveIconPath(ext);
-  return iconPath ? { icon: iconPath } : {};
+  if (!iconPath) return null;
+
+  const icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) {
+    console.warn(`[desktop] Resolved icon is empty: ${iconPath}`);
+    return null;
+  }
+
+  return icon;
 }
 
 function getInitialWindowBackgroundColor(): string {
@@ -2176,7 +2184,7 @@ function syncAllWindowAppearance(): void {
 nativeTheme.on("updated", syncAllWindowAppearance);
 
 function createWindow(): BrowserWindow {
-  const iconOption = getIconOption();
+  const resolvedIcon = resolveWindowIcon();
   const window = new BrowserWindow({
     width: 1100,
     height: 780,
@@ -2185,7 +2193,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: getInitialWindowBackgroundColor(),
-    ...iconOption,
+    ...(resolvedIcon ? { icon: resolvedIcon } : {}),
     title: APP_DISPLAY_NAME,
     ...getWindowTitleBarOptions(),
     webPreferences: {
@@ -2196,13 +2204,11 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  // Belt-and-braces: some Windows icon rendering paths rely on a
-  // post-creation `setIcon` call rather than the constructor option. If
-  // `iconOption` was empty (resolveIconPath returned null), log it so
-  // operators can tell whether the fallback kicked in.
-  if ("icon" in iconOption && typeof iconOption.icon === "string") {
+  // Some Windows icon rendering paths rely on a post-creation `setIcon`
+  // call rather than the constructor option.
+  if (resolvedIcon) {
     try {
-      window.setIcon(iconOption.icon);
+      window.setIcon(resolvedIcon);
     } catch (cause) {
       console.warn("[desktop] setIcon failed:", cause);
     }

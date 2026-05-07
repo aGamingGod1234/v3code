@@ -647,11 +647,11 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     if (signed) {
       winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
     } else {
-      // Electron-builder's Windows rcedit path downloads the legacy
-      // winCodeSign .7z bundle through app-builder, which requires symlink
-      // privileges on Windows because the archive includes Darwin symlinks.
-      // Unsigned local release builds should still produce an installer, so
-      // skip the combined sign/edit step unless signing is explicitly enabled.
+      // Electron-builder's Windows rcedit path downloads the winCodeSign
+      // bundle, whose Darwin symlinks cannot be extracted in non-admin
+      // Windows shells. Unsigned local release builds should still produce
+      // an installer, so skip the combined sign/edit step unless signing is
+      // explicitly enabled.
       winConfig.signAndEditExecutable = false;
     }
     buildConfig.win = winConfig;

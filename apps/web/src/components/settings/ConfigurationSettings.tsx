@@ -439,7 +439,7 @@ export function ConfigurationSettings() {
         <SettingsToggle
           checked={settings.requireCtrlEnter}
           label="Guard long prompt sends"
-          description="Enter sends short single-line prompts. Ctrl+Enter or Cmd+Enter sends multiline and long prompts."
+          description="Enter sends short single-line prompts. Ctrl+Enter sends multiline and long prompts."
           onChange={(checked) => updateSettings({ requireCtrlEnter: checked })}
         >
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
@@ -449,9 +449,6 @@ export function ConfigurationSettings() {
             <span className="text-muted-foreground">+</span>
             <KeyboardChip>Enter</KeyboardChip>
             <span className="text-muted-foreground">long prompts</span>
-            <KeyboardChip>Cmd</KeyboardChip>
-            <span className="text-muted-foreground">+</span>
-            <KeyboardChip>Enter</KeyboardChip>
           </div>
         </SettingsToggle>
       </Section>
