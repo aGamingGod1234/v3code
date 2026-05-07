@@ -1,20 +1,29 @@
-// ImportChatDialog — three ways to ingest a chat transcript:
-//   1. Scan local: enumerate ~/.codex/sessions and ~/.claude/projects
-//      via the desktop bridge, pick a file, parse + send to the server
-//      for skill/MCP resolution. Desktop only.
-//   2. Upload file: pick a transcript via <input type="file">, parse it,
-//      send to server. Works on web + desktop.
-//   3. Paste JSON: drop a transcript directly into a textarea and
-//      auto-detect format.
-//
-// In every flow, the parser runs in the renderer (pure, lives in
-// @v3tools/shared/chatImport), and the server call is mesh.importChat
-// which today returns skill/MCP resolution + a message-count preview.
-// Persistence as a real orchestration thread is a follow-up — for now,
-// the dialog surfaces what would be enabled and lets the user copy
-// missing IDs to clipboard for manual install.
+// ImportChatDialog - ingest a provider-specific transcript into V3.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { scopeThreadRef } from "@v3tools/client-runtime";
+import {
+  CommandId,
+  ThreadId,
+  type ChatImportFormat,
+  type DesktopTranscriptEntry,
+  type DesktopTranscriptListing,
+  type DesktopTranscriptScanProvider,
+  type DesktopTranscriptScannedRoot,
+  type EnvironmentId,
+  type MeshImportChatResult,
+  type ParsedChat,
+} from "@v3tools/contracts";
+import { parseChatImport } from "@v3tools/shared/chatImport";
 import {
   AlertCircleIcon,
   CheckCircle2Icon,
@@ -24,22 +33,11 @@ import {
   LoaderIcon,
   UploadCloudIcon,
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
-import { scopeThreadRef } from "@v3tools/client-runtime";
-import {
-  CommandId,
-  ThreadId,
-  type ChatImportFormat,
-  type DesktopTranscriptEntry,
-  type DesktopTranscriptListing,
-  type DesktopTranscriptScannedRoot,
-  type EnvironmentId,
-  type MeshImportChatResult,
-  type ParsedChat,
-} from "@v3tools/contracts";
-import { parseChatImport } from "@v3tools/shared/chatImport";
 import { useShallow } from "zustand/react/shallow";
 
+import { getPrimaryEnvironmentConnection } from "../../environments/runtime";
+import { selectProjectsForEnvironment, useStore } from "../../store";
+import { buildThreadRouteParams } from "../../threadRoutes";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import {
@@ -54,9 +52,6 @@ import {
 } from "../ui/dialog";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
-import { getPrimaryEnvironmentConnection } from "../../environments/runtime";
-import { selectProjectsForEnvironment, useStore } from "../../store";
-import { buildThreadRouteParams } from "../../threadRoutes";
 
 type Mode = "scan" | "upload" | "paste";
 
@@ -71,12 +66,36 @@ const FORMAT_LABEL: Record<ChatImportFormat, string> = {
   "anthropic-console": "Anthropic Console",
 };
 
+function isChatImportFormat(format: DesktopTranscriptEntry["format"]): format is ChatImportFormat {
+  return format === "codex" || format === "claude" || format === "anthropic-console";
+}
+
 const ENTRY_FORMAT_LABEL: Record<DesktopTranscriptEntry["format"], string> = {
   codex: "Codex",
   claude: "Claude Code",
   "anthropic-console": "Anthropic Console",
+  "gemini-cli": "Gemini CLI",
+  cursor: "Cursor",
+  windsurf: "Windsurf",
+  opencode: "OpenCode",
+  custom: "Custom",
   unknown: "Unknown",
 };
+
+const SCAN_PROVIDERS: ReadonlyArray<{
+  readonly id: DesktopTranscriptScanProvider;
+  readonly label: string;
+  readonly description: string;
+}> = [
+  { id: "codex", label: "Codex", description: "~/.codex/sessions" },
+  { id: "claude", label: "Claude", description: "~/.claude/projects" },
+  { id: "anthropic-console", label: "Anthropic", description: "JSON exports" },
+  { id: "gemini-cli", label: "Gemini CLI", description: "recognized, parser pending" },
+  { id: "cursor", label: "Cursor", description: "recognized, parser pending" },
+  { id: "windsurf", label: "Windsurf", description: "recognized, parser pending" },
+  { id: "opencode", label: "OpenCode", description: "recognized, parser pending" },
+  { id: "custom", label: "Custom", description: "manual folder" },
+];
 
 const PAGE_SIZE = 100;
 
@@ -94,6 +113,25 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function parserStatusLabel(entry: DesktopTranscriptEntry): string {
+  switch (entry.parserStatus) {
+    case "ready":
+      return "Importable";
+    case "unsupported":
+      return "Recognized, parser pending";
+    case "unknown":
+      return "Unknown format";
+  }
+}
+
+function modeTabClass(active: boolean): string {
+  return `inline-flex min-h-8 min-w-28 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+    active
+      ? "bg-foreground text-background"
+      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+  }`;
+}
+
 function ModeTabs({
   mode,
   onChange,
@@ -103,18 +141,12 @@ function ModeTabs({
   readonly onChange: (next: Mode) => void;
   readonly hasDesktopBridge: boolean;
 }) {
-  const tabClass = (active: boolean) =>
-    `inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-      active
-        ? "bg-foreground text-background"
-        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-    }`;
   return (
-    <div className="flex items-center gap-1 border-b border-border pb-3">
+    <div className="flex flex-wrap items-center gap-1 border-b border-border pb-3">
       {hasDesktopBridge ? (
         <button
           type="button"
-          className={tabClass(mode === "scan")}
+          className={modeTabClass(mode === "scan")}
           onClick={() => onChange("scan")}
         >
           <FolderSearchIcon className="size-3.5" />
@@ -123,7 +155,7 @@ function ModeTabs({
       ) : null}
       <button
         type="button"
-        className={tabClass(mode === "upload")}
+        className={modeTabClass(mode === "upload")}
         onClick={() => onChange("upload")}
       >
         <UploadCloudIcon className="size-3.5" />
@@ -131,12 +163,46 @@ function ModeTabs({
       </button>
       <button
         type="button"
-        className={tabClass(mode === "paste")}
+        className={modeTabClass(mode === "paste")}
         onClick={() => onChange("paste")}
       >
         <FileTextIcon className="size-3.5" />
         Paste JSON
       </button>
+    </div>
+  );
+}
+
+function ProviderPicker({
+  provider,
+  onChange,
+  disabled,
+}: {
+  readonly provider: DesktopTranscriptScanProvider;
+  readonly onChange: (provider: DesktopTranscriptScanProvider) => void;
+  readonly disabled: boolean;
+}) {
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-4">
+      {SCAN_PROVIDERS.map((option) => {
+        const active = option.id === provider;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(option.id)}
+            className={`min-h-14 rounded-md border px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-wait disabled:opacity-60 ${
+              active
+                ? "border-primary bg-primary/5 text-foreground"
+                : "border-border bg-card/30 text-muted-foreground hover:border-border/70 hover:text-foreground"
+            }`}
+          >
+            <span className="block font-medium">{option.label}</span>
+            <span className="mt-0.5 block truncate text-[10px]">{option.description}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -158,7 +224,7 @@ function ScannedRootsFooter({
           >
             <span className="truncate font-mono">{root.path}</span>
             <span className="shrink-0">
-              {root.existed ? `${root.fileCount} file${root.fileCount === 1 ? "" : "s"}` : "—"}
+              {root.existed ? `${root.fileCount} file${root.fileCount === 1 ? "" : "s"}` : "-"}
               {root.truncated ? " (truncated)" : ""}
             </span>
           </li>
@@ -176,6 +242,7 @@ function ScanLocalTab({
   const bridge = window.desktopBridge?.chatImport;
   const localBridge = window.desktopBridge;
   const sessionRef = useRef<string | null>(null);
+  const [provider, setProvider] = useState<DesktopTranscriptScanProvider>("codex");
   const [listing, setListing] = useState<DesktopTranscriptListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [scanningFolder, setScanningFolder] = useState(false);
@@ -194,6 +261,13 @@ function ScanLocalTab({
     return result.sessionId;
   }, [bridge]);
 
+  const resetListing = useCallback(() => {
+    setListing(null);
+    setPageSize(PAGE_SIZE);
+    previewedRef.current = new Set();
+    setPreviewById({});
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!bridge) return;
     setLoading(true);
@@ -201,7 +275,7 @@ function ScanLocalTab({
     try {
       const sessionId = await ensureSession();
       if (!sessionId) return;
-      const result = await bridge.listLocal({ sessionId });
+      const result = await bridge.listLocal({ sessionId, provider });
       setListing(result);
       setPageSize(PAGE_SIZE);
       previewedRef.current = new Set();
@@ -210,11 +284,10 @@ function ScanLocalTab({
       const message = cause instanceof Error ? cause.message : "Could not list transcripts.";
       if (message === "session-expired") {
         sessionRef.current = null;
-        // Retry once on session expiry — the modal stayed open past the idle window.
         try {
           const newSessionId = await ensureSession();
           if (!newSessionId) return;
-          const result = await bridge.listLocal({ sessionId: newSessionId });
+          const result = await bridge.listLocal({ sessionId: newSessionId, provider });
           setListing(result);
           setPageSize(PAGE_SIZE);
           previewedRef.current = new Set();
@@ -229,7 +302,7 @@ function ScanLocalTab({
     } finally {
       setLoading(false);
     }
-  }, [bridge, ensureSession]);
+  }, [bridge, ensureSession, provider]);
 
   const chooseFolder = useCallback(async () => {
     if (!bridge || !localBridge) return;
@@ -240,20 +313,22 @@ function ScanLocalTab({
       if (!folderPath) return;
       const sessionId = await ensureSession();
       if (!sessionId) return;
-      const result = await bridge.scanFolder({ sessionId, folderPath });
+      const result = await bridge.scanFolder({ sessionId, folderPath, provider });
       setListing(result);
       setPageSize(PAGE_SIZE);
+      previewedRef.current = new Set();
+      setPreviewById({});
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not scan folder.");
     } finally {
       setScanningFolder(false);
     }
-  }, [bridge, ensureSession, localBridge]);
+  }, [bridge, ensureSession, localBridge, provider]);
 
-  // Open a session on mount; close it on unmount.
   useEffect(() => {
     if (!bridge) return;
     let cancelled = false;
+    resetListing();
     void (async () => {
       try {
         await ensureSession();
@@ -267,18 +342,24 @@ function ScanLocalTab({
     })();
     return () => {
       cancelled = true;
+    };
+  }, [bridge, ensureSession, provider, refresh, resetListing]);
+
+  useEffect(() => {
+    return () => {
       const sessionId = sessionRef.current;
       sessionRef.current = null;
       if (sessionId) {
-        void bridge.closeSession({ sessionId }).catch(() => {});
+        void bridge?.closeSession({ sessionId }).catch(() => {});
       }
     };
-    // refresh is stable enough — it depends on ensureSession which depends on bridge
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge]);
 
-  // Lazily fetch previews for visible rows (the first `pageSize` of `entries`).
-  const visibleEntries = listing?.entries.slice(0, pageSize) ?? [];
+  const visibleEntries = useMemo(
+    () => listing?.entries.slice(0, pageSize) ?? [],
+    [listing?.entries, pageSize],
+  );
+
   useEffect(() => {
     if (!bridge) return;
     const sessionId = sessionRef.current;
@@ -295,7 +376,6 @@ function ScanLocalTab({
           if (cancelled) return;
           setPreviewById((current) => ({ ...current, [entry.transcriptId]: result.previewLine }));
         } catch {
-          // Silent — the row falls back to displayPath.
           if (!cancelled) {
             setPreviewById((current) => ({ ...current, [entry.transcriptId]: null }));
           }
@@ -305,7 +385,7 @@ function ScanLocalTab({
     return () => {
       cancelled = true;
     };
-  }, [bridge, listing, pageSize, visibleEntries]);
+  }, [bridge, visibleEntries]);
 
   if (!bridge) {
     return (
@@ -322,12 +402,18 @@ function ScanLocalTab({
   const totalEntries = listing?.entries.length ?? 0;
   const hasMore = totalEntries > pageSize;
   const allEntries = listing?.entries ?? [];
+  const selectedProvider = SCAN_PROVIDERS.find((option) => option.id === provider);
 
   return (
     <div className="space-y-3">
+      <ProviderPicker
+        provider={provider}
+        onChange={setProvider}
+        disabled={loading || scanningFolder || readingId !== null}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          Scans <code>~/.codex/sessions</code> and <code>~/.claude/projects</code>.
+          Scanning {selectedProvider?.label ?? "selected provider"} transcripts only.
         </p>
         <div className="flex items-center gap-1.5">
           {localBridge ? (
@@ -342,7 +428,7 @@ function ScanLocalTab({
               ) : (
                 <FolderOpenIcon className="mr-1 size-3" />
               )}
-              Choose transcript folder…
+              Choose folder
             </Button>
           ) : null}
           <Button size="xs" variant="outline" onClick={() => void refresh()} disabled={loading}>
@@ -362,25 +448,31 @@ function ScanLocalTab({
             <Alert>
               <AlertTitle>No transcripts found</AlertTitle>
               <AlertDescription>
-                The built-in scan didn't find any <code>.jsonl</code> files. Try{" "}
-                <span className="font-medium">Choose transcript folder…</span> to point at the
-                directory holding your transcripts.
+                The {selectedProvider?.label ?? "selected provider"} scan did not find any
+                transcript files. Use Choose folder to point at an archive directory.
               </AlertDescription>
             </Alert>
             <ScannedRootsFooter scannedRoots={listing.scannedRoots} />
           </>
         ) : (
           <>
-            <ul className="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border bg-background">
+            <ul className="max-h-80 space-y-1 overflow-y-auto rounded-md border border-border bg-background">
               {visibleEntries.map((entry) => {
-                const preview = previewById[entry.transcriptId] ?? null;
+                const preview = previewById[entry.transcriptId] ?? entry.summary;
+                const disabled = readingId !== null || entry.parserStatus !== "ready";
                 return (
                   <li key={entry.transcriptId}>
                     <button
                       type="button"
-                      disabled={readingId !== null}
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+                      disabled={disabled}
+                      title={
+                        entry.parserStatus === "ready"
+                          ? "Import transcript"
+                          : "This provider is recognized, but V3 does not have a safe parser for it yet."
+                      }
+                      className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={async () => {
+                        if (entry.parserStatus !== "ready") return;
                         const sessionId = sessionRef.current;
                         if (!sessionId) return;
                         setReadingId(entry.transcriptId);
@@ -401,18 +493,41 @@ function ScanLocalTab({
                         }
                       }}
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium text-foreground">
-                          {preview ?? entry.displayPath}
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {ENTRY_FORMAT_LABEL[entry.provider]}
+                          </span>
+                          <span className="min-w-0 truncate font-medium text-foreground">
+                            {entry.title}
+                          </span>
                         </div>
-                        <div className="truncate text-[10px] text-muted-foreground">
-                          {ENTRY_FORMAT_LABEL[entry.format]} · {formatBytes(entry.bytes)} ·{" "}
-                          {new Date(entry.modifiedAt).toLocaleString()}
+                        {preview ? (
+                          <div className="line-clamp-2 text-[11px] text-muted-foreground">
+                            {preview}
+                          </div>
+                        ) : null}
+                        <div className="truncate font-mono text-[10px] text-muted-foreground">
+                          {entry.displayPath}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {formatBytes(entry.bytes)} - {new Date(entry.modifiedAt).toLocaleString()}
                         </div>
                       </div>
-                      {readingId === entry.transcriptId ? (
-                        <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
-                      ) : null}
+                      <div className="flex min-w-28 flex-col items-end gap-1">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] ${
+                            entry.parserStatus === "ready"
+                              ? "bg-success/10 text-success"
+                              : "bg-warning/10 text-warning"
+                          }`}
+                        >
+                          {parserStatusLabel(entry)}
+                        </span>
+                        {readingId === entry.transcriptId ? (
+                          <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                        ) : null}
+                      </div>
                     </button>
                   </li>
                 );
@@ -442,8 +557,8 @@ function UploadTab({ onParsed }: { readonly onParsed: (source: string, content: 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Pick a <code>.jsonl</code> (Codex or Claude Code) or <code>.json</code> (Anthropic Console)
-        file. Parsing happens locally; only the parsed structure is sent to the server.
+        Pick a .jsonl transcript from Codex or Claude Code, or an Anthropic Console .json export.
+        Parsing happens locally; only the parsed structure is sent to the server.
       </p>
       <input
         type="file"
@@ -475,12 +590,13 @@ function PasteTab({ onParsed }: { readonly onParsed: (source: string, content: s
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Paste the entire transcript file contents below. Format is auto-detected.
+        Paste a full Codex, Claude Code, or Anthropic Console transcript. Unsupported provider
+        formats are rejected instead of guessed.
       </p>
       <Textarea
         value={text}
         onChange={(event) => setText(event.currentTarget.value)}
-        placeholder='{"messages":[{"role":"user","content":"..."}, ...]}  or  one JSON envelope per line'
+        placeholder='{"messages":[{"role":"user","content":"..."}, ...]} or one JSON envelope per line'
         rows={8}
         className="font-mono text-xs"
       />
@@ -514,7 +630,7 @@ function ResolutionPanel({
       toastManager.add({
         type: "error",
         title: "Clipboard unavailable",
-        description: "Copy isn't supported in this browser context.",
+        description: "Copy is not supported in this browser context.",
       });
       return;
     }
@@ -527,7 +643,7 @@ function ResolutionPanel({
         toastManager.add({
           type: "error",
           title: "Copy failed",
-          description: "Couldn't write to clipboard. Copy manually from the list.",
+          description: "Could not write to clipboard. Copy manually from the list.",
         });
       });
   };
@@ -537,8 +653,8 @@ function ResolutionPanel({
       <div>
         <div className="font-medium text-foreground">{pending.parsed.title ?? pending.source}</div>
         <div className="text-muted-foreground">
-          {FORMAT_LABEL[pending.parsed.format]} · {result.importedMessageCount} messages
-          {pending.parsed.sourceModel ? ` · ${pending.parsed.sourceModel}` : ""}
+          {FORMAT_LABEL[pending.parsed.format]} - {result.importedMessageCount} messages
+          {pending.parsed.sourceModel ? ` - ${pending.parsed.sourceModel}` : ""}
         </div>
       </div>
 
@@ -579,7 +695,7 @@ function ResolutionRow({
   onCopy,
 }: {
   readonly title: string;
-  readonly icon: React.ReactNode;
+  readonly icon: ReactNode;
   readonly items: ReadonlyArray<string>;
   readonly onCopy?: () => void;
 }) {
@@ -619,7 +735,7 @@ function ResolutionRow({
   );
 }
 
-export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNode }) {
+export function ImportChatDialog({ trigger }: { readonly trigger: ReactNode }) {
   const [open, setOpen] = useState(false);
   const hasDesktopBridge =
     typeof window !== "undefined" && Boolean(window.desktopBridge?.chatImport);
@@ -630,10 +746,6 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
   const [parseError, setParseError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Pick the first project from the primary environment as the import target.
-  // If the user has multiple projects, they can move the chat afterwards via
-  // the existing "move to project" flow. If there are zero projects, the
-  // dialog warns and disables submit.
   const primaryEnvironmentId = open ? readPrimaryEnvironmentIdForImport() : null;
   const projectsInPrimary = useStore(
     useShallow((state) => selectProjectsForEnvironment(state, primaryEnvironmentId)),
@@ -646,10 +758,10 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
     setParseError(null);
   }, []);
 
-  const handleParsed = useCallback((source: string, content: string) => {
+  const handleParsed = useCallback((source: string, content: string, format?: ChatImportFormat) => {
     setParseError(null);
     setResult(null);
-    const outcome = parseChatImport(content);
+    const outcome = parseChatImport(content, format);
     if (!outcome.ok) {
       setParseError(outcome.error.message);
       setPending(null);
@@ -716,20 +828,32 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
         if (!next) reset();
       }}
     >
-      <DialogTrigger render={trigger as React.ReactElement} />
-      <DialogPopup className="max-w-2xl">
+      <DialogTrigger render={trigger as ReactElement} />
+      <DialogPopup className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Import a chat</DialogTitle>
           <DialogDescription>
-            Bring a Codex CLI, Claude Code, or Anthropic Console transcript into V3. Skills and MCP
-            servers referenced in the transcript that you already have installed will be flagged as
-            enabled — anything missing is surfaced for manual install.
+            Choose one provider at a time. Codex, Claude Code, and Anthropic Console imports are
+            enabled; other recognized providers are shown with parser status instead of being mixed
+            into the same list.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel className="space-y-4">
           <ModeTabs mode={mode} onChange={setMode} hasDesktopBridge={hasDesktopBridge} />
           {mode === "scan" ? (
-            <ScanLocalTab onPicked={(entry, content) => handleParsed(entry.displayPath, content)} />
+            <ScanLocalTab
+              onPicked={(entry, content) => {
+                if (!isChatImportFormat(entry.format)) {
+                  setResult(null);
+                  setPending(null);
+                  setParseError(
+                    "This provider is recognized, but V3 does not have a safe parser for it yet.",
+                  );
+                  return;
+                }
+                handleParsed(entry.displayPath, content, entry.format);
+              }}
+            />
           ) : null}
           {mode === "upload" ? <UploadTab onParsed={handleParsed} /> : null}
           {mode === "paste" ? <PasteTab onParsed={handleParsed} /> : null}
@@ -747,8 +871,8 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
                 {pending.parsed.title ?? pending.source}
               </div>
               <div className="text-muted-foreground">
-                {FORMAT_LABEL[pending.parsed.format]} · {pending.parsed.messages.length} messages ·{" "}
-                {pending.parsed.references.skillIds.length} skills ·{" "}
+                {FORMAT_LABEL[pending.parsed.format]} - {pending.parsed.messages.length} messages -{" "}
+                {pending.parsed.references.skillIds.length} skills -{" "}
                 {pending.parsed.references.mcpServerIds.length} MCPs referenced
               </div>
               {targetProject ? (
@@ -759,7 +883,7 @@ export function ImportChatDialog({ trigger }: { readonly trigger: React.ReactNod
                 <Alert variant="error" className="mt-2">
                   <AlertTitle>No project to import into</AlertTitle>
                   <AlertDescription>
-                    Create a project in V3 first — imported chats need a project to live in.
+                    Create a project in V3 first. Imported chats need a project to live in.
                   </AlertDescription>
                 </Alert>
               )}

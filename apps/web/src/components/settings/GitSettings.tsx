@@ -42,19 +42,16 @@ export function GitSettings() {
             token before any cloud handoff.
           </p>
         </header>
-        <V3ConnectGitHubButton
-          clientIdOverride={useBuiltIn ? null : clientIdInput.trim() || null}
-          scopes={["read:user"]}
-        />
+        <V3ConnectGitHubButton />
       </section>
 
       <section className="space-y-3">
         <header>
           <h3 className="text-sm font-semibold text-foreground">GitHub OAuth Client ID</h3>
           <p className="text-xs text-muted-foreground">
-            GitHub Device Flow needs a public OAuth Client ID. The desktop build can ship one; you
-            can override it here for development or for a self-registered app. No client secret is
-            required for Device Flow.
+            Legacy desktop Device Flow needs a public OAuth Client ID. The main GitHub sign-in
+            button uses the OAuth redirect flow; this setting remains for development builds that
+            still exercise Device Flow.
           </p>
         </header>
         <label className="flex items-start gap-3 rounded-lg border border-border bg-card/30 p-3 text-sm">

@@ -560,6 +560,12 @@ export function resolveDesktopProductName(version: string): string {
     : (desktopPackageJson.productName ?? "V3 Code");
 }
 
+export function resolveDesktopAppId(version: string): string {
+  return resolveDesktopUpdateChannel(version) === "nightly"
+    ? "com.agaminggod.v3code.nightly"
+    : "com.agaminggod.v3code";
+}
+
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   platform: typeof BuildPlatform.Type,
   target: string,
@@ -569,7 +575,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   mockUpdateServerPort: number | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: "com.agaminggod.v3code",
+    appId: resolveDesktopAppId(version),
     productName: resolveDesktopProductName(version),
     artifactName: "V3-Code-${version}-${arch}.${ext}",
     directories: {
@@ -641,11 +647,11 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     if (signed) {
       winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
     } else {
-      // Electron-builder's Windows rcedit path downloads the legacy
-      // winCodeSign .7z bundle through app-builder, which requires symlink
-      // privileges on Windows because the archive includes Darwin symlinks.
-      // Unsigned local release builds should still produce an installer, so
-      // skip the combined sign/edit step unless signing is explicitly enabled.
+      // Electron-builder's Windows rcedit path downloads the winCodeSign
+      // bundle, whose Darwin symlinks cannot be extracted in non-admin
+      // Windows shells. Unsigned local release builds should still produce
+      // an installer, so skip the combined sign/edit step unless signing is
+      // explicitly enabled.
       winConfig.signAndEditExecutable = false;
     }
     buildConfig.win = winConfig;

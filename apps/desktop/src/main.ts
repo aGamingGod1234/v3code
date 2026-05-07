@@ -90,7 +90,7 @@ import {
   EMBEDDED_GITHUB_CLIENT_SECRET,
   EMBEDDED_GOOGLE_CLIENT_ID,
   EMBEDDED_GOOGLE_CLIENT_SECRET,
-} from "./embeddedAuthConfig.example.ts";
+} from "./embeddedAuthConfig.ts";
 
 syncShellEnvironment();
 
@@ -181,9 +181,18 @@ const desktopAppBranding: DesktopAppBranding = resolveDesktopAppBranding({
   appVersion: app.getVersion(),
 });
 const APP_DISPLAY_NAME = desktopAppBranding.displayName;
-const APP_USER_MODEL_ID = isDevelopment ? "com.agaminggod.v3code.dev" : "com.agaminggod.v3code";
-const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "v3code-dev.desktop" : "v3code.desktop";
-const LINUX_WM_CLASS = isDevelopment ? "v3code-dev" : "v3code";
+const isNightlyBuild = desktopAppBranding.stageLabel === "Nightly";
+const APP_USER_MODEL_ID = isDevelopment
+  ? "com.agaminggod.v3code.dev"
+  : isNightlyBuild
+    ? "com.agaminggod.v3code.nightly"
+    : "com.agaminggod.v3code";
+const LINUX_DESKTOP_ENTRY_NAME = isDevelopment
+  ? "v3code-dev.desktop"
+  : isNightlyBuild
+    ? "v3code-nightly.desktop"
+    : "v3code.desktop";
+const LINUX_WM_CLASS = isDevelopment ? "v3code-dev" : isNightlyBuild ? "v3code-nightly" : "v3code";
 const USER_DATA_DIR_NAME = isDevelopment ? "v3code-dev" : "v3code";
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
@@ -1077,6 +1086,8 @@ function resolveResourcePath(fileName: string): string | null {
   const candidates = [
     Path.join(__dirname, "../resources", fileName),
     Path.join(__dirname, "../prod-resources", fileName),
+    Path.join(ROOT_DIR, "apps", "desktop", "resources", fileName),
+    Path.join(ROOT_DIR, "apps", "desktop", "prod-resources", fileName),
     Path.join(process.resourcesPath, "resources", fileName),
     Path.join(process.resourcesPath, fileName),
   ];
@@ -2113,11 +2124,19 @@ function registerIpcHandlers(): void {
   });
 }
 
-function getIconOption(): { icon: string } | Record<string, never> {
-  if (process.platform === "darwin") return {}; // macOS uses .icns from app bundle
+function resolveWindowIcon(): Electron.NativeImage | null {
+  if (process.platform === "darwin") return null; // macOS uses .icns from app bundle
   const ext = process.platform === "win32" ? "ico" : "png";
   const iconPath = resolveIconPath(ext);
-  return iconPath ? { icon: iconPath } : {};
+  if (!iconPath) return null;
+
+  const icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) {
+    console.warn(`[desktop] Resolved icon is empty: ${iconPath}`);
+    return null;
+  }
+
+  return icon;
 }
 
 function getInitialWindowBackgroundColor(): string {
@@ -2165,7 +2184,7 @@ function syncAllWindowAppearance(): void {
 nativeTheme.on("updated", syncAllWindowAppearance);
 
 function createWindow(): BrowserWindow {
-  const iconOption = getIconOption();
+  const resolvedIcon = resolveWindowIcon();
   const window = new BrowserWindow({
     width: 1100,
     height: 780,
@@ -2174,7 +2193,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: getInitialWindowBackgroundColor(),
-    ...iconOption,
+    ...(resolvedIcon ? { icon: resolvedIcon } : {}),
     title: APP_DISPLAY_NAME,
     ...getWindowTitleBarOptions(),
     webPreferences: {
@@ -2185,13 +2204,11 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  // Belt-and-braces: some Windows icon rendering paths rely on a
-  // post-creation `setIcon` call rather than the constructor option. If
-  // `iconOption` was empty (resolveIconPath returned null), log it so
-  // operators can tell whether the fallback kicked in.
-  if ("icon" in iconOption && typeof iconOption.icon === "string") {
+  // Some Windows icon rendering paths rely on a post-creation `setIcon`
+  // call rather than the constructor option.
+  if (resolvedIcon) {
     try {
-      window.setIcon(iconOption.icon);
+      window.setIcon(resolvedIcon);
     } catch (cause) {
       console.warn("[desktop] setIcon failed:", cause);
     }

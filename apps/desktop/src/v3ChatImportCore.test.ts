@@ -90,9 +90,10 @@ describe("listLocal — Claude flat layout", () => {
     await seedClaudeProject("C--Users-foo", ["alpha", "beta"]);
     await seedClaudeProject("D--Users-bar", ["gamma"]);
     const { sessionId } = openSession(homeDir);
-    const result = await listLocal(sessionId, homeDir);
+    const result = await listLocal(sessionId, homeDir, "claude");
     const formats = result.entries.map((entry) => entry.format);
     expect(formats.every((format) => format === "claude")).toBe(true);
+    expect(result.entries.every((entry) => entry.parserStatus === "ready")).toBe(true);
     const paths = result.entries.map((entry) => entry.displayPath);
     expect(paths).toHaveLength(3);
     expect(paths.some((path) => path.endsWith("alpha.jsonl"))).toBe(true);
@@ -103,7 +104,7 @@ describe("listLocal — Claude flat layout", () => {
   it("does not recurse into per-project UUID subdirs or memory/", async () => {
     await seedClaudeProject("C--Users-foo", ["alpha"]);
     const { sessionId } = openSession(homeDir);
-    const result = await listLocal(sessionId, homeDir);
+    const result = await listLocal(sessionId, homeDir, "claude");
     expect(result.entries.some((entry) => entry.displayPath.includes("ignored.jsonl"))).toBe(false);
     expect(
       result.entries.some((entry) => entry.displayPath.includes(`${Path.sep}memory${Path.sep}`)),
@@ -141,9 +142,10 @@ describe("listLocal — Codex bounded recursion", () => {
     await seedCodexSession("2026", "04", "29", "rollout-foo.jsonl", `{"a":1}\n`);
     const { sessionId } = openSession(homeDir);
     const result = await listLocal(sessionId, homeDir);
-    expect(result.scannedRoots).toHaveLength(2);
+    expect(result.scannedRoots).toHaveLength(1);
     const codexRoot = result.scannedRoots.find((root) => root.format === "codex");
-    const claudeRoot = result.scannedRoots.find((root) => root.format === "claude");
+    const claudeResult = await listLocal(sessionId, homeDir, "claude");
+    const claudeRoot = claudeResult.scannedRoots.find((root) => root.format === "claude");
     expect(codexRoot?.existed).toBe(true);
     expect(codexRoot?.fileCount).toBe(1);
     expect(claudeRoot?.existed).toBe(false);
@@ -154,7 +156,7 @@ describe("listLocal — Codex bounded recursion", () => {
     const { sessionId } = openSession(homeDir);
     const result = await listLocal(sessionId, homeDir);
     expect(result.entries).toEqual([]);
-    expect(result.scannedRoots).toHaveLength(2);
+    expect(result.scannedRoots).toHaveLength(1);
     expect(result.scannedRoots.every((root) => !root.existed)).toBe(true);
   });
 });
@@ -179,15 +181,47 @@ describe("scanFolder — manual fallback with auto-detect", () => {
   it("detects format per file and adds the folder to the session allowlist", async () => {
     const customRoot = Path.join(homeDir, "my-archive");
     await writeFile(Path.join(customRoot, "exported.jsonl"), `{"role":"user","content":"hi"}`);
-    await writeFile(Path.join(customRoot, "console-export.json"), JSON.stringify({ messages: [] }));
+    await writeFile(
+      Path.join(customRoot, "console-export.json"),
+      JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    );
     const { sessionId } = openSession(homeDir);
-    const result = await scanFolder(sessionId, customRoot);
+    const result = await scanFolder(sessionId, customRoot, "custom");
     expect(result.entries.length).toBeGreaterThanOrEqual(2);
     const formats = new Set(result.entries.map((entry) => entry.format));
     // Auto-detect from path can't tell jsonl from codex/claude without folder context;
     // it falls back to "unknown" for raw paths and "anthropic-console" for .json files.
     expect(formats.has("anthropic-console")).toBe(true);
     expect(result.scannedRoots[0]?.format).toBe("auto");
+  });
+
+  it("does not mark arbitrary Anthropic Console scan JSON as importable", async () => {
+    const downloadsRoot = Path.join(homeDir, "Downloads");
+    await writeFile(
+      Path.join(downloadsRoot, "package-lock.json"),
+      JSON.stringify({ lockfileVersion: 3 }),
+    );
+    const { sessionId } = openSession(homeDir);
+    const result = await listLocal(sessionId, homeDir, "anthropic-console");
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]?.format).toBe("unknown");
+    expect(result.entries[0]?.parserStatus).toBe("unknown");
+    await expect(readTranscript(sessionId, result.entries[0]!.transcriptId)).rejects.toThrowError(
+      /unsupported-provider/,
+    );
+  });
+
+  it("marks unsupported provider-specific scans without allowing import", async () => {
+    const geminiRoot = Path.join(homeDir, ".gemini");
+    await writeFile(Path.join(geminiRoot, "session.jsonl"), `{"type":"message","text":"hi"}`);
+    const { sessionId } = openSession(homeDir);
+    const result = await listLocal(sessionId, homeDir, "gemini-cli");
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]?.provider).toBe("gemini-cli");
+    expect(result.entries[0]?.parserStatus).toBe("unsupported");
+    await expect(readTranscript(sessionId, result.entries[0]!.transcriptId)).rejects.toThrowError(
+      /unsupported-provider/,
+    );
   });
 });
 

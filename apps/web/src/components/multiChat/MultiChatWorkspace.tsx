@@ -171,7 +171,7 @@ function MultiChatToolbar({
   readonly setLayoutMode: (layoutMode: MultiChatLayoutMode) => void;
 }) {
   return (
-    <div className="flex min-h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-2 py-1.5 text-xs sm:px-3">
+    <div className="flex min-h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-2 py-1.5 text-xs sm:px-3 wco:pr-[calc(100vw_-_env(titlebar-area-width)_-_env(titlebar-area-x)_+_1em)]">
       <div className="flex min-w-0 items-center gap-2">
         <span className="hidden items-center gap-1.5 text-muted-foreground sm:inline-flex">
           <MessageSquareIcon className="size-3.5" />

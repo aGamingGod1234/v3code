@@ -1,14 +1,19 @@
-// Configuration settings panel — Codex-style.
+// Configuration settings panel - Codex-style.
 //
 // Phase 1 rule: only render controls that are wired to runtime behaviour.
 // Speed, Language, and Popout-window-hotkey are deferred until they're
 // backed by something real; they're not surfaced here.
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  PROVIDER_DISPLAY_NAMES,
+  type ProviderKind,
+  type SpawnDiscoveryOptions,
+} from "@v3tools/contracts";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
-import { Button } from "../ui/button";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
-import type { SpawnDiscoveryOptions } from "@v3tools/contracts";
+import { Button } from "../ui/button";
 
 const WORK_MODES: ReadonlyArray<{ id: "coding" | "everyday"; label: string; description: string }> =
   [
@@ -67,6 +72,18 @@ const CODE_REVIEW_OPTIONS: ReadonlyArray<{
   { id: "detached", label: "Detached", description: "Open /review in a separate review chat." },
 ];
 
+const FALLBACK_PROVIDER_OPTIONS: ReadonlyArray<ProviderKind> = [
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "opencode",
+];
+
+const FIELD_CLASS =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs/5 outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
+const SEGMENT_BUTTON_CLASS = "min-w-32 justify-center";
+
 export function ConfigurationSettings() {
   const settings = useSettings((s) => ({
     codexRuntime: s.codexRuntime,
@@ -77,6 +94,7 @@ export function ConfigurationSettings() {
     codeReviewStyle: s.codeReviewStyle,
     agentEnvironment: s.agentEnvironment,
     terminalShell: s.terminalShell,
+    autoFallback: s.autoFallback,
   }));
   const { updateSettings } = useUpdateSettings();
   const [discovery, setDiscovery] = useState<SpawnDiscoveryOptions | null>(null);
@@ -133,7 +151,7 @@ export function ConfigurationSettings() {
                   },
                 })
               }
-              className="h-8 w-full rounded-md border border-border bg-background px-2"
+              className={FIELD_CLASS}
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -154,7 +172,7 @@ export function ConfigurationSettings() {
                   },
                 })
               }
-              className="h-8 w-full rounded-md border border-border bg-background px-2"
+              className={FIELD_CLASS}
             >
               <option value="untrusted">Untrusted</option>
               <option value="on-request">On request</option>
@@ -175,58 +193,50 @@ export function ConfigurationSettings() {
                   },
                 })
               }
-              className="h-8 w-full rounded-md border border-border bg-background px-2"
+              className={FIELD_CLASS}
             >
               <option value="read-only">Read only</option>
               <option value="workspace-write">Workspace write</option>
               <option value="danger-full-access">Full access</option>
             </select>
           </label>
-          <label className="flex items-center gap-2 rounded-lg border border-border bg-card/30 p-3 text-xs text-foreground">
-            <input
-              type="checkbox"
-              checked={settings.codexRuntime.workspaceWriteNetwork}
-              onChange={(event) =>
-                updateSettings({
-                  codexRuntime: {
-                    ...settings.codexRuntime,
-                    workspaceWriteNetwork: event.currentTarget.checked,
-                  },
-                })
-              }
-            />
-            Allow network in workspace-write mode
-          </label>
-          <label className="flex items-center gap-2 rounded-lg border border-border bg-card/30 p-3 text-xs text-foreground">
-            <input
-              type="checkbox"
-              checked={settings.codexRuntime.planModeByDefault}
-              onChange={(event) =>
-                updateSettings({
-                  codexRuntime: {
-                    ...settings.codexRuntime,
-                    planModeByDefault: event.currentTarget.checked,
-                  },
-                })
-              }
-            />
-            Start new complex tasks in plan mode
-          </label>
-          <label className="flex items-center gap-2 rounded-lg border border-border bg-card/30 p-3 text-xs text-foreground sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={settings.codexRuntime.webSearchEnabled}
-              onChange={(event) =>
-                updateSettings({
-                  codexRuntime: {
-                    ...settings.codexRuntime,
-                    webSearchEnabled: event.currentTarget.checked,
-                  },
-                })
-              }
-            />
-            Allow web search when current information is required
-          </label>
+          <SettingsToggle
+            checked={settings.codexRuntime.workspaceWriteNetwork}
+            label="Allow network in workspace-write mode"
+            onChange={(checked) =>
+              updateSettings({
+                codexRuntime: {
+                  ...settings.codexRuntime,
+                  workspaceWriteNetwork: checked,
+                },
+              })
+            }
+          />
+          <SettingsToggle
+            checked={settings.codexRuntime.planModeByDefault}
+            label="Start new complex tasks in plan mode"
+            onChange={(checked) =>
+              updateSettings({
+                codexRuntime: {
+                  ...settings.codexRuntime,
+                  planModeByDefault: checked,
+                },
+              })
+            }
+          />
+          <SettingsToggle
+            checked={settings.codexRuntime.webSearchEnabled}
+            className="sm:col-span-2"
+            label="Allow web search when current information is required"
+            onChange={(checked) =>
+              updateSettings({
+                codexRuntime: {
+                  ...settings.codexRuntime,
+                  webSearchEnabled: checked,
+                },
+              })
+            }
+          />
         </div>
       </Section>
 
@@ -282,7 +292,7 @@ export function ConfigurationSettings() {
         description="Where the agent runs. Only environments this device can actually spawn are listed."
       >
         {!discovery ? (
-          <div className="text-xs text-muted-foreground">Discovering…</div>
+          <div className="text-xs text-muted-foreground">Discovering...</div>
         ) : discovery.agentEnvironments.length === 0 ? (
           <div className="text-xs text-muted-foreground">No spawnable environments detected.</div>
         ) : (
@@ -293,6 +303,7 @@ export function ConfigurationSettings() {
                 type="button"
                 size="sm"
                 variant={settings.agentEnvironment === option.id ? "default" : "outline"}
+                className={SEGMENT_BUTTON_CLASS}
                 onClick={() => updateSettings({ agentEnvironment: option.id })}
               >
                 {option.label}
@@ -307,7 +318,7 @@ export function ConfigurationSettings() {
         description="Only shells found on PATH are listed. Restart any open terminals to pick up the change."
       >
         {!discovery ? (
-          <div className="text-xs text-muted-foreground">Discovering…</div>
+          <div className="text-xs text-muted-foreground">Discovering...</div>
         ) : discovery.terminalShells.length === 0 ? (
           <div className="text-xs text-muted-foreground">No supported shells found on PATH.</div>
         ) : (
@@ -318,6 +329,7 @@ export function ConfigurationSettings() {
                 type="button"
                 size="sm"
                 variant={settings.terminalShell === shell.id ? "default" : "outline"}
+                className={SEGMENT_BUTTON_CLASS}
                 onClick={() => updateSettings({ terminalShell: shell.id })}
                 title={shell.path}
               >
@@ -359,23 +371,86 @@ export function ConfigurationSettings() {
         </div>
       </Section>
 
-      <Section title="Composer" description="Tweaks for how the chat composer handles input.">
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card/30 p-3 text-sm">
-          <input
-            type="checkbox"
-            checked={settings.requireCtrlEnter}
-            onChange={(event) => updateSettings({ requireCtrlEnter: event.currentTarget.checked })}
-            className="mt-1"
+      <Section
+        title="Auto fallback"
+        description="Continue only when a provider reports an explicit usage or rate-limit stop."
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SettingsToggle
+            checked={settings.autoFallback.enabled}
+            label="Continue after usage limits"
+            description="Cancellations, auth failures, and generic errors still stop."
+            onChange={(checked) =>
+              updateSettings({
+                autoFallback: {
+                  ...settings.autoFallback,
+                  enabled: checked,
+                },
+              })
+            }
           />
-          <div>
-            <div className="font-medium text-foreground">
-              Require ⌃/⌘ + Enter to send long prompts
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Multiline prompts need the modifier; single-line prompts still send on Enter.
-            </div>
+          <div className="min-h-20 rounded-lg border border-border bg-card/30 p-3 text-xs">
+            <div className="font-medium text-foreground">Trigger</div>
+            <div className="mt-1 text-muted-foreground">Usage-limit only</div>
           </div>
-        </label>
+          <label className="space-y-1 text-xs">
+            <span className="font-medium text-foreground">Fallback provider</span>
+            <select
+              value={settings.autoFallback.targetProviderKind}
+              onChange={(event) => {
+                const targetProviderKind = event.currentTarget.value as ProviderKind;
+                updateSettings({
+                  autoFallback: {
+                    ...settings.autoFallback,
+                    targetProviderKind,
+                    targetModel: DEFAULT_MODEL_BY_PROVIDER[targetProviderKind],
+                  },
+                });
+              }}
+              className={FIELD_CLASS}
+            >
+              {FALLBACK_PROVIDER_OPTIONS.map((provider) => (
+                <option key={provider} value={provider}>
+                  {PROVIDER_DISPLAY_NAMES[provider]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs">
+            <span className="font-medium text-foreground">Fallback model</span>
+            <input
+              value={settings.autoFallback.targetModel}
+              onChange={(event) =>
+                updateSettings({
+                  autoFallback: {
+                    ...settings.autoFallback,
+                    targetModel: event.currentTarget.value,
+                  },
+                })
+              }
+              placeholder={DEFAULT_MODEL_BY_PROVIDER[settings.autoFallback.targetProviderKind]}
+              className={FIELD_CLASS}
+            />
+          </label>
+        </div>
+      </Section>
+
+      <Section title="Composer" description="Tweaks for how the chat composer handles input.">
+        <SettingsToggle
+          checked={settings.requireCtrlEnter}
+          label="Guard long prompt sends"
+          description="Enter sends short single-line prompts. Ctrl+Enter sends multiline and long prompts."
+          onChange={(checked) => updateSettings({ requireCtrlEnter: checked })}
+        >
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+            <KeyboardChip>Enter</KeyboardChip>
+            <span className="text-muted-foreground">short prompts</span>
+            <KeyboardChip>Ctrl</KeyboardChip>
+            <span className="text-muted-foreground">+</span>
+            <KeyboardChip>Enter</KeyboardChip>
+            <span className="text-muted-foreground">long prompts</span>
+          </div>
+        </SettingsToggle>
       </Section>
     </div>
   );
@@ -388,7 +463,7 @@ function Section({
 }: {
   readonly title: string;
   readonly description: string;
-  readonly children: React.ReactNode;
+  readonly children: ReactNode;
 }) {
   return (
     <section className="space-y-3">
@@ -398,6 +473,52 @@ function Section({
       </header>
       <div className="space-y-2">{children}</div>
     </section>
+  );
+}
+
+function SettingsToggle({
+  checked,
+  label,
+  description,
+  className,
+  children,
+  onChange,
+}: {
+  readonly checked: boolean;
+  readonly label: string;
+  readonly description?: string;
+  readonly className?: string;
+  readonly children?: ReactNode;
+  readonly onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-lg border border-border bg-card/30 p-3 text-sm transition-colors hover:border-border/70 ${
+        className ?? ""
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+      />
+      <span className="min-w-0">
+        <span className="block font-medium text-foreground">{label}</span>
+        {description ? (
+          <span className="mt-1 block text-xs text-muted-foreground">{description}</span>
+        ) : null}
+        {children}
+      </span>
+    </label>
+  );
+}
+
+function KeyboardChip({ children }: { readonly children: ReactNode }) {
+  return (
+    <kbd className="inline-flex h-6 min-w-9 items-center justify-center rounded-md border border-border bg-background px-2 font-mono text-[11px] font-medium text-foreground shadow-xs">
+      {children}
+    </kbd>
   );
 }
 
@@ -416,7 +537,7 @@ function RadioCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex flex-col gap-1 rounded-lg border-2 p-3 text-left transition-colors ${
+      className={`flex min-h-24 flex-col gap-1 rounded-lg border-2 p-3 text-left transition-colors ${
         active ? "border-primary bg-primary/5" : "border-border bg-card/30 hover:border-border/70"
       }`}
     >

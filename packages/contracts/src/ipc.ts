@@ -57,6 +57,7 @@ import { EditorId } from "./editor.ts";
 import type { GitHubTokenBundle, GoogleTokenBundle } from "./identity.ts";
 import type { MeshForkChatResult } from "./mesh/chat.ts";
 import { ServerSettings, type ClientSettings, type ServerSettingsPatch } from "./settings.ts";
+import type { ChatImportParserStatus, ChatImportProvider } from "./chatImport.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -277,6 +278,9 @@ export interface DesktopBridge {
   };
   github: {
     readonly setClientIdOverride: (input: { clientId: string | null }) => Promise<void>;
+    readonly getClientConfig: (input?: {
+      readonly clientIdOverride?: string | null;
+    }) => Promise<GitHubDeviceFlowClientConfig>;
     readonly startDeviceFlow: (input: {
       readonly scopes: ReadonlyArray<string>;
       readonly clientIdOverride?: string | null;
@@ -318,10 +322,12 @@ export interface DesktopBridge {
     readonly openSession: () => Promise<DesktopChatImportSession>;
     readonly listLocal: (input: {
       readonly sessionId: string;
+      readonly provider?: DesktopTranscriptScanProvider;
     }) => Promise<DesktopTranscriptListing>;
     readonly scanFolder: (input: {
       readonly sessionId: string;
       readonly folderPath: string;
+      readonly provider?: DesktopTranscriptScanProvider;
     }) => Promise<DesktopTranscriptListing>;
     readonly readPreview: (input: {
       readonly sessionId: string;
@@ -339,13 +345,18 @@ export interface DesktopChatImportSession {
   readonly sessionId: string;
 }
 
-export type DesktopTranscriptFormat = "codex" | "claude" | "anthropic-console" | "unknown";
-export type DesktopTranscriptScanFormat = "codex" | "claude" | "auto";
+export type DesktopTranscriptFormat = ChatImportProvider | "unknown";
+export type DesktopTranscriptScanProvider = ChatImportProvider;
+export type DesktopTranscriptScanFormat = DesktopTranscriptScanProvider | "auto";
 
 export interface DesktopTranscriptEntry {
   readonly transcriptId: string;
   readonly displayPath: string;
   readonly format: DesktopTranscriptFormat;
+  readonly provider: ChatImportProvider;
+  readonly parserStatus: ChatImportParserStatus;
+  readonly title: string;
+  readonly summary: string | null;
   readonly modifiedAt: string;
   readonly bytes: number;
 }
@@ -397,6 +408,11 @@ export interface GitHubDeviceFlowStart {
   readonly expiresIn: number;
   readonly interval: number;
   readonly deviceCodeHandle: string;
+}
+
+export interface GitHubDeviceFlowClientConfig {
+  readonly configured: boolean;
+  readonly source: "override" | "build-time" | "missing";
 }
 
 export type GitHubDeviceFlowState =

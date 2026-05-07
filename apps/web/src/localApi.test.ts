@@ -218,6 +218,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     },
     github: {
       setClientIdOverride: async () => undefined,
+      getClientConfig: async () => ({ configured: true, source: "override" }),
       startDeviceFlow: async () => ({
         userCode: "ABCD-1234",
         verificationUri: "https://github.com/login/device",

@@ -1,3 +1,126 @@
+## [2026-05-07] - Settings Search, GitHub OAuth, Appearance, and Desktop Icon Fixes
+
+### What Was Implemented
+
+- Replaced the Git settings sign-in action with the existing GitHub OAuth redirect/desktop loopback flow instead of the legacy Device Flow dialog.
+- Kept the legacy GitHub public client ID setting in place for development/device-flow fallback use.
+- Built a Windows x64 release installer for `0.0.25-v3.20260507.settings-github-oauth-search`.
+- Added Git LFS tracking for release `.exe` artifacts so the installer can be included without exceeding GitHub's normal blob limit.
+- Added a settings sidebar search bar with cross-section results and Ctrl+F-style match highlighting.
+- Moved settings navigation metadata into a shared settings navigation module so the sidebar and search index use the same route types.
+- Updated the Codex-like appearance preview swatch to match the neutral Codex CSS tokens instead of green.
+- Changed the composer shortcut copy and chips to show Ctrl+Enter only.
+- Loaded desktop window icons through `nativeImage` so runtime windows receive the V3 icon instead of falling back to Electron defaults.
+
+### Files Modified
+
+- `apps/web/src/v3/ui/ConnectGitHubButton.tsx` - switched connection handling to OAuth redirect/desktop loopback and removed Device Flow UI branching.
+- `apps/web/src/components/settings/GitSettings.tsx` - wired GitHub sign-in to the new OAuth button behavior while retaining the legacy client ID setting.
+- `apps/web/src/components/settings/SettingsSidebarNav.tsx` - added the search input, result list, and highlighted result rendering above the General tab.
+- `apps/web/src/components/settings/settingsNavigation.ts` - added shared settings route/navigation metadata.
+- `apps/web/src/components/settings/settingsSearch.ts` - added the cross-section settings search index and ranking logic.
+- `apps/web/src/components/settings/ConfigurationSettings.tsx` - changed the composer shortcut display to Ctrl+Enter.
+- `apps/web/src/themes/themePalettes.ts` - aligned the Codex-like swatch with neutral Codex theme values.
+- `apps/desktop/src/main.ts` - resolved desktop icons as `nativeImage` instances before passing them to BrowserWindow.
+- `scripts/build-desktop-artifact.ts` - preserved the unsigned Windows build fallback that avoids electron-builder's symlink-sensitive winCodeSign extraction path.
+- `.gitattributes` - added Git LFS tracking for release `.exe` artifacts.
+- `release/V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe` - added the new Windows x64 installer artifact through Git LFS.
+- `release/V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe.blockmap` - added the installer blockmap.
+- `release/latest.yml` - added update metadata for the new installer.
+- `PROJECT_LOG.md` - recorded this implementation.
+
+### Assumptions Made (flag these for review)
+
+- The visible GitHub sign-in control should prefer OAuth everywhere and only leave Device Flow settings for legacy/development fallback.
+- The settings search should be a sidebar search index across settings pages, with matching terms highlighted in result titles and descriptions.
+- Runtime BrowserWindow icon assignment is enough to fix the visible desktop/taskbar window icon in the local app.
+
+### Known Issues / Deferred
+
+- Search indexing is static settings metadata, so highly dynamic provider/device names are represented by their setting categories rather than every runtime value.
+- Unsigned Windows installer builds still skip electron-builder executable resource editing because the local non-admin shell cannot extract winCodeSign's Darwin symlinks; a signed/admin release build is still needed to verify embedded executable metadata.
+- Windows may continue to show cached taskbar or pinned shortcut icons until the shortcut/icon cache is refreshed or a freshly built app is installed.
+
+### Suggested Next Steps
+
+- Add a browser-level screenshot pass for the settings sidebar search once the dev server is running.
+- Verify a fresh Windows desktop artifact after `bun run dist:desktop:win:x64`.
+
+## [2026-05-06] - V3 UI, Import, GitHub, Usage, and Fallback Fixes
+
+### What Was Implemented
+
+- Pulled latest changes with `git pull --ff-only` and worked on `codex/ui-import-github-fallback-fixes`.
+- Fixed boot-time banner rendering by keeping `ConfigureServerBanner` at the root and removing the duplicate chat-route render.
+- Reworked alert/banner action layout so button groups wrap cleanly instead of squeezing text into narrow columns.
+- Added Windows titlebar-safe right padding to the multi-agent toolbar to prevent top-right controls from overlapping.
+- Updated desktop resource path fallbacks so dev and packaged launches can resolve V3 icon assets instead of falling back to Electron defaults.
+- Replaced green Codex-theme accents with neutral white, gray, and light-black tokens.
+- Normalized settings control sizes for checkbox rows, segmented options, radio cards, select fields, and button groups.
+- Redesigned the composer send shortcut setting with keyboard-style chips and clearer copy for Enter versus Ctrl/Cmd+Enter behavior.
+- Added schema-backed `autoFallback` settings with default-off behavior, fallback provider/model fields, and the `usage-limit` trigger.
+- Added a conservative auto-fallback coordinator that only starts a fallback thread when a provider task errors after explicit usage or rate-limit signals.
+- Reworked chat import scanning from one mixed list into provider-specific scanning for Codex, Claude, Anthropic Console, Gemini CLI, Cursor, Windsurf, OpenCode, and custom folders.
+- Added richer transcript metadata so import rows show provider, title, summary, path, size, date, and parser status instead of raw JSON labels.
+- Marked unsupported provider formats as recognized but not importable instead of mixing them silently into importable results.
+- Fixed GitHub desktop device flow UX by checking for a configured public client ID before opening the device-flow dialog and surfacing setup guidance when it is missing.
+- Added provider-reported rate-limit projection and Usage UI summaries for active runtime duration, token totals, provider snapshots, and exact remaining quota only when providers report it.
+- Smoke-checked the paired web app with Playwright at desktop, tablet, and mobile widths for the app shell, Configuration settings, import dialog, Git settings, and Usage page.
+
+### Files Modified
+
+- `apps/desktop/src/main.ts` - added icon resource path fallbacks for dev and packaged desktop launches.
+- `apps/desktop/src/preload.ts` - exposed GitHub client configuration checks to the web UI.
+- `apps/desktop/src/v3ChatImport.test.ts` - updated desktop import tests for provider-specific scans and formatted previews.
+- `apps/desktop/src/v3ChatImport.ts` - validated provider-specific import IPC requests and passed provider options through safely.
+- `apps/desktop/src/v3ChatImportCore.test.ts` - added coverage for provider-specific scans and unsupported-provider handling.
+- `apps/desktop/src/v3ChatImportCore.ts` - rebuilt local scan/import logic around explicit providers, metadata extraction, and parser status.
+- `apps/desktop/src/v3GitHubAuth.ts` - added typed GitHub client ID configuration detection before device flow startup.
+- `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.test.ts` - covered provider rate-limit activity projection.
+- `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts` - projected provider rate-limit updates into orchestration activity events.
+- `apps/web/src/components/AutoFallbackCoordinator.tsx` - added conservative usage-limit-only fallback thread startup.
+- `apps/web/src/components/chat/ConfigureServerBanner.tsx` - made banner action buttons consistently sized and wrap-friendly.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - replaced mixed transcript scan UI with provider-specific scanning and formatted rows.
+- `apps/web/src/components/multiChat/MultiChatWorkspace.tsx` - added titlebar-safe right padding for window controls.
+- `apps/web/src/components/settings/ConfigurationSettings.tsx` - normalized settings controls, redesigned composer shortcut UI, and added auto fallback settings.
+- `apps/web/src/components/settings/SettingsPanels.browser.tsx` - updated desktop bridge fixture shape for the new GitHub config method.
+- `apps/web/src/components/settings/UsageSettings.tsx` - added active runtime, provider-reported limits, and clearer token usage summaries.
+- `apps/web/src/components/ui/alert.tsx` - changed alert layout so action groups do not squeeze text content.
+- `apps/web/src/index.css` - changed Codex theme accents from green to neutral tones.
+- `apps/web/src/lib/providerUsage.ts` - added shared helpers for provider usage/rate-limit snapshots and explicit limit detection.
+- `apps/web/src/localApi.test.ts` - updated local API fixtures for the new desktop GitHub bridge method.
+- `apps/web/src/routes/__root.tsx` - mounted the root banner and auto-fallback coordinator once.
+- `apps/web/src/routes/_chat.tsx` - removed duplicate boot banner rendering.
+- `apps/web/src/v3/auth/githubBridge.ts` - added desktop GitHub client config lookup.
+- `apps/web/src/v3/ui/ConnectGitHubButton.tsx` - surfaced missing GitHub public client ID setup before device flow.
+- `apps/web/src/v3/ui/GitHubDeviceCodeDialog.tsx` - corrected device-flow error styling tokens.
+- `packages/contracts/src/chatImport.ts` - added provider, parser status, and richer import metadata schemas.
+- `packages/contracts/src/ipc.ts` - extended desktop chat-import and GitHub IPC contracts.
+- `packages/contracts/src/settings.ts` - added `autoFallback` settings schema and defaults.
+- `PROJECT_LOG.md` - recorded this implementation.
+
+### Assumptions Made (flag these for review)
+
+- No GitHub OAuth client ID should be committed; users or builds must provide it through settings, environment, or embedded release config.
+- Gemini CLI, Cursor, Windsurf, OpenCode, and custom transcript roots should be discoverable and clearly labeled now, but remain non-importable until their local transcript formats are safely parsed and tested.
+- Auto fallback should create a new fallback thread rather than mutating or retrying the original failed thread.
+- Provider quota data must not be guessed; exact remaining plan/quota is shown only when the provider reports it.
+- Desktop taskbar icons may still require Windows taskbar cache or pinned shortcut refresh outside the app after the resource path is fixed.
+
+### Known Issues / Deferred
+
+- Full import parsing for Gemini CLI, Cursor, Windsurf, OpenCode, and arbitrary custom transcript formats is deferred until sample formats are available.
+- Exact Codex plan remaining and cross-provider subscription quota cannot be shown unless provider APIs or runtime events report it.
+- `bun run test` was attempted for the full monorepo but timed out locally after 10 minutes; focused changed-area tests passed.
+- Windows installer artifact verification was not run in this pass.
+
+### Suggested Next Steps
+
+- Add safe parsers and fixtures for Gemini CLI, Cursor, Windsurf, and OpenCode once representative local transcript samples are confirmed.
+- Add a server-side fallback policy layer if fallback behavior should work when the web UI is closed.
+- Add provider-specific quota connectors when official APIs expose remaining plan usage.
+- Verify the desktop icon in a fresh Windows install or after clearing pinned shortcut icon cache.
+
 ## [2026-04-29] - Settings, OAuth, Provider-Style UI, and Live Control Repair
 
 ### What Was Implemented
@@ -229,3 +352,68 @@
 ### Suggested Next Steps
 
 - Watch the new `main` push GitHub Actions run and confirm both CI and mobile smoke jobs complete successfully.
+
+## [2026-05-06] - Audit Finding Repairs
+
+### What Was Implemented
+
+- Fixed Cursor ACP Windows tests by spawning the active Bun executable instead of assuming `bun.exe` is directly on PATH.
+- Made chat import detection stricter so unsupported JSON/JSONL is rejected instead of guessed as Codex or Anthropic.
+- Kept local scanned imports provider-bounded by parsing ready scan entries with their scanned provider format.
+- Prevented Anthropic Console local scans from marking arbitrary Downloads JSON/JSONL files as importable.
+- Made auto fallback use the atomic bootstrap `thread.turn.start` path, persist trigger markers, and avoid duplicate visible fallback threads.
+- Scoped auto fallback usage-limit detection to the latest turn's provider rate-limit/runtime-error activity.
+- Made Usage CSV's "include prompt/message text" setting affect exported rows.
+- Fixed Windows titlebar-overlay padding `calc(...)` classes so top-right controls reserve valid space.
+- Added tracked null embedded auth defaults and switched desktop GitHub/Google code away from the example config module.
+- Gave nightly desktop builds a distinct app id and runtime app identity.
+- Preserved ACP child stderr in process-exit errors so spawn failures are diagnosable.
+
+### Files Modified
+
+- `.gitignore` - keeps private local embedded auth overrides ignored while allowing tracked null defaults.
+- `apps/desktop/src/embeddedAuthConfig.ts` - tracked null OAuth defaults; no client IDs or secrets committed.
+- `apps/desktop/src/embeddedAuthConfig.example.ts` - updated credential guidance to avoid tracked secrets.
+- `apps/desktop/src/main.ts` - imports tracked auth defaults and separates nightly app identity.
+- `apps/desktop/src/v3GitHubAuth.ts` - resolves GitHub device-flow client id from the tracked auth config path.
+- `apps/desktop/src/v3GoogleAuthFlow.ts` - resolves Google embedded secret from the tracked auth config path.
+- `apps/desktop/src/v3ChatImportCore.ts` - validates scanned transcript formats and blocks arbitrary Anthropic JSON imports.
+- `apps/desktop/src/v3ChatImportCore.test.ts` - covers provider-specific scan detection and arbitrary JSON rejection.
+- `apps/server/src/git/Layers/CursorTextGeneration.test.ts` - uses `process.execPath` for the Bun mock agent.
+- `apps/server/src/provider/Layers/CursorAdapter.test.ts` - uses `process.execPath` for the Bun mock agent.
+- `apps/server/src/provider/Layers/CursorProvider.test.ts` - uses `process.execPath` for the Bun mock agent.
+- `apps/web/src/components/AutoFallbackCoordinator.tsx` - adds durable trigger markers and atomic fallback thread creation.
+- `apps/web/src/lib/providerUsage.ts` - scopes limit snapshots and fallback signals to the active turn.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - parses scanned transcripts with the scanned provider format.
+- `apps/web/src/components/settings/UsageSettings.tsx` - exports message text when the CSV setting is enabled.
+- `apps/web/src/components/ChatView.tsx` - fixes titlebar-overlay padding calc syntax.
+- `apps/web/src/components/DiffPanelShell.tsx` - fixes titlebar-overlay padding calc syntax.
+- `apps/web/src/components/NoActiveThreadState.tsx` - fixes titlebar-overlay padding calc syntax.
+- `apps/web/src/components/multiChat/MultiChatWorkspace.tsx` - fixes titlebar-overlay padding calc syntax.
+- `apps/web/src/routes/settings.tsx` - fixes titlebar-overlay padding calc syntax.
+- `packages/effect-acp/src/_internal/stdio.ts` - captures child stderr tail for process-exit diagnostics.
+- `packages/effect-acp/src/errors.ts` - includes optional stderr detail in ACP process-exit errors.
+- `packages/shared/src/chatImport/detect.ts` - removes broad fallback guessing and requires recognizable transcript shapes.
+- `packages/shared/src/chatImport/chatImport.test.ts` - covers unsupported JSON/JSONL detection rejection.
+- `scripts/build-desktop-artifact.ts` - emits a distinct nightly app id.
+- `scripts/build-desktop-artifact.test.ts` - covers nightly app id resolution.
+
+### Assumptions Made (flag these for review)
+
+- Provider-specific local scans should list recognized unsupported providers but only allow import for tested parsers.
+- Anthropic Console JSON exports include role-bearing message objects near the start of the file.
+- Persisting auto fallback trigger keys in localStorage is sufficient client-side dedupe until a server-side idempotency contract exists.
+- Stable and nightly should share user data for now; only OS app identity and packaging id were separated.
+
+### Known Issues / Deferred
+
+- `bun lint` still reports 26 pre-existing warnings but exits with 0 errors.
+- GitHub device flow still requires the user, environment, or build pipeline to provide a public OAuth client ID.
+- Exact provider quota remaining is still displayed only when the provider reports it.
+- Full packaged Windows icon/AppUserModelID behavior still needs verification on an installed artifact.
+
+### Suggested Next Steps
+
+- Add server-side idempotency for auto fallback source thread/activity pairs.
+- Add packaged Windows install verification for stable/nightly side-by-side taskbar behavior.
+- Add desktop IPC tests for the GitHub device-flow client-id resolution path.

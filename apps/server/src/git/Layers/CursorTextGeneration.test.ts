@@ -17,7 +17,7 @@ import { ServerSettingsService } from "../../serverSettings.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mockAgentPath = path.join(__dirname, "../../../scripts/acp-mock-agent.ts");
-const bunExe = process.platform === "win32" ? "bun.exe" : "bun";
+const bunExe = process.execPath;
 
 const CursorTextGenerationTestLayer = CursorTextGenerationLive.pipe(
   Layer.provideMerge(ServerSettingsService.layerTest()),

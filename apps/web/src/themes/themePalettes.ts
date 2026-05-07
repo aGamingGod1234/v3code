@@ -35,13 +35,13 @@ export const THEME_SWATCHES: Record<ThemeName, ThemeSwatchSet> = {
     light: {
       background: "oklch(1 0 0)",
       foreground: "oklch(0.27 0.02 250)",
-      primary: "oklch(0.62 0.18 145)",
-      card: "oklch(0.99 0.005 145)",
+      primary: "oklch(0.31 0.006 250)",
+      card: "oklch(0.995 0.002 250)",
     },
     dark: {
       background: "oklch(0.18 0.005 250)",
       foreground: "oklch(0.94 0.005 250)",
-      primary: "oklch(0.7 0.18 145)",
+      primary: "oklch(0.86 0.006 250)",
       card: "oklch(0.21 0.005 250)",
     },
   },

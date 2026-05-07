@@ -10,6 +10,17 @@ import * as AcpError from "../errors.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const STDERR_TAIL_MAX_CHARS = 4000;
+const childStderrTail = new WeakMap<ChildProcessSpawner.ChildProcessHandle, string>();
+
+const appendChildStderr = (
+  handle: ChildProcessSpawner.ChildProcessHandle,
+  chunk: string | Uint8Array,
+): void => {
+  const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
+  const current = childStderrTail.get(handle) ?? "";
+  childStderrTail.set(handle, `${current}${text}`.slice(-STDERR_TAIL_MAX_CHARS));
+};
 
 export const makeChildStdio = (handle: ChildProcessSpawner.ChildProcessHandle) =>
   Stdio.make({
@@ -19,7 +30,10 @@ export const makeChildStdio = (handle: ChildProcessSpawner.ChildProcessHandle) =
       Sink.mapInput(handle.stdin, (chunk: string | Uint8Array) =>
         typeof chunk === "string" ? encoder.encode(chunk) : chunk,
       ),
-    stderr: () => Sink.drain,
+    stderr: () =>
+      Sink.forEach((chunk: string | Uint8Array) =>
+        Effect.sync(() => appendChildStderr(handle, chunk)),
+      ),
   });
 
 export const makeInMemoryStdio = Effect.fn("makeInMemoryStdio")(function* () {
@@ -50,5 +64,11 @@ export const makeTerminationError = (
         detail: "Failed to determine ACP process exit status",
         cause,
       }),
-    onSuccess: (code) => new AcpError.AcpProcessExitedError({ code }),
+    onSuccess: (code) => {
+      const stderr = childStderrTail.get(handle)?.trim();
+      return new AcpError.AcpProcessExitedError({
+        code,
+        ...(stderr ? { stderr } : {}),
+      });
+    },
   });

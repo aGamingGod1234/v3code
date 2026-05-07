@@ -383,6 +383,7 @@ const createDesktopBridgeStub = (overrides?: {
     },
     github: {
       setClientIdOverride: vi.fn().mockResolvedValue(undefined),
+      getClientConfig: vi.fn().mockResolvedValue({ configured: true, source: "override" }),
       startDeviceFlow: vi.fn().mockResolvedValue({
         userCode: "ABCD-1234",
         verificationUri: "https://github.com/login/device",

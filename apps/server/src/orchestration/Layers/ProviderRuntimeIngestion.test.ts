@@ -2700,6 +2700,51 @@ describe("ProviderRuntimeIngestion", () => {
     });
   });
 
+  it("projects provider rate-limit reports into thread activities", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "account.rate-limits.updated",
+      eventId: asEventId("evt-provider-rate-limits"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-rate-limit"),
+      payload: {
+        rateLimits: {
+          primary: {
+            remaining: 0,
+            limit: 100,
+            resetAt: "2026-05-06T10:00:00.000Z",
+          },
+        },
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "provider.rate-limits.updated",
+      ),
+    );
+
+    const activity = thread.activities.find(
+      (candidate: ProviderRuntimeTestActivity) => candidate.kind === "provider.rate-limits.updated",
+    );
+    expect(activity?.summary).toBe("Provider rate limits updated");
+    expect(activity?.payload).toMatchObject({
+      provider: "codex",
+      availability: "provider-reported",
+      rateLimits: {
+        primary: {
+          remaining: 0,
+          limit: 100,
+          resetAt: "2026-05-06T10:00:00.000Z",
+        },
+      },
+    });
+  });
+
   it("projects compacted thread state into context compaction activities", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();

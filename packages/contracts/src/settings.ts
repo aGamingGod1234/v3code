@@ -7,10 +7,11 @@ import {
   CodexReasoningEffort,
   CodexModelOptions,
   CursorModelOptions,
+  DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   OpenCodeModelOptions,
 } from "./model.ts";
-import { ModelSelection } from "./orchestration.ts";
+import { ModelSelection, ProviderKind } from "./orchestration.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -156,6 +157,21 @@ export const UsageSettings = Schema.Struct({
 });
 export type UsageSettings = typeof UsageSettings.Type;
 
+export const AutoFallbackTrigger = Schema.Literal("usage-limit");
+export type AutoFallbackTrigger = typeof AutoFallbackTrigger.Type;
+
+export const AutoFallbackSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  targetProviderKind: ProviderKind.pipe(
+    Schema.withDecodingDefault(Effect.succeed("codex" as const)),
+  ),
+  targetModel: TrimmedString.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_MODEL_BY_PROVIDER.codex)),
+  ),
+  trigger: AutoFallbackTrigger.pipe(Schema.withDecodingDefault(Effect.succeed("usage-limit"))),
+});
+export type AutoFallbackSettings = typeof AutoFallbackSettings.Type;
+
 export const CustomPrompt = Schema.Struct({
   id: TrimmedNonEmptyString,
   name: TrimmedString.pipe(
@@ -221,6 +237,7 @@ export const ClientSettingsSchema = Schema.Struct({
   browserUse: BrowserUseSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   dictation: DictationSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   usage: UsageSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  autoFallback: AutoFallbackSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   workMode: WorkMode.pipe(Schema.withDecodingDefault(Effect.succeed("coding" as const))),
   permissions: PermissionsSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   requireCtrlEnter: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),

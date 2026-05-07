@@ -2935,7 +2935,7 @@ export default function ChatView(props: ChatViewProps) {
             ? cn(
                 "drag-region flex h-[52px] items-center wco:h-[env(titlebar-area-height)]",
                 reserveTitleBarControlInset &&
-                  "wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]",
+                  "wco:pr-[calc(100vw_-_env(titlebar-area-width)_-_env(titlebar-area-x)_+_1em)]",
               )
             : "py-2 sm:py-3",
         )}
