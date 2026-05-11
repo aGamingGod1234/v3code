@@ -12,7 +12,9 @@ import type {
   ProjectId,
   TurnId,
   MessageId,
+  OrchestratorConfig,
   ProviderKind,
+  SessionMode,
   CheckpointRef,
   DeviceId,
   ProviderInteractionMode,
@@ -104,6 +106,8 @@ export interface Thread {
   title: string;
   hostDeviceId: DeviceId | null;
   modelSelection: ModelSelection;
+  sessionMode: SessionMode;
+  orchestratorConfig: OrchestratorConfig | null;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;
@@ -130,6 +134,8 @@ export interface ThreadShell {
   title: string;
   hostDeviceId: DeviceId | null;
   modelSelection: ModelSelection;
+  sessionMode: SessionMode;
+  orchestratorConfig: OrchestratorConfig | null;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
   error: string | null;

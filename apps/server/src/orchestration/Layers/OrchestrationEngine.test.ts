@@ -132,6 +132,8 @@ describe("OrchestrationEngine", () => {
             provider: "codex" as const,
             model: "gpt-5-codex",
           },
+          sessionMode: "single" as const,
+          orchestratorConfig: null,
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "full-access" as const,
           branch: null,

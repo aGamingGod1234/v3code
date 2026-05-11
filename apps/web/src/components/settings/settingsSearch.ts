@@ -185,14 +185,29 @@ export const SETTINGS_SEARCH_ENTRIES: ReadonlyArray<SettingsSearchEntry> = [
   entry(
     "Personalization",
     "/settings/personalization",
-    "Saved prompts",
-    "Create, edit, delete, and manage reusable prompt snippets for chat and coding work.",
+    "Custom prompts",
+    "Create and manage reusable prompt instructions that are appended to the core system instructions.",
   ),
   entry(
     "Personalization",
     "/settings/personalization",
-    "Prompt library",
-    "Custom prompts, prompt text, prompt titles, and reusable instructions.",
+    "Dictation",
+    "Configure voice input availability, speech recognition provider, and dictation hotkey.",
+    ["speech", "voice"],
+  ),
+  entry(
+    "Personalization",
+    "/settings/personalization",
+    "Chat import",
+    "Import existing transcripts from Codex CLI, Claude Code, or Anthropic Console.",
+    ["import", "transcript", "transcripts", "codex", "claude", "anthropic"],
+  ),
+  entry(
+    "Orchestrator",
+    "/settings/orchestrator",
+    "Orchestrator",
+    "Configure orchestrator, implementation, assistant, sub-agent roles, provider routing, model fields, effort, mode, and planning budget.",
+    ["multi-agent", "subagent", "sub-agent", "plan", "delegate"],
   ),
   entry(
     "Providers",
@@ -259,8 +274,8 @@ export const SETTINGS_SEARCH_ENTRIES: ReadonlyArray<SettingsSearchEntry> = [
   entry(
     "Environments",
     "/settings/environments",
-    "Chat import",
-    "Import existing transcripts from Codex CLI, Claude Code, or Anthropic Console. Auto-detect skills and MCP servers.",
+    "V3 connections",
+    "Authorized clients, network access, server node URL override, and remote environment records.",
   ),
   entry(
     "Worktrees",
@@ -269,10 +284,29 @@ export const SETTINGS_SEARCH_ENTRIES: ReadonlyArray<SettingsSearchEntry> = [
     "Manage active repository worktrees, branch state, and worktree cleanup guidance.",
   ),
   entry(
+    "Worktrees",
+    "/settings/worktrees",
+    "Worktree defaults",
+    "Choose default worktree parent folder, naming template, and reuse behaviour.",
+  ),
+  entry(
+    "Worktrees",
+    "/settings/worktrees",
+    "Detected repositories",
+    "Review detected repositories and configure worktree settings for each repository.",
+  ),
+  entry(
     "Browser use",
     "/settings/browser",
     "Browser use",
     "Browser automation settings, local browser control, screenshots, and external browsing preferences.",
+  ),
+  entry(
+    "Browser use",
+    "/settings/browser",
+    "OpenChrome MCP bridge",
+    "Install or repair the local OpenChrome MCP bridge, open the Chrome extension setup, and view bridge status.",
+    ["openchrome", "chrome extension", "browser mcp", "pair token"],
   ),
   entry(
     "Devices",
@@ -285,6 +319,18 @@ export const SETTINGS_SEARCH_ENTRIES: ReadonlyArray<SettingsSearchEntry> = [
     "/settings/usage",
     "Usage",
     "Chats, active threads, context tokens, processed tokens, archived threads, latest turns, active runtime, and limit reports.",
+  ),
+  entry(
+    "Usage",
+    "/settings/usage",
+    "Provider breakdown",
+    "Usage grouped by provider, model, and runtime limits.",
+  ),
+  entry(
+    "Usage",
+    "/settings/usage",
+    "Provider limit snapshots",
+    "Latest provider usage-limit snapshots and reset timing.",
   ),
   entry(
     "Archive",

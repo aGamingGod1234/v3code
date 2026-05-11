@@ -686,6 +686,8 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
       model: "gpt-5.4",
       ...overrides?.modelSelection,
     },
+    sessionMode: "single",
+    orchestratorConfig: null,
     runtimeMode: DEFAULT_RUNTIME_MODE,
     interactionMode: DEFAULT_INTERACTION_MODE,
     session: null,

@@ -10,6 +10,7 @@ import {
   type ProjectId,
   type ProviderApprovalDecision,
   type ServerProvider,
+  type SessionMode,
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type ThreadId,
@@ -135,15 +136,18 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
+import { ChatModelRunStatsStrip } from "./chat/ModelRunStats";
 import { ChatHeader } from "./chat/ChatHeader";
 import { ForkAcceptDialog } from "./chat/ForkAcceptDialog";
 import { requestOpenForkChatDialog } from "./chat/forkChatOpener";
+import { deriveAssistantMessageModelStats, deriveThreadModelRunStats } from "../lib/modelRunStats";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
 import { RemoteHostBanner } from "./chat/RemoteHostBanner";
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
+import { OrchestratedSession } from "./OrchestratedSession";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
@@ -333,6 +337,7 @@ export default function ChatView(props: ChatViewProps) {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [draftSessionMode, setDraftSessionMode] = useState<SessionMode>("single");
   const shouldUsePlanSidebarSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
@@ -451,6 +456,10 @@ export default function ChatView(props: ChatViewProps) {
   const interactionMode =
     composerInteractionMode ?? activeThread?.interactionMode ?? defaultInteractionMode;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
+  const sessionMode = draftSessionMode;
+  useEffect(() => {
+    setDraftSessionMode(activeThread?.sessionMode ?? "single");
+  }, [activeThread?.id, activeThread?.sessionMode]);
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
   const activeThreadId = activeThread?.id ?? null;
@@ -1032,6 +1041,15 @@ export default function ChatView(props: ChatViewProps) {
       deriveTimelineEntries(timelineMessages, activeThread?.proposedPlans ?? [], workLogEntries),
     [activeThread?.proposedPlans, timelineMessages, workLogEntries],
   );
+  const detailedModelSpecsEnabled = settings.usage.detailedModelSpecsEnabled;
+  const modelStatsByAssistantMessageId = useMemo(
+    () => (activeThread ? deriveAssistantMessageModelStats(activeThread) : new Map()),
+    [activeThread],
+  );
+  const activeThreadModelStats = useMemo(
+    () => (activeThread ? deriveThreadModelRunStats(activeThread) : null),
+    [activeThread],
+  );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
   const turnDiffSummaryByAssistantMessageId = useMemo(() => {
@@ -1610,6 +1628,7 @@ export default function ChatView(props: ChatViewProps) {
       threadId: ThreadId;
       createdAt: string;
       modelSelection?: ModelSelection;
+      sessionMode: SessionMode;
       runtimeMode: RuntimeMode;
       interactionMode: ProviderInteractionMode;
     }) => {
@@ -1636,6 +1655,22 @@ export default function ChatView(props: ChatViewProps) {
         });
       }
 
+      if (
+        input.sessionMode !== serverThread.sessionMode ||
+        (input.sessionMode === "orchestrated" &&
+          JSON.stringify(settings.orchestratorConfig) !==
+            JSON.stringify(serverThread.orchestratorConfig))
+      ) {
+        await api.orchestration.dispatchCommand({
+          type: "thread.meta.update",
+          commandId: newCommandId(),
+          threadId: input.threadId,
+          sessionMode: input.sessionMode,
+          orchestratorConfig:
+            input.sessionMode === "orchestrated" ? settings.orchestratorConfig : null,
+        });
+      }
+
       if (input.runtimeMode !== serverThread.runtimeMode) {
         await api.orchestration.dispatchCommand({
           type: "thread.runtime-mode.set",
@@ -1656,7 +1691,7 @@ export default function ChatView(props: ChatViewProps) {
         });
       }
     },
-    [environmentId, serverThread],
+    [environmentId, serverThread, settings.orchestratorConfig],
   );
 
   // Scroll helpers — LegendList handles auto-scroll via maintainScrollAtEnd.
@@ -2083,6 +2118,7 @@ export default function ChatView(props: ChatViewProps) {
       selectedProviderModels: ctxSelectedProviderModels,
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
+      selectedSessionMode: ctxSelectedSessionMode,
     } = sendCtx;
     const promptForSend = promptRef.current;
     const {
@@ -2268,6 +2304,7 @@ export default function ChatView(props: ChatViewProps) {
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
           ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
+          sessionMode: ctxSelectedSessionMode,
           runtimeMode,
           interactionMode,
         });
@@ -2283,6 +2320,11 @@ export default function ChatView(props: ChatViewProps) {
                       projectId: activeProject.id,
                       title,
                       modelSelection: threadCreateModelSelection,
+                      sessionMode: ctxSelectedSessionMode,
+                      orchestratorConfig:
+                        ctxSelectedSessionMode === "orchestrated"
+                          ? settings.orchestratorConfig
+                          : null,
                       runtimeMode,
                       interactionMode,
                       branch: activeThreadBranch,
@@ -2570,6 +2612,7 @@ export default function ChatView(props: ChatViewProps) {
         selectedProviderModels: ctxSelectedProviderModels,
         selectedPromptEffort: ctxSelectedPromptEffort,
         selectedModelSelection: ctxSelectedModelSelection,
+        selectedSessionMode: ctxSelectedSessionMode,
       } = sendCtx;
 
       const threadIdForSend = activeThread.id;
@@ -2609,6 +2652,7 @@ export default function ChatView(props: ChatViewProps) {
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
           modelSelection: ctxSelectedModelSelection,
+          sessionMode: ctxSelectedSessionMode,
           runtimeMode,
           interactionMode: nextInteractionMode,
         });
@@ -2711,6 +2755,7 @@ export default function ChatView(props: ChatViewProps) {
       selectedProviderModels: ctxSelectedProviderModels,
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
+      selectedSessionMode: ctxSelectedSessionMode,
     } = sendCtx;
 
     const createdAt = new Date().toISOString();
@@ -2742,6 +2787,9 @@ export default function ChatView(props: ChatViewProps) {
         projectId: activeProject.id,
         title: nextThreadTitle,
         modelSelection: nextThreadModelSelection,
+        sessionMode: ctxSelectedSessionMode,
+        orchestratorConfig:
+          ctxSelectedSessionMode === "orchestrated" ? settings.orchestratorConfig : null,
         runtimeMode,
         interactionMode: "default",
         branch: activeThreadBranch,
@@ -2816,6 +2864,7 @@ export default function ChatView(props: ChatViewProps) {
     runtimeMode,
     composerRef,
     environmentId,
+    settings.orchestratorConfig,
     settings.codexRuntime.approvalPolicy,
     settings.codexRuntime.sandboxMode,
   ]);
@@ -2994,35 +3043,46 @@ export default function ChatView(props: ChatViewProps) {
           {/* Messages Wrapper */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Messages — LegendList handles virtualization and scrolling internally */}
-            <MessagesTimeline
-              key={activeThread.id}
-              isWorking={isWorking}
-              activeTurnInProgress={isWorking || !latestTurnSettled}
-              activeTurnId={activeLatestTurn?.turnId ?? null}
-              activeTurnStartedAt={activeWorkStartedAt}
-              listRef={legendListRef}
-              timelineEntries={timelineEntries}
-              completionDividerBeforeEntryId={completionDividerBeforeEntryId}
-              completionSummary={completionSummary}
-              turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
-              activeThreadEnvironmentId={activeThread.environmentId}
-              currentDeviceId={currentDeviceId}
-              deviceNameById={deviceNameById}
-              routeThreadKey={routeThreadKey}
-              onOpenTurnDiff={onOpenTurnDiff}
-              revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
-              onRevertUserMessage={onRevertUserMessage}
-              isRevertingCheckpoint={isRevertingCheckpoint}
-              onImageExpand={onExpandTimelineImage}
-              markdownCwd={gitCwd ?? undefined}
-              resolvedTheme={resolvedTheme}
-              timestampFormat={timestampFormat}
-              workspaceRoot={activeWorkspaceRoot}
-              onIsAtEndChange={onIsAtEndChange}
-            />
+            {activeThread.sessionMode === "orchestrated" ? (
+              <OrchestratedSession
+                key={activeThread.id}
+                thread={activeThread}
+                isWorking={isWorking}
+                timestampFormat={timestampFormat}
+              />
+            ) : (
+              <MessagesTimeline
+                key={activeThread.id}
+                isWorking={isWorking}
+                activeTurnInProgress={isWorking || !latestTurnSettled}
+                activeTurnId={activeLatestTurn?.turnId ?? null}
+                activeTurnStartedAt={activeWorkStartedAt}
+                listRef={legendListRef}
+                timelineEntries={timelineEntries}
+                completionDividerBeforeEntryId={completionDividerBeforeEntryId}
+                completionSummary={completionSummary}
+                turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
+                activeThreadEnvironmentId={activeThread.environmentId}
+                currentDeviceId={currentDeviceId}
+                deviceNameById={deviceNameById}
+                routeThreadKey={routeThreadKey}
+                onOpenTurnDiff={onOpenTurnDiff}
+                revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
+                onRevertUserMessage={onRevertUserMessage}
+                isRevertingCheckpoint={isRevertingCheckpoint}
+                onImageExpand={onExpandTimelineImage}
+                markdownCwd={gitCwd ?? undefined}
+                resolvedTheme={resolvedTheme}
+                timestampFormat={timestampFormat}
+                workspaceRoot={activeWorkspaceRoot}
+                onIsAtEndChange={onIsAtEndChange}
+                detailedModelSpecsEnabled={detailedModelSpecsEnabled}
+                modelStatsByAssistantMessageId={modelStatsByAssistantMessageId}
+              />
+            )}
 
             {/* scroll to bottom pill — shown when user has scrolled away from the bottom */}
-            {showScrollToBottom && (
+            {activeThread.sessionMode !== "orchestrated" && showScrollToBottom && (
               <div className="pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5">
                 <button
                   type="button"
@@ -3072,6 +3132,7 @@ export default function ChatView(props: ChatViewProps) {
               planSidebarOpen={planSidebarOpen}
               runtimeMode={runtimeMode}
               interactionMode={interactionMode}
+              sessionMode={sessionMode}
               lockedProvider={lockedProvider}
               providerStatuses={providerStatuses as ServerProvider[]}
               activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
@@ -3096,6 +3157,7 @@ export default function ChatView(props: ChatViewProps) {
                 onChangeActivePendingUserInputCustomAnswer
               }
               onProviderModelSelect={onProviderModelSelect}
+              onSessionModeChange={setDraftSessionMode}
               toggleInteractionMode={toggleInteractionMode}
               handleRuntimeModeChange={handleRuntimeModeChange}
               handleInteractionModeChange={handleInteractionModeChange}
@@ -3131,6 +3193,11 @@ export default function ChatView(props: ChatViewProps) {
                     onEnvironmentChange,
                   }
                 : {})}
+              statsSlot={
+                detailedModelSpecsEnabled && activeThreadModelStats ? (
+                  <ChatModelRunStatsStrip stats={activeThreadModelStats} compact />
+                ) : null
+              }
             />
           )}
           {pullRequestDialogState ? (

@@ -12,6 +12,7 @@ import {
   OpenCodeModelOptions,
 } from "./model.ts";
 import { ModelSelection, ProviderKind } from "./orchestration.ts";
+import { EMPTY_ORCHESTRATOR_CONFIG, OrchestratorConfig } from "./orchestrator-config.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -153,6 +154,7 @@ export type DictationSettings = typeof DictationSettings.Type;
 export const UsageSettings = Schema.Struct({
   retentionDays: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(90))),
   exportCsvIncludesPrompts: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  detailedModelSpecsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   pricingTableUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 export type UsageSettings = typeof UsageSettings.Type;
@@ -333,6 +335,9 @@ export const ServerSettings = Schema.Struct({
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  orchestratorConfig: OrchestratorConfig.pipe(
+    Schema.withDecodingDefault(Effect.succeed(EMPTY_ORCHESTRATOR_CONFIG)),
+  ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -457,5 +462,6 @@ export const ServerSettingsPatch = Schema.Struct({
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
     }),
   ),
+  orchestratorConfig: Schema.optionalKey(OrchestratorConfig),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;

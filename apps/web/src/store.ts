@@ -18,7 +18,7 @@ import type {
   ScopedProjectRef,
   ScopedThreadRef,
 } from "@v3tools/contracts";
-import { ProviderKind } from "@v3tools/contracts";
+import { DEFAULT_SESSION_MODE, ProviderKind } from "@v3tools/contracts";
 import type { ThreadId, TurnId } from "@v3tools/contracts";
 import { Schema } from "effect";
 import { resolveModelSlugForProvider } from "@v3tools/shared/model";
@@ -248,6 +248,8 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     title: thread.title,
     hostDeviceId: thread.hostDeviceId ?? null,
     modelSelection: normalizeModelSelection(thread.modelSelection),
+    sessionMode: thread.sessionMode,
+    orchestratorConfig: thread.orchestratorConfig,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
     session: thread.session ? mapSession(thread.session) : null,
@@ -284,6 +286,8 @@ function mapThreadShell(
     title: thread.title,
     hostDeviceId: thread.hostDeviceId ?? null,
     modelSelection: normalizeModelSelection(thread.modelSelection),
+    sessionMode: thread.sessionMode,
+    orchestratorConfig: thread.orchestratorConfig,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
     error: sanitizeThreadErrorMessage(thread.session?.lastError),
@@ -335,6 +339,8 @@ function toThreadShell(thread: Thread): ThreadShell {
     title: thread.title,
     hostDeviceId: thread.hostDeviceId,
     modelSelection: thread.modelSelection,
+    sessionMode: thread.sessionMode,
+    orchestratorConfig: thread.orchestratorConfig,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
     error: thread.error,
@@ -448,6 +454,8 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
     left.title === right.title &&
     left.hostDeviceId === right.hostDeviceId &&
     left.modelSelection === right.modelSelection &&
+    left.sessionMode === right.sessionMode &&
+    left.orchestratorConfig === right.orchestratorConfig &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&
     left.error === right.error &&
@@ -1289,6 +1297,8 @@ function applyEnvironmentOrchestrationEvent(
           title: event.payload.title,
           hostDeviceId: event.payload.hostDeviceId ?? null,
           modelSelection: event.payload.modelSelection,
+          sessionMode: event.payload.sessionMode ?? DEFAULT_SESSION_MODE,
+          orchestratorConfig: event.payload.orchestratorConfig ?? null,
           runtimeMode: event.payload.runtimeMode,
           interactionMode: event.payload.interactionMode,
           branch: event.payload.branch,
@@ -1335,6 +1345,12 @@ function applyEnvironmentOrchestrationEvent(
           : {}),
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSelection(event.payload.modelSelection) }
+          : {}),
+        ...(event.payload.sessionMode !== undefined
+          ? { sessionMode: event.payload.sessionMode }
+          : {}),
+        ...(event.payload.orchestratorConfig !== undefined
+          ? { orchestratorConfig: event.payload.orchestratorConfig }
           : {}),
         ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
         ...(event.payload.worktreePath !== undefined

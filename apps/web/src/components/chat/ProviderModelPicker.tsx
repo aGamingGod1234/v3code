@@ -1,9 +1,9 @@
-import { type ProviderKind, type ServerProvider } from "@v3tools/contracts";
+import { type ProviderKind, type ServerProvider, type SessionMode } from "@v3tools/contracts";
 import { resolveSelectableModel } from "@v3tools/shared/model";
 import { memo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../../session-logic";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, WorkflowIcon } from "lucide-react";
 import { Button, buttonVariants } from "../ui/button";
 import {
   Menu,
@@ -53,19 +53,23 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   lockedProvider: ProviderKind | null;
   providers?: ReadonlyArray<ServerProvider>;
   modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>>;
+  sessionMode?: SessionMode;
   activeProviderIconClassName?: string;
   compact?: boolean;
   disabled?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   onProviderModelChange: (provider: ProviderKind, model: string) => void;
+  onSessionModeChange?: (mode: SessionMode) => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const activeProvider = props.lockedProvider ?? props.provider;
   const selectedProviderOptions = props.modelOptionsByProvider[activeProvider];
-  const selectedModelLabel =
-    selectedProviderOptions.find((option) => option.slug === props.model)?.name ?? props.model;
-  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[activeProvider];
+  const isOrchestrated = props.sessionMode === "orchestrated";
+  const selectedModelLabel = isOrchestrated
+    ? "Orchestrator"
+    : (selectedProviderOptions.find((option) => option.slug === props.model)?.name ?? props.model);
+  const ProviderIcon = isOrchestrated ? WorkflowIcon : PROVIDER_ICON_BY_PROVIDER[activeProvider];
   const handleModelChange = (provider: ProviderKind, value: string) => {
     if (props.disabled) return;
     if (!value) return;
@@ -75,6 +79,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       props.modelOptionsByProvider[provider],
     );
     if (!resolvedModel) return;
+    props.onSessionModeChange?.("single");
     props.onProviderModelChange(provider, resolvedModel);
     setIsMenuOpen(false);
   };
@@ -115,8 +120,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             aria-hidden="true"
             className={cn(
               "size-4 shrink-0",
-              providerIconClassName(activeProvider, "text-muted-foreground/70"),
-              props.activeProviderIconClassName,
+              isOrchestrated
+                ? "text-emerald-500"
+                : providerIconClassName(activeProvider, "text-muted-foreground/70"),
+              isOrchestrated ? undefined : props.activeProviderIconClassName,
             )}
           />
           <span className="min-w-0 flex-1 truncate">{selectedModelLabel}</span>
@@ -143,6 +150,23 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           </MenuGroup>
         ) : (
           <>
+            {props.onSessionModeChange ? (
+              <>
+                <MenuItem
+                  onClick={() => {
+                    props.onSessionModeChange?.("orchestrated");
+                    setIsMenuOpen(false);
+                  }}
+                >
+                  <WorkflowIcon aria-hidden="true" className="size-4 shrink-0 text-emerald-500" />
+                  <span>Orchestrator</span>
+                  <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase">
+                    3 lanes
+                  </span>
+                </MenuItem>
+                <MenuDivider />
+              </>
+            ) : null}
             {AVAILABLE_PROVIDER_OPTIONS.map((option) => {
               const OptionIcon = PROVIDER_ICON_BY_PROVIDER[option.value];
               const liveProvider = props.providers

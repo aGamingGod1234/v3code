@@ -79,6 +79,8 @@ function makeReadModel(
       projectId,
       title: `Thread ${thread.id}`,
       modelSelection: defaultModelSelection,
+      sessionMode: "single" as const,
+      orchestratorConfig: null,
       interactionMode: "default" as const,
       runtimeMode: "full-access" as const,
       branch: null,

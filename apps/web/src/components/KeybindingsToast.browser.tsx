@@ -139,6 +139,8 @@ function createMinimalSnapshot(): OrchestrationReadModel {
           provider: "codex",
           model: "gpt-5",
         },
+        sessionMode: "single",
+        orchestratorConfig: null,
         interactionMode: "default",
         runtimeMode: "full-access",
         branch: "main",

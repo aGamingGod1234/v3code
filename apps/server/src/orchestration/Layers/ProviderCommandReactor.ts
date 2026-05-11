@@ -32,6 +32,8 @@ import {
   type ProviderCommandReactorShape,
 } from "../Services/ProviderCommandReactor.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { publishOrchestratorTurnStarted } from "../events.ts";
+import { buildOrchestratedTurnInput, isOrchestratedThread } from "../session.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -462,7 +464,12 @@ const make = Effect.gen(function* () {
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
-    const normalizedInput = toNonEmptyProviderInput(input.messageText);
+    const normalizedInput = toNonEmptyProviderInput(
+      buildOrchestratedTurnInput({
+        thread,
+        messageText: input.messageText,
+      }),
+    );
     const normalizedAttachments = input.attachments ?? [];
     const activeSession = yield* providerService
       .listSessions()
@@ -618,6 +625,22 @@ const make = Effect.gen(function* () {
         createdAt: event.payload.createdAt,
       });
       return;
+    }
+
+    if (isOrchestratedThread(thread)) {
+      yield* publishOrchestratorTurnStarted({
+        engine: orchestrationEngine,
+        threadId: event.payload.threadId,
+        messageId: event.payload.messageId,
+        createdAt: event.payload.createdAt,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("provider command reactor failed to publish orchestrator events", {
+            threadId: event.payload.threadId,
+            cause: Cause.pretty(cause),
+          }),
+        ),
+      );
     }
 
     const isFirstUserMessageTurn =

@@ -313,6 +313,8 @@ export const cloudCreateChatRouteLayer = HttpRouter.add(
           title: threadTitle as never,
           hostDeviceId: null,
           modelSelection: defaultModelSelection,
+          sessionMode: "single",
+          orchestratorConfig: null,
           runtimeMode: DEFAULT_RUNTIME_MODE,
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           branch: payload.branch as never,
