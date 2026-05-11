@@ -14,11 +14,12 @@ import {
   SetForkLineageInput,
   type ProjectionThreadRepositoryShape,
 } from "../Services/ProjectionThreads.ts";
-import { ModelSelection } from "@v3tools/contracts";
+import { ModelSelection, OrchestratorConfig } from "@v3tools/contracts";
 
 const ProjectionThreadDbRow = ProjectionThread.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
+    orchestratorConfig: Schema.NullOr(Schema.fromJsonString(OrchestratorConfig)),
   }),
 );
 type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
@@ -38,6 +39,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           title,
           host_device_id,
           model_selection_json,
+          session_mode,
+          orchestrator_config_json,
           runtime_mode,
           interaction_mode,
           branch,
@@ -59,6 +62,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.title},
           ${row.hostDeviceId},
           ${JSON.stringify(row.modelSelection)},
+          ${row.sessionMode},
+          ${row.orchestratorConfig === null ? null : JSON.stringify(row.orchestratorConfig)},
           ${row.runtimeMode},
           ${row.interactionMode},
           ${row.branch},
@@ -80,6 +85,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           title = excluded.title,
           host_device_id = excluded.host_device_id,
           model_selection_json = excluded.model_selection_json,
+          session_mode = excluded.session_mode,
+          orchestrator_config_json = excluded.orchestrator_config_json,
           runtime_mode = excluded.runtime_mode,
           interaction_mode = excluded.interaction_mode,
           branch = excluded.branch,
@@ -108,6 +115,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           title,
           host_device_id AS "hostDeviceId",
           model_selection_json AS "modelSelection",
+          session_mode AS "sessionMode",
+          orchestrator_config_json AS "orchestratorConfig",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
           branch,
@@ -138,6 +147,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           title,
           host_device_id AS "hostDeviceId",
           model_selection_json AS "modelSelection",
+          session_mode AS "sessionMode",
+          orchestrator_config_json AS "orchestratorConfig",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
           branch,

@@ -1,3 +1,563 @@
+## [2026-05-11] - Orchestrated Session Feature
+
+### What Was Implemented
+
+- Added schema-only orchestrator configuration contracts with free-form
+  provider model, effort, and mode fields.
+- Added the `packages/agent-harness` workspace with CLI process,
+  routing, session, and task queue primitives for future multi-process
+  runtime adapters.
+- Wired orchestrated session mode through the current V3 orchestration
+  event log, projection threads, settings state, WebSocket shells, and
+  provider command reactor.
+- Added explicit orchestrator task and agent lane events. Providers
+  without a dedicated runtime adapter emit a visible fallback lane and
+  route through the active provider runtime.
+- Added migrations for persisted thread `session_mode` and
+  `orchestrator_config_json` in both SQLite and Postgres.
+- Added the web orchestrated chat view, Orchestrator settings page,
+  route/search/navigation entries, and ProviderModelPicker Orchestrator
+  selection.
+- Added the Sonnet assistant subagent definition and updated affected
+  fixtures for required thread metadata.
+
+### Files Modified
+
+- `.claude/agents/sonnet-assistant.md` - Sonnet assistant subagent
+  definition.
+- `packages/contracts/src/orchestrator-config.ts` - orchestrator config
+  and session-mode schemas.
+- `packages/contracts/src/index.ts` - exports orchestrator config
+  contracts.
+- `packages/contracts/src/settings.ts` - stores saved
+  `orchestratorConfig`.
+- `packages/contracts/src/orchestration.ts` - adds orchestrator thread
+  metadata, commands, and events.
+- `packages/agent-harness/package.json` - new workspace package
+  manifest.
+- `packages/agent-harness/tsconfig.json` - harness TypeScript config.
+- `packages/agent-harness/src/CLIProcess.ts` - single CLI process
+  wrapper.
+- `packages/agent-harness/src/AgentRouter.ts` - role/task router.
+- `packages/agent-harness/src/OrchestratorSession.ts` - three-process
+  session lifecycle.
+- `packages/agent-harness/src/TaskQueue.ts` - task state rebuilt from
+  orchestration events.
+- `packages/agent-harness/src/index.ts` - harness exports.
+- `apps/server/src/persistence/Migrations/034_OrchestratorSessionMode.ts`
+  - SQLite migration.
+- `apps/server/src/persistence/PostgresMigrations/034_OrchestratorSessionMode.ts`
+  - Postgres migration.
+- `apps/server/src/persistence/Migrations.ts` - registers migration 034.
+- `apps/server/src/persistence/PostgresMigrations.ts` - registers
+  Postgres migration 034.
+- `apps/server/src/persistence/Layers/ProjectionThreads.ts` - persists
+  orchestrator projection fields.
+- `apps/server/src/persistence/Services/ProjectionThreads.ts` - adds
+  projection row/schema fields.
+- `apps/server/src/orchestration/session.ts` - orchestrator prompt and
+  turn-input builder.
+- `apps/server/src/orchestration/events.ts` - orchestrator event
+  publisher helpers.
+- `apps/server/src/orchestration/index.ts` - orchestration exports.
+- `apps/server/src/orchestration/decider.ts` - handles orchestrator
+  commands.
+- `apps/server/src/orchestration/projector.ts` - projects orchestrator
+  thread metadata.
+- `apps/server/src/orchestration/Layers/MeshEventIngestion.ts` - imports
+  remote orchestrator metadata/events.
+- `apps/server/src/orchestration/Layers/ProjectionPipeline.ts` - writes
+  orchestrator projection fields.
+- `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts` -
+  exposes orchestrator fields in snapshots.
+- `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts` -
+  routes orchestrated turns through the active provider fallback.
+- `apps/server/src/cloud/http.ts` - carries orchestrator fields through
+  cloud thread shells.
+- `apps/server/src/serverRuntimeStartup.ts` - carries orchestrator
+  fields during startup projection.
+- `apps/server/src/ws.ts` - includes orchestrator fields in WS shells.
+- `apps/server/src/orchestration/commandInvariants.test.ts` - fixture
+  updates.
+- `apps/server/src/orchestration/Layers/OrchestrationEngine.test.ts` -
+  fixture updates.
+- `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.test.ts`
+  - fixture updates.
+- `apps/server/src/persistence/Layers/ProjectionRepositories.test.ts` -
+  persisted-field coverage.
+- `apps/server/src/provider/Layers/ProviderSessionReaper.test.ts` -
+  fixture updates.
+- `apps/server/src/server.test.ts` - fixture updates.
+- `apps/web/src/types.ts` - web thread orchestrator fields.
+- `apps/web/src/store.ts` - settings and thread-state persistence.
+- `apps/web/src/routeTree.gen.ts` - generated Orchestrator settings
+  route.
+- `apps/web/src/components/ChatView.logic.ts` - draft bootstrap session
+  metadata.
+- `apps/web/src/components/ChatView.tsx` - orchestrated rendering and
+  persisted turn metadata.
+- `apps/web/src/components/chat/ChatComposer.tsx` - forwards selected
+  session mode.
+- `apps/web/src/components/chat/ProviderModelPicker.tsx` - adds the
+  Orchestrator option.
+- `apps/web/src/components/OrchestratedSession/AgentBadge.tsx` - agent
+  status badge.
+- `apps/web/src/components/OrchestratedSession/AgentLane.tsx` - agent
+  output lane.
+- `apps/web/src/components/OrchestratedSession/TaskQueue.tsx` - task
+  queue panel.
+- `apps/web/src/components/OrchestratedSession/index.tsx` - three-panel
+  orchestrated chat view.
+- `apps/web/src/components/settings/OrchestratorSettings/ProviderPicker.tsx`
+  - generic provider/model picker.
+- `apps/web/src/components/settings/OrchestratorSettings/OrchestratorRoles.tsx`
+  - per-role config.
+- `apps/web/src/components/settings/OrchestratorSettings/SubAgentConfig.tsx`
+  - subagent config editor.
+- `apps/web/src/components/settings/OrchestratorSettings/PlanningConfig.tsx`
+  - planning controls.
+- `apps/web/src/components/settings/OrchestratorSettings/index.tsx` -
+  settings page root.
+- `apps/web/src/routes/settings.orchestrator.tsx` - settings route.
+- `apps/web/src/components/settings/settingsNavigation.ts` - navigation
+  entry.
+- `apps/web/src/components/settings/settingsSearch.ts` - settings search
+  entry.
+- `apps/web/src/components/ChatView.logic.test.ts` - fixture updates.
+- `apps/web/src/components/CommandPalette.logic.test.ts` - fixture
+  updates.
+- `apps/web/src/components/Sidebar.logic.test.ts` - fixture updates.
+- `apps/web/src/components/ChatView.browser.tsx` - fixture updates.
+- `apps/web/src/components/KeybindingsToast.browser.tsx` - fixture
+  updates.
+- `apps/web/src/environments/runtime/service.threadSubscriptions.test.ts`
+  - fixture updates.
+- `apps/web/src/store.test.ts` - settings/thread fixture coverage.
+- `apps/web/src/lib/threadSort.test.ts` - fixture updates.
+- `apps/web/src/worktreeCleanup.test.ts` - fixture updates.
+- `bun.lock` - updated after adding the new workspace package.
+- `MESH_CHANGES.md` - documents the orchestrator file delta.
+- `PROJECT_LOG.md` - records this task.
+
+### Assumptions Made (flag these for review)
+
+- The plan referred to older names like `chats`, `chat_events`,
+  `CreateChatPayload`, and `UpdatePreferencesPayload`; this repo now
+  uses event-sourced orchestration projections and `ServerSettings`, so
+  the feature was added at those current integration points.
+- Dedicated runtime adapters for Claude Code, Codex, Gemini, and custom
+  providers are not all present yet. The server therefore emits an
+  explicit fallback lane and routes the turn through the active provider
+  until those adapters are implemented.
+- `bun install` was required after adding `packages/agent-harness` so
+  the workspace lockfile recognized the new package.
+
+### Known Issues / Deferred
+
+- The new `agent-harness` package is implemented as a standalone
+  primitive layer; the server currently uses the existing active
+  provider runtime rather than spawning a full three-provider process
+  set.
+- `bun lint` and `apps/web` build still print existing warning noise,
+  but both commands exit successfully.
+- Several unrelated files were already dirty in the worktree and were
+  left untouched except where the orchestrator feature required edits.
+
+### Suggested Next Steps
+
+- Add concrete runtime adapters that bind provider configs to
+  `packages/agent-harness` process definitions.
+- Add focused interaction tests for orchestrated lane projection once
+  the UI test harness covers the new three-panel view.
+- Exercise an orchestrated chat manually against a real provider profile
+  to validate the prompt/fallback behavior under streaming output.
+
+## [2026-05-09] - Import Review Summary IPC
+
+### What Was Implemented
+
+- Added a desktop `readSummary` chat-import IPC method that parses a transcript in the Electron main process and returns only review metadata plus message count.
+- Changed local transcript review/import preparation to use summary IPC instead of sending full transcript text into the renderer before the user clicks `Import selected`.
+- Kept final commit lazy: full transcript content is still loaded one chat at a time only when actually importing.
+- Added desktop coverage proving review summaries parse workspace/message metadata without returning raw transcript content.
+
+### Files Modified
+
+- `packages/contracts/src/ipc.ts` - adds `DesktopParsedTranscriptSummary` and the `chatImport.readSummary` bridge contract.
+- `apps/desktop/src/v3ChatImportCore.ts` - adds validated summary parsing for ready transcript formats.
+- `apps/desktop/src/v3ChatImport.ts` - registers the new IPC channel.
+- `apps/desktop/src/preload.ts` - exposes `chatImport.readSummary` to the renderer.
+- `apps/desktop/src/v3ChatImportCore.test.ts` - covers summary parsing without content transfer.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - uses `readSummary` during review preparation.
+- `apps/web/src/components/settings/SettingsPanels.browser.tsx` and `apps/web/src/localApi.test.ts` - update desktop bridge mocks for the new contract.
+- `PROJECT_LOG.md` - records this import hardening pass.
+
+### Assumptions Made (flag these for review)
+
+- Moving review parsing to the desktop main process is the safest next step before a larger server-side streaming importer, because it avoids renderer-side full-text parsing during bulk review without changing the final import RPC contract.
+
+### Known Issues / Deferred
+
+- Final import still sends each parsed chat through the renderer one at a time; a dedicated streaming importer would be needed to keep extremely large single transcripts fully out of the renderer.
+
+### Suggested Next Steps
+
+- Re-run Import All with the rebuilt desktop app and confirm the review screen appears quickly with projects/threads grouped before clicking `Import selected`.
+- If one very large transcript still causes pressure during final commit, move the final parse/import loop fully into desktop/server IPC with progress events.
+
+## [2026-05-09] - Phase 3 Live Device Presence
+
+### What Was Implemented
+
+- Wired the mesh presence stream into the device React Query cache so online/offline state updates without waiting for a focus refresh or manual refetch.
+- Added a pure presence merge helper that updates known devices only, preserves unchanged device references, and ignores invalid timestamps instead of corrupting last-seen data.
+- Added focused tests for presence snapshot updates, live single-device updates, unknown devices, and invalid timestamp handling.
+
+### Files Modified
+
+- `apps/web/src/rpc/meshSubscriptions.ts` - subscribes to `mesh.subscribePresence` and updates `v3DeviceQueryKeys.list()` directly.
+- `apps/web/src/rpc/meshPresence.ts` - centralizes presence-to-device-list merge logic.
+- `apps/web/src/rpc/meshPresence.test.ts` - covers the live presence merge behavior.
+- `PROJECT_LOG.md` - records this Phase 3 completion work.
+
+### Assumptions Made (flag these for review)
+
+- The existing device-first multi-device sidebar and single-device project-first sidebar were the intended Phase 3 baseline; the missing behavior was live presence subscription.
+
+### Known Issues / Deferred
+
+- Presence updates only apply to devices already returned by the server device list; account-discovered installs still need server pairing before they can appear as controllable devices.
+
+### Suggested Next Steps
+
+- Verify with two signed-in installs that a second device flips online/offline in the sidebar without changing pages or focusing the app.
+
+## [2026-05-09] - Phase 1 OpenChrome Browser Automation Setup
+
+### What Was Implemented
+
+- Added typed desktop IPC for OpenChrome status checks, installer execution, and extension setup opening.
+- Added a one-time first-boot prompt that asks before enabling browser automation and defers the status probe until browser idle time.
+- Added a Browser use settings card to install/repair OpenChrome, refresh bridge status, show MCP/startup/pair-token state, and open the extension setup.
+- Added settings search coverage for the OpenChrome MCP bridge under Browser use.
+- Built a fresh Windows x64 installer at `C:\Users\lucas\Desktop\V3-Code-0.0.25-x64.exe`.
+
+### Files Modified
+
+- `apps/desktop/src/openChromeSetup.ts` - OpenChrome path resolution, bridge reachability probe, installer runner, and IPC registration.
+- `apps/desktop/src/openChromeSetup.test.ts` - coverage for path resolution, status reporting, and extension setup opening.
+- `apps/desktop/src/main.ts` - registers OpenChrome IPC.
+- `apps/desktop/src/preload.ts` - exposes `desktopBridge.openChrome`.
+- `packages/contracts/src/ipc.ts` - adds OpenChrome desktop bridge contracts.
+- `apps/web/src/v3/ui/OpenChromeSetupNudge.tsx` - first-boot consent prompt.
+- `apps/web/src/routes/__root.tsx` - mounts the prompt.
+- `apps/web/src/components/settings/BrowserUseSettings.tsx` - adds OpenChrome install/status controls.
+- `apps/web/src/components/settings/settingsSearch.ts` - adds the Browser use search entry.
+
+### Assumptions Made (flag these for review)
+
+- The OpenChrome project lives at `~/projects/claude-in-chrome-clone` unless `V3CODE_OPENCHROME_HOME` overrides it.
+- V3 can run the MCP/bridge installer automatically after consent, but normal Chrome policies still require a guided load-unpacked extension step.
+- A one-time local prompt is the right first-boot behavior for this phase.
+
+### Known Issues / Deferred
+
+- The Chrome extension is opened as a guided setup page plus selected folder; it is not silently force-installed into the browser profile.
+- Broad performance optimization remains a phased effort; this pass kept startup work lazy and bounded but did not profile every subsystem.
+
+### Suggested Next Steps
+
+- Install the rebuilt desktop app, choose `Enable` on the prompt, and load the unpacked extension from the opened folder.
+- Confirm Settings > Browser use shows OpenChrome bridge online after the bridge starts.
+
+## [2026-05-09] - Lazy Chat Import Review Crash Fix
+
+### What Was Implemented
+
+- Changed local chat-import review so desktop scans keep only lightweight parsed summaries in React state instead of storing every full transcript body.
+- Made final import lazily re-read and parse each selected transcript one at a time, so large Codex/Claude archives do not accumulate multi-GB renderer memory.
+- Renamed the staging action to `Prepare import`, changed the staging toast to `Ready to import`, and made the footer say `Close without importing` so users do not mistake the review step for a completed import.
+- Added a top-level render error boundary so ordinary React render failures show a recoverable error screen instead of an unexplained blank window.
+- Added tests proving import project planning works from summary metadata without full message bodies and that full chat content is loaded lazily during commit.
+
+### Files Modified
+
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - lazy desktop transcript review/import flow, visible parse failures, and clearer staging/close copy.
+- `apps/web/src/components/chat/importChatCommit.ts` - commit helper now loads full parsed chats only during per-chat import.
+- `apps/web/src/components/chat/importChatCommit.test.ts` - covers summary-only planning and lazy full-transcript loading.
+- `apps/web/src/main.tsx` - adds a root render error boundary.
+- `PROJECT_LOG.md` - records this crash fix.
+
+### Assumptions Made (flag these for review)
+
+- The blank black screen was caused by renderer memory pressure from reading and storing the whole selected import set before review.
+- It is acceptable to re-read/re-parse selected desktop transcripts during final import to keep memory bounded.
+
+### Known Issues / Deferred
+
+- A single extremely large transcript still needs to be parsed and sent during import; this fix bounds memory to one transcript at a time rather than eliminating large single-file cost.
+- A renderer process killed by the OS for out-of-memory cannot show the new React error screen; the lazy import path is the prevention for that case.
+- The current local database inspection showed no committed `chat.import` events after the user's reported attempt, which means the prior success signal was likely the review-ready staging toast rather than the final commit.
+
+### Suggested Next Steps
+
+- Re-run Import All in the rebuilt desktop app and confirm the review screen appears instead of a black window.
+- If individual 100MB+ transcripts still stress the renderer, move transcript parsing into the desktop/server process and stream the resulting import command.
+
+## [2026-05-09] - GitHub Device Flow and Cloud Node Routing
+
+### What Was Implemented
+
+- Switched desktop GitHub connect UI to the existing GitHub Device Flow path so the desktop app no longer requires embedded confidential GitHub OAuth credentials to start sign-in.
+- Added one-time device-flow token consumption so the renderer can immediately bootstrap the GitHub token into the authenticated V3 server session.
+- Let the server validate and store pre-obtained GitHub tokens even when server-side GitHub OAuth client secrets are not configured.
+- Stopped treating `v3.agaminggod.com` as a server-node URL override; the cloud website now opens separately and legacy website overrides are cleared.
+- Redirected server-node `/` and `/pair` traffic into the cloud app, and mirrored cloud build assets under `dist-cloud/app` for static `/app/*` hosting.
+
+### Files Modified
+
+- `apps/web/src/v3/ui/ConnectGitHubButton.tsx` - uses desktop Device Flow and bootstraps the resulting token.
+- `apps/web/src/v3/ui/GitHubDeviceCodeDialog.tsx` - consumes the completed device-flow token and reports bootstrap failures.
+- `apps/desktop/src/v3GitHubAuth.ts` and `apps/desktop/src/preload.ts` - expose one-time device-flow token consumption over the desktop bridge.
+- `packages/contracts/src/ipc.ts` and `packages/contracts/src/identity.ts` - update the bridge/auth contracts for the device-flow bootstrap path.
+- `apps/server/src/identity/Layers/GitHubIdentityService.ts` - allows `/user` validation without configured OAuth client secrets.
+- `apps/server/src/http.ts` - redirects server-node root and legacy pairing routes to the cloud app.
+- `apps/web/src/components/settings/ConnectionsSettings.tsx` and `apps/web/src/environments/primary/target.ts` - separate cloud website linking from server-node API overrides.
+- `scripts/build-web-cloud.ts`, `apps/web/public/_redirects`, and `deploy/cloudflare-pages/README.md` - make `/app/*` static hosting resolve mirrored cloud assets.
+
+### Assumptions Made (flag these for review)
+
+- Desktop GitHub sign-in should rely on a public GitHub OAuth Client ID via Settings > Git or `V3CODE_GITHUB_PUBLIC_CLIENT_ID`; no client secret should be embedded in the desktop app.
+- `v3.agaminggod.com` is the browser cloud website, not the direct server-node API override.
+
+### Known Issues / Deferred
+
+- A real public GitHub OAuth Client ID is still required before GitHub Device Flow can complete.
+- Deploying the rebuilt cloud bundle to the live `v3.agaminggod.com` host still depends on the configured hosting credentials.
+
+### Suggested Next Steps
+
+- Deploy the rebuilt cloud bundle/server-node changes to `v3.agaminggod.com`.
+- Add a setup-screen check that warns when the live cloud host is serving the non-cloud pairing bundle.
+
+## [2026-05-09] - Transfer Context Menu and Import Status Visibility
+
+### What Was Implemented
+
+- Added `Transfer chat` to the sidebar chat right-click menu and wired it to open the transfer dialog even when the target chat was not already active.
+- Made transfer dialog open requests durable across navigation so a context-menu request can navigate to the chat and open the mounted header dialog.
+- Added persistent import commit status inside the import dialog, including explicit all-failed/catastrophic failure messages instead of relying only on transient toasts.
+- Surfaced transcript read failures in the scan tab itself as well as in a toast.
+- Expanded first-install/server-node prompts so users see the sequence: Google sign-in, choose an always-on server-node machine, publish the cloud URL, open `v3.agaminggod.com`, then sign in on other devices.
+
+### Files Modified
+
+- `apps/web/src/components/sidebar/SidebarProjectItem.tsx` - adds the chat-row context-menu transfer action and blocked-state feedback.
+- `apps/web/src/components/chat/forkChatOpener.ts` - queues transfer dialog open requests until the matching chat header mounts.
+- `apps/web/src/components/chat/ForkChatButton.tsx` - clears queued transfer requests after the dialog opens.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - adds persistent import result/error status and local transcript read error visibility.
+- `apps/web/src/components/chat/ConfigureServerBanner.tsx` - turns the server-node banner into a concise setup checklist.
+- `apps/web/src/v3/ui/StartupSignInNudge.tsx` - points first-run sign-in guidance toward server-node/cloud setup.
+- `PROJECT_LOG.md` - records this implementation pass.
+
+### Assumptions Made (flag these for review)
+
+- The existing transfer dialog remains the intended target-selection UI; the missing piece was the chat-row right-click entry point.
+- A visible in-dialog import status is necessary because transient toasts are too easy to miss during bulk imports.
+- The first-install tutorial can start as the existing startup nudge plus server-node banner rather than a separate modal wizard.
+
+### Known Issues / Deferred
+
+- The local database still shows no committed import events from the prior failed attempt, so the rebuilt app needs a fresh Import selected run to verify the repaired UI and current-device attribution end to end.
+- Full encrypted workspace-folder transfer remains deferred to a dedicated transfer protocol.
+
+### Suggested Next Steps
+
+- Re-run Import All from the rebuilt app and check the persistent status block for exact failure text if any transcript still does not commit.
+- Add a dedicated first-run modal only if the banner/toast sequence is still too easy to miss.
+
+## [2026-05-08] - Import Commit Status and Transfer Targeting
+
+### What Was Implemented
+
+- Added a dedicated import commit helper that groups selected Codex/Claude/Anthropic transcripts by normalized workspace path, creates or reuses matching projects, imports every selected chat, and keeps going after per-chat failures.
+- Added import progress/status UI, success/failure notifications, and a post-import outcome panel with imported counts, failed entries, and an "open first imported chat" action.
+- Stamped imported chats with the current signed-in device so they land under the correct device/project hierarchy instead of relying on sidebar fallback attribution.
+- Renamed the fork handoff UI to "Transfer chat" and kept the target device/cloud selector visible for signed-in mesh devices.
+- Built a fresh Windows x64 installer at `C:\Users\lucas\Desktop\V3-Code-0.0.25-x64.exe`.
+
+### Files Modified
+
+- `apps/web/src/components/chat/importChatCommit.ts` - shared import commit/project grouping helper with progress and notification summaries.
+- `apps/web/src/components/chat/importChatCommit.test.ts` - covers workspace grouping, continued imports after failures, disabled reference filtering, and notification copy.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - wires bulk imports through the commit helper, adds status/failure UI, and stamps current device attribution.
+- `apps/web/src/components/chat/ForkChatButton.tsx` - updates the chat handoff dialog to transfer language while keeping target selection.
+- `apps/web/src/components/chat/ForkAcceptDialog.tsx` - updates receiving-device folder selection copy for transferred chats.
+- `apps/web/src/hooks/useThreadActions.ts` - updates transfer success/error toasts.
+- `apps/web/src/environments/runtime/service.ts` - updates incoming transfer notification copy.
+- `PROJECT_LOG.md` - records this implementation pass.
+
+### Assumptions Made (flag these for review)
+
+- Import should fail visibly per transcript instead of aborting the whole batch after the first failed project/thread commit.
+- Imported chats should be hosted by the current signed-in device when one is available.
+- The current mesh chat-copy path is still the right base for chat transfer, with target folder selection handled on the receiving device.
+
+### Known Issues / Deferred
+
+- End-to-end encrypted workspace-folder file bundle transfer is not implemented in this pass; current transfer copies chat context through the authenticated mesh and lets the receiving device choose a local folder.
+- Full credential-aware MCP server import and skill management remain part of the broader MCP/skills management work.
+
+### Suggested Next Steps
+
+- Run Import All from the rebuilt desktop app and confirm the outcome panel reports the same Codex/Claude counts as the local scan.
+- Add a dedicated encrypted workspace bundle protocol before advertising full folder/file transfer.
+
+## [2026-05-08] - Device Sidebar, Cloud Linking, and Import All Fixes
+
+### What Was Implemented
+
+- Allowed the desktop chat-import IPC validator to accept the `all` provider and made All scan only supported importers.
+- Hid parser-pending providers from the import provider picker and All scan results.
+- Changed the sidebar so single-device accounts show Projects first, while multi-device accounts show Device > Project > Chat with the current device expanded by default.
+- Added an explicit V3 cloud website row that asks for Google sign-in first, explains remote access requirements after sign-in, and saves `https://v3.agaminggod.com` in one click.
+
+### Files Modified
+
+- `apps/desktop/src/v3ChatImport.ts` - accepts `all` as a valid scan provider from the renderer.
+- `apps/desktop/src/v3ChatImportCore.ts` - limits All scans to supported local import parsers.
+- `apps/desktop/src/v3ChatImportCore.test.ts` - covers the supported-only All scan behavior.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - hides unsupported provider cards/results and clarifies import review copy.
+- `apps/web/src/components/sidebar/DeviceGroup.tsx` - supports nested device content and remounts when current/online state changes so defaults apply.
+- `apps/web/src/components/sidebar/SidebarProjectItem.tsx` - supports filtering project threads by device.
+- `apps/web/src/components/sidebar/SidebarProjectsContent.tsx` - switches between single-device Projects-first and multi-device Device > Project > Chat layouts.
+- `apps/web/src/components/settings/ConnectionsSettings.tsx` - adds the Google sign-in/cloud-link guidance and one-click V3 cloud selection.
+- `PROJECT_LOG.md` - records this implementation pass.
+
+### Assumptions Made (flag these for review)
+
+- All import should mean all currently supported parsers rather than all recognized transcript products.
+- In multi-device mode, current-device projects should remain visible even before they have attributed chats so users can still start local work.
+
+### Known Issues / Deferred
+
+- Full credential-aware MCP config importing is still deferred to the dedicated MCP/skills management work.
+- Website remote control still depends on a reachable paired server node; the settings UI now states that requirement.
+
+### Suggested Next Steps
+
+- Verify import All against the local Codex and Claude roots after installing the rebuilt desktop artifact.
+- Exercise the sidebar with one and two Google-signed-in devices to confirm the hierarchy feels right.
+
+## [2026-05-07] - Bulk Import, Cloud Link, Composer UI, and Model Specs
+
+### What Was Implemented
+
+- Added an opt-in detailed model specs setting under Usage.
+- Added per-assistant-response stats for completed model runs and a chat aggregate stats strip between the folder mode and branch controls.
+- Added weekly and monthly usage bar charts in Usage settings using completed run telemetry.
+- Reworked the composer footer so the context meter and send button sit in a stable centered action row and the composer surface keeps rounded lower corners.
+- Made the local import scanner support an explicit All provider mode in the dialog while preserving the Codex default for the lower-level desktop API.
+- Added bulk transcript review with per-chat toggles, workspace-path project grouping, and skill/MCP reference toggles before import.
+- Added a V3 cloud shortcut for `https://v3.agaminggod.com` in the server-node URL override controls.
+- Built a fresh Windows x64 NSIS installer at `C:\Users\lucas\Desktop\V3-Code-0.0.25-x64.exe`.
+
+### Files Modified
+
+- `packages/contracts/src/settings.ts` - adds the detailed model specs usage setting.
+- `apps/web/src/lib/modelRunStats.ts` - derives per-run, chat, weekly, and monthly model usage stats.
+- `apps/web/src/components/chat/ModelRunStats.tsx` - renders assistant-run and chat aggregate stat chips.
+- `apps/web/src/components/ChatView.tsx`, `apps/web/src/components/chat/MessagesTimeline.tsx`, and `apps/web/src/components/BranchToolbar.tsx` - wires model specs into messages and the bottom toolbar.
+- `apps/web/src/components/chat/ChatComposer.tsx`, `apps/web/src/components/chat/ContextWindowMeter.tsx`, and `apps/web/src/components/chat/ComposerPrimaryActions.tsx` - centers footer actions and improves the send button.
+- `apps/web/src/components/settings/UsageSettings.tsx` - adds the setting, aggregate cards, and weekly/monthly charts.
+- `packages/contracts/src/ipc.ts`, `apps/desktop/src/v3ChatImportCore.ts`, and `apps/web/src/components/chat/ImportChatDialog.tsx` - adds all-provider scan support and bulk import review.
+- `apps/web/src/components/settings/ConnectionsSettings.tsx` - adds the V3 cloud URL shortcut.
+- `PROJECT_LOG.md` - records this implementation pass.
+
+### Assumptions Made (flag these for review)
+
+- The desktop import dialog should default to scanning all known local provider roots, but the desktop core API should keep its existing Codex default for compatibility.
+- Selected imports should require a parsed workspace path instead of silently falling back to an unrelated project.
+- Skills and MCPs referenced by transcripts should be reviewed as references first; credentials still stay in the existing MCP settings flow rather than being copied blindly from foreign configs.
+- Detailed model stats can only show values that are available from provider events and message timing; unsupported providers or old sessions may show partial metrics.
+
+### Known Issues / Deferred
+
+- `bun lint` still reports 26 pre-existing warnings but exits with 0 errors.
+- Some provider formats are still listed as unsupported until a tested parser exists.
+- Import review toggles skill/MCP references in imported transcripts; full credential-aware MCP config importing remains a follow-up.
+
+### Suggested Next Steps
+
+- Verify the bulk import review against a real Codex and Claude history folder and confirm the project grouping matches the desired workspace names.
+- Add credential-aware MCP config import once the desired secret handling policy is finalized.
+
+## [2026-05-07] - Chat Startup, Import, Devices, and Split Drag Fixes
+
+### What Was Implemented
+
+- Fixed mesh local prompt publishing for new chats by expanding bootstrap turn starts into thread creation plus turn start.
+- Replaced the home-page multi-agent workspace with the normal start-chat state.
+- Added sidebar chat drag data and drop zones that split the current chat left, right, above, or below without surfacing a dedicated multi-agent feature on the home page.
+- Corrected settings search results so Chat import resolves to Personalization.
+- Updated chat import parsing for current Codex JSONL sessions and workspace-root aware imports for Codex, Claude, and Anthropic exports.
+- Made imported chats attach to or create the parsed transcript workspace project instead of defaulting to the first project.
+- Displayed Drive-discovered Google signed-in installs in sidebar device groups and Devices settings with clear offline/not-paired status.
+- Re-enabled Windows executable resource editing in the desktop artifact build so the V3 icon can be stamped into desktop/start-menu shortcuts.
+
+### Files Modified
+
+- `apps/server/src/orchestration/Layers/MeshEventIngestion.ts` - handles mesh bootstrap turn starts.
+- `apps/web/src/components/multiChat/MultiChatWorkspace.tsx` and `apps/web/src/multiChatDrag.ts` - add unobtrusive chat drag/drop split support.
+- `apps/web/src/components/sidebar/SidebarThreadRow.tsx` - makes sidebar chats draggable.
+- `apps/web/src/routes/_chat.index.tsx` - restores the normal no-active-chat home state.
+- `apps/web/src/components/settings/settingsSearch.ts` - fixes settings search paths and labels.
+- `apps/web/src/components/chat/ImportChatDialog.tsx` - routes imports to transcript workspace projects.
+- `packages/contracts/src/chatImport.ts` and `packages/shared/src/chatImport/*` - add workspace-root parsing and current Codex JSONL support.
+- `apps/web/src/hooks/useChatsByDevice.ts` and `apps/web/src/components/settings/DevicesSettingsPanel.tsx` - show Google signed-in devices, including offline Drive-only installs.
+- `scripts/build-desktop-artifact.ts` - lets Electron Builder stamp the Windows executable icon.
+
+### Assumptions Made (flag these for review)
+
+- Drive-only devices are not live mesh clients, so they should render as offline/not paired until they connect to this server node.
+- Mesh bootstrap worktree preparation should stay on the existing local UI dispatch path until a full mesh-safe worktree bootstrap path is implemented.
+
+### Known Issues / Deferred
+
+- `bun lint` still reports 26 pre-existing warnings but exits with 0 errors.
+- Windows desktop/start-menu icon behavior requires rebuilding and installing a new desktop artifact to verify against Explorer's icon cache.
+
+### Suggested Next Steps
+
+- Rebuild the Windows desktop artifact and reinstall it to confirm Explorer shows the stamped V3 icon after cache refresh.
+
+## [2026-05-07] - Fresh Main Install
+
+### What Was Implemented
+
+- Backed up the previous local `V3 code` directory before replacing it.
+- Cloned the latest `main` branch from `https://github.com/aGamingGod1234/v3code.git`.
+- Installed dependencies with `bun install --frozen-lockfile`.
+
+### Files Modified
+
+- `PROJECT_LOG.md` - recorded the install and recovery steps required by the workspace agent instructions.
+
+### Assumptions Made (flag these for review)
+
+- Used `main` as confirmed by the user.
+- Used the lockfile-provided dependency versions rather than upgrading packages beyond the repository state.
+
+### Known Issues / Deferred
+
+- Stopped two `bun.exe` and two `claude.exe` processes that had the old project folder open.
+- The previous local project remains available at `C:\Users\lucas\Desktop\Projects\V3 code.backup-20260507-124537`.
+
+### Suggested Next Steps
+
+- Run the app with the repo script appropriate for the workflow, such as `bun run dev` or `bun run start:desktop`.
+- Use `git pull` from `C:\Users\lucas\Desktop\Projects\V3 code` going forward; the clone now tracks `origin/main`.
+
 ## [2026-05-07] - Settings Search, GitHub OAuth, Appearance, and Desktop Icon Fixes
 
 ### What Was Implemented

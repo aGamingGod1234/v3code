@@ -9,6 +9,7 @@ import type {
   RuntimeMode,
   ScopedThreadRef,
   ServerProvider,
+  SessionMode,
   ThreadId,
   TurnId,
 } from "@v3tools/contracts";
@@ -294,12 +295,16 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   onImplementPlanInNewThread: () => void;
 }) {
   return (
-    <>
+    <div className="flex min-h-10 shrink-0 flex-nowrap items-center justify-end gap-2 self-center">
       {props.activeContextWindow ? <ContextWindowMeter usage={props.activeContextWindow} /> : null}
       {props.inputDisabledReason ? (
-        <span className="text-muted-foreground/70 text-xs">{props.inputDisabledReason}</span>
+        <span className="max-w-40 truncate text-xs text-muted-foreground/70">
+          {props.inputDisabledReason}
+        </span>
       ) : props.isPreparingWorktree ? (
-        <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
+        <span className="max-w-40 truncate text-xs text-muted-foreground/70">
+          Preparing worktree...
+        </span>
       ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
@@ -316,7 +321,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         onInterrupt={props.onInterrupt}
         onImplementPlanInNewThread={props.onImplementPlanInNewThread}
       />
-    </>
+    </div>
   );
 });
 
@@ -349,6 +354,7 @@ export interface ChatComposerHandle {
     selectedPromptEffort: string | null;
     selectedModelOptionsForDispatch: unknown;
     selectedModelSelection: ModelSelection;
+    selectedSessionMode: SessionMode;
     selectedProvider: ProviderKind;
     selectedModel: string;
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
@@ -410,6 +416,7 @@ export interface ChatComposerProps {
   interactionMode: ProviderInteractionMode;
 
   // Provider / model
+  sessionMode: SessionMode;
   lockedProvider: ProviderKind | null;
   providerStatuses: ServerProvider[];
   activeProjectDefaultModelSelection: ModelSelection | null | undefined;
@@ -452,6 +459,7 @@ export interface ChatComposerProps {
   ) => void;
 
   onProviderModelSelect: (provider: ProviderKind, model: string) => void;
+  onSessionModeChange: (mode: SessionMode) => void;
   toggleInteractionMode: () => void;
   handleRuntimeModeChange: (mode: RuntimeMode) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
@@ -1720,6 +1728,7 @@ export const ChatComposer = memo(
           selectedPromptEffort,
           selectedModelOptionsForDispatch,
           selectedModelSelection,
+          selectedSessionMode: props.sessionMode,
           selectedProvider,
           selectedModel,
           selectedProviderModels,
@@ -1738,6 +1747,7 @@ export const ChatComposer = memo(
         selectedModel,
         selectedModelOptionsForDispatch,
         selectedModelSelection,
+        props.sessionMode,
         selectedPromptEffort,
         selectedProvider,
         selectedProviderModels,
@@ -1765,7 +1775,7 @@ export const ChatComposer = memo(
         >
           <div
             className={cn(
-              "rounded-[20px] border bg-card transition-colors duration-200 has-focus-visible:border-ring/45",
+              "overflow-hidden rounded-[20px] border bg-card transition-colors duration-200 has-focus-visible:border-ring/45",
               isDragOverComposer ? "border-primary/70 bg-accent/30" : "border-border",
               composerProviderState.composerSurfaceClassName,
             )}
@@ -1941,7 +1951,7 @@ export const ChatComposer = memo(
                 data-chat-composer-footer="true"
                 data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
                 className={cn(
-                  "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-3 sm:pb-3",
+                  "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible rounded-b-[19px] px-2.5 pb-2.5 sm:px-3 sm:pb-3",
                   isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
                 )}
               >
@@ -1953,6 +1963,7 @@ export const ChatComposer = memo(
                     lockedProvider={lockedProvider}
                     providers={providerStatuses}
                     modelOptionsByProvider={modelOptionsByProvider}
+                    sessionMode={props.sessionMode}
                     {...(composerProviderState.modelPickerIconClassName
                       ? {
                           activeProviderIconClassName:
@@ -1960,6 +1971,7 @@ export const ChatComposer = memo(
                         }
                       : {})}
                     onProviderModelChange={onProviderModelSelect}
+                    onSessionModeChange={props.onSessionModeChange}
                   />
 
                   {isComposerFooterCompact ? (
@@ -2009,7 +2021,7 @@ export const ChatComposer = memo(
                   data-chat-composer-primary-actions-compact={
                     isComposerPrimaryActionsCompact ? "true" : "false"
                   }
-                  className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
+                  className="flex min-h-10 shrink-0 flex-nowrap items-center justify-end gap-2 self-center"
                 >
                   <ComposerFooterPrimaryActions
                     compact={isComposerPrimaryActionsCompact}

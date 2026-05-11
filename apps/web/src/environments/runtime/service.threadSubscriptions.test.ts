@@ -101,6 +101,8 @@ function makeThreadShellSnapshot(params: {
           provider: "codex",
           model: "gpt-5-codex",
         },
+        sessionMode: "single",
+        orchestratorConfig: null,
         runtimeMode: "full-access",
         interactionMode: "default",
         branch: null,

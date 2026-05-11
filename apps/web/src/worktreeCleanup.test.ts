@@ -18,6 +18,8 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
       provider: "codex",
       model: "gpt-5.3-codex",
     },
+    sessionMode: "single",
+    orchestratorConfig: null,
     runtimeMode: DEFAULT_RUNTIME_MODE,
     interactionMode: DEFAULT_INTERACTION_MODE,
     session: null,

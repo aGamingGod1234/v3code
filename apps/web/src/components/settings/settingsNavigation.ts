@@ -13,6 +13,7 @@ import {
   Settings2Icon,
   SlidersIcon,
   UserIcon,
+  WorkflowIcon,
 } from "lucide-react";
 
 export type SettingsSectionPath =
@@ -20,6 +21,7 @@ export type SettingsSectionPath =
   | "/settings/appearance"
   | "/settings/configuration"
   | "/settings/personalization"
+  | "/settings/orchestrator"
   | "/settings/providers"
   | "/settings/mcp"
   | "/settings/git"
@@ -41,6 +43,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<SettingsNavigationItem> = [
   { label: "Appearance", to: "/settings/appearance", icon: PaletteIcon },
   { label: "Configuration", to: "/settings/configuration", icon: SlidersIcon },
   { label: "Personalization", to: "/settings/personalization", icon: UserIcon },
+  { label: "Orchestrator", to: "/settings/orchestrator", icon: WorkflowIcon },
   { label: "Providers", to: "/settings/providers", icon: PlugIcon },
   { label: "MCP servers", to: "/settings/mcp", icon: BoxesIcon },
   { label: "Git", to: "/settings/git", icon: GitBranchIcon },

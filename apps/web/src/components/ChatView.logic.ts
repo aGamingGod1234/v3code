@@ -38,6 +38,8 @@ export function buildLocalDraftThread(
     title: "New thread",
     hostDeviceId: null,
     modelSelection: fallbackModelSelection,
+    sessionMode: "single",
+    orchestratorConfig: null,
     runtimeMode: draftThread.runtimeMode,
     interactionMode: draftThread.interactionMode,
     session: null,

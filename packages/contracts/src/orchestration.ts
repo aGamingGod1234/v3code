@@ -22,6 +22,7 @@ import {
 } from "./baseSchemas.ts";
 import { ChatImportFormat, ParsedChat } from "./chatImport.ts";
 import { DeviceId } from "./identity.ts";
+import { DEFAULT_SESSION_MODE, OrchestratorConfig, SessionMode } from "./orchestrator-config.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -315,6 +316,10 @@ export const OrchestrationThread = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
+  sessionMode: SessionMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_SESSION_MODE))),
+  orchestratorConfig: Schema.NullOr(OrchestratorConfig).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -363,6 +368,10 @@ export const OrchestrationThreadShell = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
+  sessionMode: SessionMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_SESSION_MODE))),
+  orchestratorConfig: Schema.NullOr(OrchestratorConfig).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -470,6 +479,8 @@ const ThreadCreateCommand = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
+  sessionMode: Schema.optionalKey(SessionMode),
+  orchestratorConfig: Schema.optionalKey(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -504,6 +515,8 @@ const ThreadMetaUpdateCommand = Schema.Struct({
   title: Schema.optional(TrimmedNonEmptyString),
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: Schema.optional(ModelSelection),
+  sessionMode: Schema.optional(SessionMode),
+  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
 });
@@ -529,6 +542,8 @@ const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
+  sessionMode: Schema.optionalKey(SessionMode),
+  orchestratorConfig: Schema.optionalKey(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
@@ -768,6 +783,44 @@ const ThreadActivityAppendCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const OrchestratorTaskCreatedCommand = Schema.Struct({
+  type: Schema.Literal("orchestrator.task.create"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  taskId: TrimmedNonEmptyString,
+  title: TrimmedNonEmptyString,
+  agentRole: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+const OrchestratorTaskAssignedCommand = Schema.Struct({
+  type: Schema.Literal("orchestrator.task.assign"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  taskId: TrimmedNonEmptyString,
+  agentRole: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+const OrchestratorTaskCompletedCommand = Schema.Struct({
+  type: Schema.Literal("orchestrator.task.complete"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  taskId: TrimmedNonEmptyString,
+  result: Schema.optional(Schema.String),
+  createdAt: IsoDateTime,
+});
+
+const AgentLaneChunkCommand = Schema.Struct({
+  type: Schema.Literal("agent.lane.chunk"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  lane: TrimmedNonEmptyString,
+  role: TrimmedNonEmptyString,
+  chunk: Schema.String,
+  createdAt: IsoDateTime,
+});
+
 const ThreadRevertCompleteCommand = Schema.Struct({
   type: Schema.Literal("thread.revert.complete"),
   commandId: CommandId,
@@ -783,6 +836,10 @@ const InternalOrchestrationCommand = Schema.Union([
   ThreadProposedPlanUpsertCommand,
   ThreadTurnDiffCompleteCommand,
   ThreadActivityAppendCommand,
+  OrchestratorTaskCreatedCommand,
+  OrchestratorTaskAssignedCommand,
+  OrchestratorTaskCompletedCommand,
+  AgentLaneChunkCommand,
   ThreadRevertCompleteCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
@@ -817,6 +874,10 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.turn-diff-completed",
   "thread.activity-appended",
   "thread.forked",
+  "orchestrator_task_created",
+  "orchestrator_task_assigned",
+  "orchestrator_task_completed",
+  "agent_lane_chunk",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
@@ -856,6 +917,8 @@ export const ThreadCreatedPayload = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
+  sessionMode: Schema.optionalKey(SessionMode),
+  orchestratorConfig: Schema.optionalKey(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_RUNTIME_MODE))),
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -887,6 +950,8 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   title: Schema.optional(TrimmedNonEmptyString),
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: Schema.optional(ModelSelection),
+  sessionMode: Schema.optional(SessionMode),
+  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: IsoDateTime,
@@ -994,6 +1059,36 @@ export const ThreadTurnDiffCompletedPayload = Schema.Struct({
 export const ThreadActivityAppendedPayload = Schema.Struct({
   threadId: ThreadId,
   activity: OrchestrationThreadActivity,
+});
+
+export const OrchestratorTaskCreatedPayload = Schema.Struct({
+  threadId: ThreadId,
+  taskId: TrimmedNonEmptyString,
+  title: TrimmedNonEmptyString,
+  agentRole: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+export const OrchestratorTaskAssignedPayload = Schema.Struct({
+  threadId: ThreadId,
+  taskId: TrimmedNonEmptyString,
+  agentRole: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+export const OrchestratorTaskCompletedPayload = Schema.Struct({
+  threadId: ThreadId,
+  taskId: TrimmedNonEmptyString,
+  result: Schema.optional(Schema.String),
+  createdAt: IsoDateTime,
+});
+
+export const AgentLaneChunkPayload = Schema.Struct({
+  threadId: ThreadId,
+  lane: TrimmedNonEmptyString,
+  role: TrimmedNonEmptyString,
+  chunk: Schema.String,
+  createdAt: IsoDateTime,
 });
 
 export const ThreadForkedPayload = Schema.Struct({
@@ -1148,6 +1243,26 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.forked"),
     payload: ThreadForkedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("orchestrator_task_created"),
+    payload: OrchestratorTaskCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("orchestrator_task_assigned"),
+    payload: OrchestratorTaskAssignedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("orchestrator_task_completed"),
+    payload: OrchestratorTaskCompletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("agent_lane_chunk"),
+    payload: AgentLaneChunkPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

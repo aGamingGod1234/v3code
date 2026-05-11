@@ -1,10 +1,12 @@
-import type {
-  OrchestrationCommand,
-  OrchestrationEvent,
-  OrchestrationReadModel,
-  OrchestrationThread,
-  ProjectId,
-  ThreadId,
+import {
+  DEFAULT_SESSION_MODE,
+  EventId,
+  type OrchestrationCommand,
+  type OrchestrationEvent,
+  type OrchestrationReadModel,
+  type OrchestrationThread,
+  type ProjectId,
+  type ThreadId,
 } from "@v3tools/contracts";
 import { Effect } from "effect";
 
@@ -227,6 +229,8 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           title: command.title,
           ...(command.hostDeviceId !== undefined ? { hostDeviceId: command.hostDeviceId } : {}),
           modelSelection: command.modelSelection,
+          sessionMode: command.sessionMode ?? DEFAULT_SESSION_MODE,
+          orchestratorConfig: command.orchestratorConfig ?? null,
           runtimeMode: command.runtimeMode,
           interactionMode: command.interactionMode,
           branch: command.branch,
@@ -325,6 +329,10 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.hostDeviceId !== undefined ? { hostDeviceId: command.hostDeviceId } : {}),
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
+            : {}),
+          ...(command.sessionMode !== undefined ? { sessionMode: command.sessionMode } : {}),
+          ...(command.orchestratorConfig !== undefined
+            ? { orchestratorConfig: command.orchestratorConfig }
             : {}),
           ...(command.branch !== undefined ? { branch: command.branch } : {}),
           ...(command.worktreePath !== undefined ? { worktreePath: command.worktreePath } : {}),
@@ -777,6 +785,205 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           activity: command.activity,
         },
       };
+    }
+
+    case "orchestrator.task.create": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return [
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "orchestrator_task_created",
+          payload: {
+            threadId: command.threadId,
+            taskId: command.taskId,
+            title: command.title,
+            agentRole: command.agentRole,
+            createdAt: command.createdAt,
+          },
+        },
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.activity-appended",
+          payload: {
+            threadId: command.threadId,
+            activity: {
+              id: EventId.make(crypto.randomUUID()),
+              tone: "info",
+              kind: "orchestrator_task_created",
+              summary: command.title,
+              payload: {
+                taskId: command.taskId,
+                agentRole: command.agentRole,
+              },
+              turnId: null,
+              createdAt: command.createdAt,
+            },
+          },
+        },
+      ];
+    }
+
+    case "orchestrator.task.assign": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return [
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "orchestrator_task_assigned",
+          payload: {
+            threadId: command.threadId,
+            taskId: command.taskId,
+            agentRole: command.agentRole,
+            createdAt: command.createdAt,
+          },
+        },
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.activity-appended",
+          payload: {
+            threadId: command.threadId,
+            activity: {
+              id: EventId.make(crypto.randomUUID()),
+              tone: "info",
+              kind: "orchestrator_task_assigned",
+              summary: `Assigned to ${command.agentRole}`,
+              payload: {
+                taskId: command.taskId,
+                agentRole: command.agentRole,
+              },
+              turnId: null,
+              createdAt: command.createdAt,
+            },
+          },
+        },
+      ];
+    }
+
+    case "orchestrator.task.complete": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return [
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "orchestrator_task_completed",
+          payload: {
+            threadId: command.threadId,
+            taskId: command.taskId,
+            ...(command.result !== undefined ? { result: command.result } : {}),
+            createdAt: command.createdAt,
+          },
+        },
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.activity-appended",
+          payload: {
+            threadId: command.threadId,
+            activity: {
+              id: EventId.make(crypto.randomUUID()),
+              tone: "info",
+              kind: "orchestrator_task_completed",
+              summary: command.result ?? "Task completed",
+              payload: {
+                taskId: command.taskId,
+                ...(command.result !== undefined ? { result: command.result } : {}),
+              },
+              turnId: null,
+              createdAt: command.createdAt,
+            },
+          },
+        },
+      ];
+    }
+
+    case "agent.lane.chunk": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return [
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "agent_lane_chunk",
+          payload: {
+            threadId: command.threadId,
+            lane: command.lane,
+            role: command.role,
+            chunk: command.chunk,
+            createdAt: command.createdAt,
+          },
+        },
+        {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.activity-appended",
+          payload: {
+            threadId: command.threadId,
+            activity: {
+              id: EventId.make(crypto.randomUUID()),
+              tone: "info",
+              kind: "agent_lane_chunk",
+              summary: command.chunk.slice(0, 120) || command.role,
+              payload: {
+                lane: command.lane,
+                role: command.role,
+                chunk: command.chunk,
+              },
+              turnId: null,
+              createdAt: command.createdAt,
+            },
+          },
+        },
+      ];
     }
 
     default: {
