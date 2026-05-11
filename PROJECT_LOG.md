@@ -1,3 +1,35 @@
+## [2026-05-11] - Main CI Test Repair
+
+### What Was Implemented
+
+- Updated server test expectations for the orchestrator read-model fields
+  and the new Postgres migration entry after the orchestrator merge.
+
+### Files Modified
+
+- `apps/server/src/orchestration/projector.test.ts` - expects
+  `sessionMode` and `orchestratorConfig` on projected threads.
+- `apps/server/src/persistence/PostgresMigrations.test.ts` - includes
+  `OrchestratorSessionMode` in the migration-name sequence.
+- `PROJECT_LOG.md` - records this CI test repair pass.
+
+### Assumptions Made (flag these for review)
+
+- The projector behavior is correct; the failing test was an outdated
+  exact-object expectation.
+- Migration 034 is part of the upstream-port sequence for Postgres
+  migration registry tests.
+
+### Known Issues / Deferred
+
+- Broader scheduled release workflow failures visible in GitHub Actions
+  predate this orchestrator CI repair and were not part of this fix.
+
+### Suggested Next Steps
+
+- Watch the refreshed main CI run through browser tests and desktop build
+  after this patch lands.
+
 ## [2026-05-11] - Orchestrator PR CI Repair
 
 ### What Was Implemented

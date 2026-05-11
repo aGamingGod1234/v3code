@@ -95,6 +95,8 @@ describe("orchestration projector", () => {
         activities: [],
         checkpoints: [],
         session: null,
+        sessionMode: "single",
+        orchestratorConfig: null,
       },
     ]);
   });
