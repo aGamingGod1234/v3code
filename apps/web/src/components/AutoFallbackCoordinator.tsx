@@ -169,6 +169,8 @@ export function AutoFallbackCoordinator() {
                 title: fallbackTitle,
                 ...(thread.hostDeviceId === null ? {} : { hostDeviceId: thread.hostDeviceId }),
                 modelSelection: fallbackModelSelection,
+                sessionMode: "single",
+                orchestratorConfig: null,
                 runtimeMode: thread.runtimeMode,
                 interactionMode: thread.interactionMode,
                 branch: thread.branch,

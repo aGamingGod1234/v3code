@@ -248,6 +248,8 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     title: thread.title,
     hostDeviceId: thread.hostDeviceId ?? null,
     modelSelection: normalizeModelSelection(thread.modelSelection),
+    sessionMode: thread.sessionMode ?? "single",
+    orchestratorConfig: thread.orchestratorConfig ?? null,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
     session: thread.session ? mapSession(thread.session) : null,
@@ -284,6 +286,8 @@ function mapThreadShell(
     title: thread.title,
     hostDeviceId: thread.hostDeviceId ?? null,
     modelSelection: normalizeModelSelection(thread.modelSelection),
+    sessionMode: thread.sessionMode ?? "single",
+    orchestratorConfig: thread.orchestratorConfig ?? null,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
     error: sanitizeThreadErrorMessage(thread.session?.lastError),
@@ -305,6 +309,7 @@ function mapThreadShell(
     projectId: thread.projectId,
     title: thread.title,
     hostDeviceId: thread.hostDeviceId ?? null,
+    sessionMode: thread.sessionMode ?? "single",
     interactionMode: thread.interactionMode,
     session,
     createdAt: thread.createdAt,
@@ -335,6 +340,8 @@ function toThreadShell(thread: Thread): ThreadShell {
     title: thread.title,
     hostDeviceId: thread.hostDeviceId,
     modelSelection: thread.modelSelection,
+    sessionMode: thread.sessionMode ?? "single",
+    orchestratorConfig: thread.orchestratorConfig ?? null,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
     error: thread.error,
@@ -423,6 +430,7 @@ function sidebarThreadSummariesEqual(
     left.projectId === right.projectId &&
     left.title === right.title &&
     left.hostDeviceId === right.hostDeviceId &&
+    left.sessionMode === right.sessionMode &&
     left.interactionMode === right.interactionMode &&
     threadSessionsEqual(left.session, right.session) &&
     left.createdAt === right.createdAt &&
@@ -448,6 +456,8 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
     left.title === right.title &&
     left.hostDeviceId === right.hostDeviceId &&
     left.modelSelection === right.modelSelection &&
+    left.sessionMode === right.sessionMode &&
+    left.orchestratorConfig === right.orchestratorConfig &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&
     left.error === right.error &&
@@ -1289,6 +1299,8 @@ function applyEnvironmentOrchestrationEvent(
           title: event.payload.title,
           hostDeviceId: event.payload.hostDeviceId ?? null,
           modelSelection: event.payload.modelSelection,
+          sessionMode: event.payload.sessionMode,
+          orchestratorConfig: event.payload.orchestratorConfig,
           runtimeMode: event.payload.runtimeMode,
           interactionMode: event.payload.interactionMode,
           branch: event.payload.branch,
@@ -1335,6 +1347,12 @@ function applyEnvironmentOrchestrationEvent(
           : {}),
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSelection(event.payload.modelSelection) }
+          : {}),
+        ...(event.payload.sessionMode !== undefined
+          ? { sessionMode: event.payload.sessionMode }
+          : {}),
+        ...(event.payload.orchestratorConfig !== undefined
+          ? { orchestratorConfig: event.payload.orchestratorConfig }
           : {}),
         ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
         ...(event.payload.worktreePath !== undefined

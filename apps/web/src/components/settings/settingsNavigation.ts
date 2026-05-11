@@ -9,6 +9,7 @@ import {
   MonitorIcon,
   PaletteIcon,
   PlugIcon,
+  RouteIcon,
   ServerIcon,
   Settings2Icon,
   SlidersIcon,
@@ -21,6 +22,7 @@ export type SettingsSectionPath =
   | "/settings/configuration"
   | "/settings/personalization"
   | "/settings/providers"
+  | "/settings/orchestrator"
   | "/settings/mcp"
   | "/settings/git"
   | "/settings/environments"
@@ -42,6 +44,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<SettingsNavigationItem> = [
   { label: "Configuration", to: "/settings/configuration", icon: SlidersIcon },
   { label: "Personalization", to: "/settings/personalization", icon: UserIcon },
   { label: "Providers", to: "/settings/providers", icon: PlugIcon },
+  { label: "Orchestrator", to: "/settings/orchestrator", icon: RouteIcon },
   { label: "MCP servers", to: "/settings/mcp", icon: BoxesIcon },
   { label: "Git", to: "/settings/git", icon: GitBranchIcon },
   { label: "Environments", to: "/settings/environments", icon: ServerIcon },

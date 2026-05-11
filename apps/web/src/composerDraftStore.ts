@@ -8,6 +8,7 @@ import {
   type ProviderKind,
   type ProviderModelOptions,
   type RuntimeMode,
+  type SessionMode,
   type ScopedProjectRef,
   type ScopedThreadRef,
   type ServerProvider,
@@ -76,6 +77,7 @@ import {
   EMPTY_COMPOSER_DRAFT_MODEL_STATE,
   EMPTY_THREAD_DRAFT,
   isRuntimeMode,
+  isSessionMode,
   logicalProjectDraftKey,
   normalizeDraftThreadEnvMode,
   normalizeLegacyComposerStorageKey,
@@ -146,6 +148,7 @@ interface ComposerDraftStoreState {
       envMode?: DraftThreadEnvMode;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
+      sessionMode?: SessionMode;
     },
   ) => void;
   /** Creates or updates the draft session tracked for a concrete project ref. */
@@ -162,6 +165,7 @@ interface ComposerDraftStoreState {
       envMode?: DraftThreadEnvMode;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
+      sessionMode?: SessionMode;
     },
   ) => void;
   /** Updates mutable draft-session metadata without touching composer content. */
@@ -177,6 +181,7 @@ interface ComposerDraftStoreState {
       envMode?: DraftThreadEnvMode;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
+      sessionMode?: SessionMode;
     },
   ) => void;
   clearProjectDraftThreadId: (projectRef: ScopedProjectRef) => void;
@@ -217,6 +222,10 @@ interface ComposerDraftStoreState {
   setInteractionMode: (
     threadRef: ComposerThreadTarget,
     interactionMode: ProviderInteractionMode | null | undefined,
+  ) => void;
+  setSessionMode: (
+    threadRef: ComposerThreadTarget,
+    sessionMode: SessionMode | null | undefined,
   ) => void;
   addImage: (threadRef: ComposerThreadTarget, image: ComposerImageAttachment) => void;
   addImages: (threadRef: ComposerThreadTarget, images: ComposerImageAttachment[]) => void;
@@ -336,6 +345,7 @@ function createDraftThreadState(
     envMode?: DraftThreadEnvMode;
     runtimeMode?: RuntimeMode;
     interactionMode?: ProviderInteractionMode;
+    sessionMode?: SessionMode;
   },
 ): DraftThreadState {
   const projectChanged =
@@ -369,6 +379,7 @@ function createDraftThreadState(
     runtimeMode: options?.runtimeMode ?? existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode:
       options?.interactionMode ?? existingThread?.interactionMode ?? DEFAULT_INTERACTION_MODE,
+    sessionMode: options?.sessionMode ?? existingThread?.sessionMode ?? "single",
     branch: nextBranch,
     worktreePath: nextWorktreePath,
     cwd: nextCwd,
@@ -408,6 +419,7 @@ function draftThreadsEqual(left: DraftThreadState | undefined, right: DraftThrea
     left.createdAt === right.createdAt &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&
+    left.sessionMode === right.sessionMode &&
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath &&
     left.cwd === right.cwd &&
@@ -677,6 +689,7 @@ function normalizePersistedDraftsByThreadId(
       draftCandidate.interactionMode === "plan" || draftCandidate.interactionMode === "default"
         ? draftCandidate.interactionMode
         : null;
+    const sessionMode = draftCandidate.sessionMode === "orchestrated" ? "orchestrated" : null;
     const prompt = ensureInlineTerminalContextPlaceholders(
       promptCandidate,
       terminalContexts.length,
@@ -735,7 +748,8 @@ function normalizePersistedDraftsByThreadId(
       terminalContexts.length === 0 &&
       !hasModelData &&
       !runtimeMode &&
-      !interactionMode
+      !interactionMode &&
+      !sessionMode
     ) {
       continue;
     }
@@ -758,6 +772,7 @@ function normalizePersistedDraftsByThreadId(
       ...(hasModelData ? { modelSelectionByProvider, activeProvider } : {}),
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
+      ...(sessionMode ? { sessionMode } : {}),
     };
   }
 
@@ -834,7 +849,8 @@ function partializeComposerDraftStoreState(
       draft.terminalContexts.length === 0 &&
       !hasModelData &&
       draft.runtimeMode === null &&
-      draft.interactionMode === null
+      draft.interactionMode === null &&
+      draft.sessionMode === null
     ) {
       continue;
     }
@@ -862,6 +878,7 @@ function partializeComposerDraftStoreState(
         : {}),
       ...(draft.runtimeMode ? { runtimeMode: draft.runtimeMode } : {}),
       ...(draft.interactionMode ? { interactionMode: draft.interactionMode } : {}),
+      ...(draft.sessionMode ? { sessionMode: draft.sessionMode } : {}),
     };
     persistedDraftsByThreadKey[threadKey] = persistedDraft;
   }
@@ -1085,6 +1102,7 @@ function toHydratedThreadDraft(
     activeProvider,
     runtimeMode: persistedDraft.runtimeMode ?? null,
     interactionMode: persistedDraft.interactionMode ?? null,
+    sessionMode: persistedDraft.sessionMode ?? null,
   };
 }
 
@@ -1106,6 +1124,7 @@ function toHydratedDraftThreadState(
     createdAt: persistedDraftThread.createdAt,
     runtimeMode: persistedDraftThread.runtimeMode,
     interactionMode: persistedDraftThread.interactionMode,
+    sessionMode: persistedDraftThread.sessionMode ?? "single",
     branch: persistedDraftThread.branch,
     worktreePath: persistedDraftThread.worktreePath,
     cwd: persistedDraftThread.cwd ?? null,
@@ -1313,6 +1332,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                   : options.createdAt || existing.createdAt,
               runtimeMode: options.runtimeMode ?? existing.runtimeMode,
               interactionMode: options.interactionMode ?? existing.interactionMode,
+              sessionMode: options.sessionMode ?? existing.sessionMode ?? "single",
               branch: nextBranch,
               worktreePath: nextWorktreePath,
               cwd: nextCwd,
@@ -1333,6 +1353,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               nextDraftThread.createdAt === existing.createdAt &&
               nextDraftThread.runtimeMode === existing.runtimeMode &&
               nextDraftThread.interactionMode === existing.interactionMode &&
+              nextDraftThread.sessionMode === existing.sessionMode &&
               nextDraftThread.branch === existing.branch &&
               nextDraftThread.worktreePath === existing.worktreePath &&
               nextDraftThread.cwd === existing.cwd &&
@@ -1776,6 +1797,34 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             const nextDraft: ComposerThreadDraftState = {
               ...base,
               interactionMode: nextInteractionMode,
+            };
+            const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
+            if (shouldRemoveDraft(nextDraft)) {
+              delete nextDraftsByThreadKey[threadKey];
+            } else {
+              nextDraftsByThreadKey[threadKey] = nextDraft;
+            }
+            return { draftsByThreadKey: nextDraftsByThreadKey };
+          });
+        },
+        setSessionMode: (threadRef, sessionMode) => {
+          const threadKey = resolveComposerDraftKey(get(), threadRef) ?? "";
+          if (threadKey.length === 0) {
+            return;
+          }
+          const nextSessionMode = isSessionMode(sessionMode) ? sessionMode : null;
+          set((state) => {
+            const existing = state.draftsByThreadKey[threadKey];
+            if (!existing && nextSessionMode === null) {
+              return state;
+            }
+            const base = existing ?? createEmptyThreadDraft();
+            if (base.sessionMode === nextSessionMode) {
+              return state;
+            }
+            const nextDraft: ComposerThreadDraftState = {
+              ...base,
+              sessionMode: nextSessionMode,
             };
             const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
             if (shouldRemoveDraft(nextDraft)) {

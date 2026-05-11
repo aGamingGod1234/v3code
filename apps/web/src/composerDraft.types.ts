@@ -6,6 +6,7 @@ import {
   ProviderInteractionMode,
   ProviderKind,
   RuntimeMode,
+  SessionMode,
   type ScopedThreadRef,
   ThreadId,
 } from "@v3tools/contracts";
@@ -58,6 +59,7 @@ export interface ComposerThreadDraftState {
   activeProvider: ProviderKind | null;
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
+  sessionMode?: SessionMode | null;
 }
 
 /**
@@ -74,6 +76,7 @@ export interface DraftSessionState {
   createdAt: string;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
+  sessionMode?: SessionMode;
   branch: string | null;
   worktreePath: string | null;
   /**

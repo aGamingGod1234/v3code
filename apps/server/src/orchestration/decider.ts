@@ -6,6 +6,7 @@ import type {
   ProjectId,
   ThreadId,
 } from "@v3tools/contracts";
+import { DEFAULT_SESSION_MODE } from "@v3tools/contracts";
 import { Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -227,6 +228,8 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           title: command.title,
           ...(command.hostDeviceId !== undefined ? { hostDeviceId: command.hostDeviceId } : {}),
           modelSelection: command.modelSelection,
+          sessionMode: command.sessionMode ?? DEFAULT_SESSION_MODE,
+          orchestratorConfig: command.orchestratorConfig ?? null,
           runtimeMode: command.runtimeMode,
           interactionMode: command.interactionMode,
           branch: command.branch,
@@ -325,6 +328,10 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.hostDeviceId !== undefined ? { hostDeviceId: command.hostDeviceId } : {}),
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
+            : {}),
+          ...(command.sessionMode !== undefined ? { sessionMode: command.sessionMode } : {}),
+          ...(command.orchestratorConfig !== undefined
+            ? { orchestratorConfig: command.orchestratorConfig }
             : {}),
           ...(command.branch !== undefined ? { branch: command.branch } : {}),
           ...(command.worktreePath !== undefined ? { worktreePath: command.worktreePath } : {}),

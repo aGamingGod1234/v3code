@@ -1,5 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_SERVER_SETTINGS, ServerSettingsPatch } from "@v3tools/contracts";
+import {
+  DEFAULT_ORCHESTRATOR_CONFIG,
+  DEFAULT_SERVER_SETTINGS,
+  ServerSettingsPatch,
+} from "@v3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { ServerConfig } from "./config.ts";
@@ -138,6 +142,27 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         options: {
           reasoningEffort: "high",
         },
+      });
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("normalizes orchestrator role defaults when a provider patch changes provider", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+
+      const next = yield* serverSettings.updateSettings({
+        orchestratorConfig: {
+          implementation: {
+            provider: "gemini",
+          },
+        },
+      });
+
+      assert.deepEqual(next.orchestratorConfig.implementation, {
+        provider: "gemini",
+        model: "gemini-2.5-pro",
+        effort: "standard",
+        mode: null,
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
@@ -294,6 +319,38 @@ it.layer(NodeServices.layer)("server settings", (it) => {
             serverPassword: "secret-password",
           },
         },
+      });
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("persists orchestrator config atomically so sparse writes reload cleanly", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      const serverConfig = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+
+      const next = yield* serverSettings.updateSettings({
+        orchestratorConfig: {
+          fastMode: true,
+        },
+      });
+
+      assert.equal(next.orchestratorConfig.fastMode, true);
+      assert.deepEqual(
+        next.orchestratorConfig.orchestrator,
+        DEFAULT_ORCHESTRATOR_CONFIG.orchestrator,
+      );
+      assert.deepEqual(
+        next.orchestratorConfig.implementation,
+        DEFAULT_ORCHESTRATOR_CONFIG.implementation,
+      );
+      assert.deepEqual(next.orchestratorConfig.assistant, DEFAULT_ORCHESTRATOR_CONFIG.assistant);
+
+      const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      const persisted = JSON.parse(raw);
+      assert.deepEqual(persisted.orchestratorConfig, {
+        ...DEFAULT_ORCHESTRATOR_CONFIG,
+        fastMode: true,
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );

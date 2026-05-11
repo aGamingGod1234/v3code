@@ -1,6 +1,8 @@
 node_modules
 .bun
-.claude
+.claude/*
+!.claude/agents/
+!.claude/agents/sonnet-assistant.md
 .deploy-secrets
 .turbo
 .DS_Store
