@@ -38,9 +38,9 @@ export function V3StartupSignInNudge(): null {
         firedRef.current = true;
         toastManager.add({
           type: "info",
-          title: "Sync V3 across your devices",
+          title: "Connect V3 online",
           description:
-            "Sign in with Google to mirror your chats to the V3 web app and any other device you sign in on.",
+            "Sign in with Google first. Then use Devices > Start setup on one always-on machine to publish the server node URL and connect v3.agaminggod.com.",
           // Action toasts need long enough to read + click. The Base UI default
           // (5s) was so short users reported the toast vanishing before they
           // could press "Sign in".

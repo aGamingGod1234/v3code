@@ -55,6 +55,7 @@ import {
 import { V3StartupSignInNudge } from "../v3/ui/StartupSignInNudge";
 import { V3DeviceApprovalToast } from "../v3/ui/DeviceApprovalToast";
 import { V3CloudSignInBootstrap } from "../v3/ui/CloudSignInBootstrap";
+import { OpenChromeSetupNudge } from "../v3/ui/OpenChromeSetupNudge";
 import { TourMount } from "../components/tour/TourMount";
 
 export const Route = createRootRouteWithContext<{
@@ -97,6 +98,7 @@ function RootRouteView() {
     return (
       <ToastProvider>
         <AnchoredToastProvider>
+          <OpenChromeSetupNudge />
           <Outlet />
         </AnchoredToastProvider>
       </ToastProvider>
@@ -124,6 +126,7 @@ function RootRouteView() {
         <V3StartupSignInNudge />
         <V3DeviceApprovalToast />
         <V3CloudSignInBootstrap />
+        <OpenChromeSetupNudge />
         <TourMount />
       </AnchoredToastProvider>
     </ToastProvider>

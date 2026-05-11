@@ -7,7 +7,6 @@ import {
   FolderSearchIcon,
   LayoutGridIcon,
   Maximize2Icon,
-  MessageSquareIcon,
   MonitorIcon,
   PlusIcon,
   Rows2Icon,
@@ -47,6 +46,7 @@ import { usePrimaryEnvironmentId } from "../../environments/primary";
 import { pushRecentFolder, readRecentFolders } from "../../lib/recentFolders";
 import { startThreadFromFolder } from "../../lib/startThreadFromFolder";
 import { useSettings } from "../../hooks/useSettings";
+import { hasThreadDragData, readThreadDragData } from "../../multiChatDrag";
 
 const CURRENT_DEVICE_SELECT_VALUE = "__current_device__";
 
@@ -83,6 +83,51 @@ function shortPaneLabel(paneId: MultiChatPaneId): string {
   return paneId.slice(-1);
 }
 
+type DropPlacement = "left" | "right" | "top" | "bottom" | "replace";
+
+const dropPlacementLabel = (placement: DropPlacement): string => {
+  switch (placement) {
+    case "left":
+      return "Drop left";
+    case "right":
+      return "Drop right";
+    case "top":
+      return "Drop above";
+    case "bottom":
+      return "Drop below";
+    case "replace":
+      return "Drop here";
+  }
+};
+
+function resolveDropPlacement(
+  event: React.DragEvent<HTMLElement>,
+  hasCurrentTarget: boolean,
+): DropPlacement {
+  if (!hasCurrentTarget) {
+    return "replace";
+  }
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
+  const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+  const horizontalDistance = Math.min(x, 1 - x);
+  const verticalDistance = Math.min(y, 1 - y);
+
+  if (horizontalDistance <= verticalDistance) {
+    return x < 0.5 ? "left" : "right";
+  }
+  return y < 0.5 ? "top" : "bottom";
+}
+
+function isHorizontalDropPlacement(placement: DropPlacement): boolean {
+  return placement === "left" || placement === "right";
+}
+
+function isBeforeDropPlacement(placement: DropPlacement): boolean {
+  return placement === "left" || placement === "top";
+}
+
 export function MultiChatWorkspace({ routeThreadRef, onDiffPanelOpen }: MultiChatWorkspaceProps) {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 767px)");
@@ -98,6 +143,7 @@ export function MultiChatWorkspace({ routeThreadRef, onDiffPanelOpen }: MultiCha
     : visiblePaneIds;
   const fallbackPaneId: MultiChatPaneId = visiblePaneIds[0] ?? "pane-1";
   const paneIdsToRender = mobilePaneIds.length > 0 ? mobilePaneIds : [fallbackPaneId];
+  const singlePaneTarget = layoutMode === "single" ? (panes[fallbackPaneId]?.target ?? null) : null;
 
   useEffect(() => {
     if (!routeThreadRef) {
@@ -128,30 +174,42 @@ export function MultiChatWorkspace({ routeThreadRef, onDiffPanelOpen }: MultiCha
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
       <div className="flex h-full min-h-0 min-w-0 flex-col">
-        <MultiChatToolbar
-          activePaneId={activePaneId}
-          layoutMode={layoutMode}
-          paneIds={visiblePaneIds}
-          setActivePaneId={handlePaneFocus}
-          setLayoutMode={setLayoutMode}
-        />
-        <div
-          className={cn(
-            "grid min-h-0 flex-1 grid-cols-1 grid-rows-1 gap-1 bg-border/70 p-1 md:grid",
-            layoutGridClass(layoutMode),
-          )}
-        >
-          {paneIdsToRender.map((paneId) => (
-            <MultiChatPane
-              key={paneId}
-              active={paneId === activePaneId}
-              onFocus={() => handlePaneFocus(paneId)}
-              paneId={paneId}
-              target={panes[paneId].target}
-              {...(onDiffPanelOpen ? { onDiffPanelOpen } : {})}
-            />
-          ))}
-        </div>
+        {layoutMode === "single" && singlePaneTarget ? (
+          <SingleChatDropSurface
+            paneId={fallbackPaneId}
+            target={singlePaneTarget}
+            {...(onDiffPanelOpen ? { onDiffPanelOpen } : {})}
+          />
+        ) : (
+          <>
+            {layoutMode === "single" ? null : (
+              <MultiChatToolbar
+                activePaneId={activePaneId}
+                layoutMode={layoutMode}
+                paneIds={visiblePaneIds}
+                setActivePaneId={handlePaneFocus}
+                setLayoutMode={setLayoutMode}
+              />
+            )}
+            <div
+              className={cn(
+                "grid min-h-0 flex-1 grid-cols-1 grid-rows-1 gap-1 bg-border/70 p-1 md:grid",
+                layoutGridClass(layoutMode),
+              )}
+            >
+              {paneIdsToRender.map((paneId) => (
+                <MultiChatPane
+                  key={paneId}
+                  active={paneId === activePaneId}
+                  onFocus={() => handlePaneFocus(paneId)}
+                  paneId={paneId}
+                  target={panes[paneId].target}
+                  {...(onDiffPanelOpen ? { onDiffPanelOpen } : {})}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </SidebarInset>
   );
@@ -173,10 +231,6 @@ function MultiChatToolbar({
   return (
     <div className="flex min-h-11 shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-2 py-1.5 text-xs sm:px-3 wco:pr-[calc(100vw_-_env(titlebar-area-width)_-_env(titlebar-area-x)_+_1em)]">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="hidden items-center gap-1.5 text-muted-foreground sm:inline-flex">
-          <MessageSquareIcon className="size-3.5" />
-          Multi-agent view
-        </span>
         <div className="flex items-center gap-1 rounded-md border border-border/70 bg-background/70 p-0.5">
           {paneIds.map((paneId) => (
             <button
@@ -215,6 +269,148 @@ function MultiChatToolbar({
   );
 }
 
+function applyDroppedThreadToPane(input: {
+  readonly droppedTarget: ScopedThreadRef;
+  readonly navigate: ReturnType<typeof useNavigate>;
+  readonly paneId: MultiChatPaneId;
+  readonly placement: DropPlacement;
+}) {
+  const store = useMultiChatLayoutStore.getState();
+  const currentTarget = store.panes[input.paneId].target;
+  const droppedTarget = scopeThreadRef(
+    input.droppedTarget.environmentId,
+    input.droppedTarget.threadId,
+  );
+  const droppedTargetKey = paneTargetKey(droppedTarget);
+
+  if (currentTarget && paneTargetKey(currentTarget) === droppedTargetKey) {
+    store.setActivePaneId(input.paneId);
+  } else if (currentTarget && store.layoutMode === "single" && input.placement !== "replace") {
+    const nextLayoutMode = isHorizontalDropPlacement(input.placement) ? "horizontal" : "vertical";
+    const droppedPaneId: MultiChatPaneId = isBeforeDropPlacement(input.placement)
+      ? "pane-1"
+      : "pane-2";
+    const existingPaneId: MultiChatPaneId = droppedPaneId === "pane-1" ? "pane-2" : "pane-1";
+
+    store.setLayoutMode(nextLayoutMode);
+    store.setPaneTarget(droppedPaneId, droppedTarget);
+    store.setPaneTarget(existingPaneId, currentTarget);
+    store.setActivePaneId(droppedPaneId);
+  } else {
+    const visiblePaneIds = visiblePaneIdsForLayout(store.layoutMode);
+    const emptyPaneId =
+      input.placement === "replace"
+        ? null
+        : (visiblePaneIds.find(
+            (paneId) => paneId !== input.paneId && store.panes[paneId].target === null,
+          ) ?? null);
+    const targetPaneId = emptyPaneId ?? input.paneId;
+    store.setPaneTarget(targetPaneId, droppedTarget);
+    store.setActivePaneId(targetPaneId);
+  }
+
+  void input.navigate({
+    to: "/$environmentId/$threadId",
+    params: buildThreadRouteParams(droppedTarget),
+  });
+}
+
+function usePaneDropHandlers(input: {
+  readonly paneId: MultiChatPaneId;
+  readonly target: ScopedThreadRef | null;
+}) {
+  const navigate = useNavigate();
+  const [dropPlacement, setDropPlacement] = useState<DropPlacement | null>(null);
+
+  const handleDragOver = useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      if (!hasThreadDragData(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setDropPlacement(resolveDropPlacement(event, input.target !== null));
+    },
+    [input.target],
+  );
+
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLElement>) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+    setDropPlacement(null);
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      const droppedTarget = readThreadDragData(event.dataTransfer);
+      if (!droppedTarget) {
+        return;
+      }
+      event.preventDefault();
+      const placement = dropPlacement ?? resolveDropPlacement(event, input.target !== null);
+      setDropPlacement(null);
+      applyDroppedThreadToPane({
+        droppedTarget,
+        navigate,
+        paneId: input.paneId,
+        placement,
+      });
+    },
+    [dropPlacement, input.paneId, input.target, navigate],
+  );
+
+  return {
+    dropPlacement,
+    dropHandlers: {
+      onDragLeave: handleDragLeave,
+      onDragOver: handleDragOver,
+      onDrop: handleDrop,
+    },
+  };
+}
+
+function DropOverlay({ placement }: { readonly placement: DropPlacement | null }) {
+  if (!placement) {
+    return null;
+  }
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-primary/8 ring-2 ring-inset ring-primary/55">
+      <span className="rounded-md border border-primary/35 bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm">
+        {dropPlacementLabel(placement)}
+      </span>
+    </div>
+  );
+}
+
+function SingleChatDropSurface({
+  onDiffPanelOpen,
+  paneId,
+  target,
+}: {
+  readonly onDiffPanelOpen?: () => void;
+  readonly paneId: MultiChatPaneId;
+  readonly target: ScopedThreadRef;
+}) {
+  const { dropHandlers, dropPlacement } = usePaneDropHandlers({ paneId, target });
+
+  return (
+    <section
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
+      {...dropHandlers}
+    >
+      <ChatView
+        environmentId={target.environmentId}
+        threadId={target.threadId}
+        routeKind="server"
+        {...(onDiffPanelOpen ? { onDiffPanelOpen } : {})}
+      />
+      <DropOverlay placement={dropPlacement} />
+    </section>
+  );
+}
+
 function MultiChatPane({
   active,
   onDiffPanelOpen,
@@ -229,6 +425,7 @@ function MultiChatPane({
   readonly target: ScopedThreadRef | null;
 }) {
   const closePane = useMultiChatLayoutStore((state) => state.closePane);
+  const { dropHandlers, dropPlacement } = usePaneDropHandlers({ paneId, target });
   const thread = useStore(
     useMemo(() => {
       if (!target) {
@@ -243,10 +440,11 @@ function MultiChatPane({
     return (
       <section
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-hidden border bg-background",
+          "relative flex min-h-0 min-w-0 flex-col overflow-hidden border bg-background",
           active ? "border-primary/60" : "border-border",
         )}
         onMouseDown={onFocus}
+        {...dropHandlers}
       >
         <PaneHeader
           active={active}
@@ -256,6 +454,7 @@ function MultiChatPane({
           onFocus={onFocus}
         />
         <PaneEmptyState paneId={paneId} />
+        <DropOverlay placement={dropPlacement} />
       </section>
     );
   }
@@ -263,10 +462,11 @@ function MultiChatPane({
   return (
     <section
       className={cn(
-        "flex min-h-0 min-w-0 flex-col overflow-hidden border bg-background",
+        "relative flex min-h-0 min-w-0 flex-col overflow-hidden border bg-background",
         active ? "border-primary/60" : "border-border",
       )}
       onMouseDown={onFocus}
+      {...dropHandlers}
     >
       <PaneHeader
         active={active}
@@ -284,6 +484,7 @@ function MultiChatPane({
           {...(onDiffPanelOpen ? { onDiffPanelOpen } : {})}
         />
       </div>
+      <DropOverlay placement={dropPlacement} />
     </section>
   );
 }

@@ -20,6 +20,7 @@ const CODEX_MESSAGE_TYPES = new Set([
   "exec_result",
   "session_meta",
 ]);
+const CODEX_ENVELOPE_TYPES = new Set(["session_meta", "turn_context", "response_item"]);
 const CLAUDE_ENVELOPE_TYPES = new Set([
   "user",
   "assistant",
@@ -96,6 +97,14 @@ export function detectChatImportFormat(text: string): DetectionResult | null {
       format: "codex",
       confidence: "high",
       reason: "First line has Codex CLI envelope shape.",
+    };
+  }
+
+  if (typeof env.type === "string" && CODEX_ENVELOPE_TYPES.has(env.type)) {
+    return {
+      format: "codex",
+      confidence: "high",
+      reason: "First line has current Codex CLI envelope shape.",
     };
   }
 

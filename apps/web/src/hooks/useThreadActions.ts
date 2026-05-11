@@ -293,9 +293,9 @@ export function useThreadActions() {
           );
           toastManager.add({
             type: "success",
-            title: `Fork sent to ${targetDevice?.name ?? "another device"}`,
+            title: `Transfer sent to ${targetDevice?.name ?? "another device"}`,
             description: targetDevice?.online
-              ? "Open the new chat there to choose a local folder."
+              ? "Open the new chat there to choose the workspace folder."
               : "The new chat will be ready when that device reconnects.",
           });
         }
@@ -304,7 +304,7 @@ export function useThreadActions() {
         const message = error instanceof Error ? error.message : "Unknown error forking chat.";
         toastManager.add({
           type: "error",
-          title: "Could not fork chat",
+          title: "Could not transfer chat",
           description: message,
         });
         return null;

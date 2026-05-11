@@ -141,6 +141,22 @@ describe("GitHubIdentityService.fetchUser", () => {
     expect(call.headers.get("Authorization")).toBe("Bearer ghp_xxx");
   });
 
+  it("can validate a pre-obtained token without OAuth client credentials", async () => {
+    const { fetchImpl } = makeFetch({
+      status: 200,
+      body: JSON.stringify({
+        login: "aGamingGod1234",
+        id: 12345,
+        name: "Lucas",
+        email: null,
+        avatar_url: "https://cdn/avatar.png",
+      }),
+    });
+    const service = makeGitHubIdentityServiceWith({ fetchImpl });
+    const result = await Effect.runPromise(service.fetchUser({ accessToken: "ghp_xxx" }));
+    expect(result.login).toBe("aGamingGod1234");
+  });
+
   it("raises a tagged error on 401", async () => {
     const { fetchImpl } = makeFetch({ status: 401, body: JSON.stringify({ message: "Bad" }) });
     const service = makeGitHubIdentityServiceWith({

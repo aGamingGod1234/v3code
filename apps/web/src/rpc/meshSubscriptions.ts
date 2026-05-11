@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import type { DeviceId, DevicePlatform, MeshRegisterPushTokenInput } from "@v3tools/contracts";
 
-import { useDevices } from "../hooks/useDevices";
+import { useDevices, v3DeviceQueryKeys, type DeviceListSnapshot } from "../hooks/useDevices";
 import { useServerMode } from "../hooks/useServerMode";
 import { updateV3SignedIn, useV3SignInSnapshot } from "../v3/auth/signInState";
 import { getPrimaryEnvironmentConnection } from "../environments/runtime";
@@ -11,6 +11,7 @@ import { toastManager } from "../components/ui/toast";
 import { startGoogleTokenRefreshScheduler } from "../v3/auth/googleTokenRefreshScheduler";
 import { attachFcmTokenBridge } from "../v3/mobile/fcmTokenBridge";
 import type { MobilePushRegistration } from "../v3/mobile/mobilePlatform";
+import { applyPresenceStreamItemToDeviceList } from "./meshPresence";
 import { setMeshDeviceSnapshot } from "./meshState";
 import { setServerModeState, setUserSessionState } from "./serverState";
 
@@ -66,7 +67,7 @@ export function useMeshSubscriptions(): void {
 
     const unsubscribe = getPrimaryEnvironmentConnection().client.mesh.subscribeDeviceApprovals(
       (event) => {
-        void queryClient.invalidateQueries({ queryKey: ["v3", "devices"] });
+        void queryClient.invalidateQueries({ queryKey: v3DeviceQueryKeys.all });
 
         const currentDevice = devices.find((device) => device.id === currentDeviceId) ?? null;
         if (event.type === "device-approved" && event.device.id === currentDeviceId) {
@@ -97,6 +98,22 @@ export function useMeshSubscriptions(): void {
       unsubscribe();
     };
   }, [currentDeviceId, devices, queryClient, signInSnapshot.email]);
+
+  useEffect(() => {
+    if (signInSnapshot.email === null) {
+      return;
+    }
+
+    const unsubscribe = getPrimaryEnvironmentConnection().client.mesh.subscribePresence((item) => {
+      queryClient.setQueryData<DeviceListSnapshot | undefined>(v3DeviceQueryKeys.list(), (data) =>
+        applyPresenceStreamItemToDeviceList(data, item),
+      );
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [queryClient, signInSnapshot.email]);
 
   // Spec §8.6 / Phase 9: register the Android device's FCM token with
   // the server whenever we have an authenticated session. Without this

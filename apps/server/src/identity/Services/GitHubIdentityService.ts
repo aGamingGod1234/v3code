@@ -1,9 +1,9 @@
 // V3 Phase 1e — GitHub identity service.
 //
 // Mirrors the Google identity service, but for GitHub's web application
-// OAuth flow. The server exchanges a code for an access token using the
-// operator's `V3CODE_GITHUB_CLIENT_SECRET`, then fetches /user to learn
-// the user's login / profile. The token is handed back to the caller
+// OAuth flow. The server can exchange a code for an access token using the
+// operator's `V3CODE_GITHUB_CLIENT_SECRET`, and it can also fetch /user for
+// a token obtained by desktop Device Flow. The token is handed back to the caller
 // (identity/http.ts) which encrypts it and writes it to `v3_users` via
 // `UserRepository.setGitHubToken`.
 //

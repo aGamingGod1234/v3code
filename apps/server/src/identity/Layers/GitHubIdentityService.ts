@@ -2,9 +2,9 @@
 //
 // The Live layer consumes `ServerConfig.githubClientId` +
 // `.githubClientSecret` and issues real HTTPS calls to GitHub. When
-// either secret is unset the layer still constructs but every method
-// returns a `not-configured` GitHubIdentityError, which the routes
-// translate into a 500 with an operator-friendly message.
+// either secret is unset the redirect-code exchange returns a
+// `not-configured` GitHubIdentityError, while token profile validation
+// remains available for desktop Device Flow bootstrap.
 
 import { Effect, Layer, Schema } from "effect";
 
@@ -42,8 +42,8 @@ const clampScopes = (scope: string): ReadonlyArray<string> =>
     .filter((entry) => entry.length > 0);
 
 export interface GitHubIdentityServiceFactoryOptions {
-  readonly clientId: string;
-  readonly clientSecret: string;
+  readonly clientId?: string;
+  readonly clientSecret?: string;
   readonly fetchImpl: typeof fetch;
 }
 
@@ -57,6 +57,12 @@ export const makeGitHubIdentityServiceWith = (
   const exchangeCode: GitHubIdentityServiceShape["exchangeCode"] = (input) =>
     Effect.tryPromise({
       try: async () => {
+        if (!opts.clientId || !opts.clientSecret) {
+          throw new GitHubIdentityError({
+            reason: "not-configured",
+            message: "GitHub sign-in is not configured on this server.",
+          });
+        }
         const body = new URLSearchParams({
           client_id: opts.clientId,
           client_secret: opts.clientSecret,
@@ -183,8 +189,7 @@ export const makeGitHubIdentityServiceWith = (
 
 /**
  * Builds a service that fails fast with `not-configured` on every call.
- * Used when the operator has not set `V3CODE_GITHUB_CLIENT_ID` or
- * `V3CODE_GITHUB_CLIENT_SECRET`.
+ * Kept for tests and explicit disabled-service wiring.
  */
 export const makeNotConfiguredGitHubIdentityService = (): GitHubIdentityServiceShape => {
   const notConfigured = Effect.fail(
@@ -201,17 +206,9 @@ export const makeNotConfiguredGitHubIdentityService = (): GitHubIdentityServiceS
 
 export const makeGitHubIdentityService = Effect.gen(function* () {
   const config = yield* ServerConfig;
-  if (
-    config.githubClientId === undefined ||
-    config.githubClientId.length === 0 ||
-    config.githubClientSecret === undefined ||
-    config.githubClientSecret.length === 0
-  ) {
-    return makeNotConfiguredGitHubIdentityService();
-  }
   return makeGitHubIdentityServiceWith({
-    clientId: config.githubClientId,
-    clientSecret: config.githubClientSecret,
+    ...(config.githubClientId !== undefined ? { clientId: config.githubClientId } : {}),
+    ...(config.githubClientSecret !== undefined ? { clientSecret: config.githubClientSecret } : {}),
     fetchImpl: fetch,
   });
 });

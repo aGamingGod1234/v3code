@@ -34,6 +34,49 @@ const codexFixture = [
   }),
 ].join("\n");
 
+const currentCodexFixture = [
+  JSON.stringify({
+    type: "session_meta",
+    payload: {
+      timestamp: "2026-05-01T01:00:00Z",
+      cwd: "C:\\Users\\lucas\\Desktop\\Projects\\2048",
+      model: "gpt-5.4",
+    },
+  }),
+  JSON.stringify({
+    type: "turn_context",
+    payload: {
+      cwd: "C:\\Users\\lucas\\Desktop\\Projects\\2048",
+      model: "gpt-5.4",
+    },
+  }),
+  JSON.stringify({
+    type: "response_item",
+    payload: {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Fix tile movement." }],
+    },
+  }),
+  JSON.stringify({
+    type: "response_item",
+    payload: {
+      type: "function_call",
+      name: "shell_command",
+      call_id: "call_1",
+      arguments: { command: "bun lint" },
+    },
+  }),
+  JSON.stringify({
+    type: "response_item",
+    payload: {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Tile movement is fixed." }],
+    },
+  }),
+].join("\n");
+
 const claudeFixture = [
   JSON.stringify({
     type: "summary",
@@ -78,6 +121,12 @@ const anthropicConsoleFixture = JSON.stringify({
 describe("detectChatImportFormat", () => {
   it("recognises Codex JSONL", () => {
     const result = detectChatImportFormat(codexFixture);
+    expect(result?.format).toBe("codex");
+    expect(result?.confidence).toBe("high");
+  });
+
+  it("recognises current Codex JSONL", () => {
+    const result = detectChatImportFormat(currentCodexFixture);
     expect(result?.format).toBe("codex");
     expect(result?.confidence).toBe("high");
   });
@@ -130,6 +179,15 @@ describe("parseCodexSession", () => {
     expect(second.references.skillIds).toContain("smart_search");
     expect(first.references.mcpServerIds).toContain("plugin_claude-mem_mcp-search");
     expect(second.references.mcpServerIds).toContain("plugin_claude-mem_mcp-search");
+  });
+
+  it("extracts current Codex response items and workspace root", () => {
+    const parsed = parseCodexSession(currentCodexFixture);
+    expect(parsed.format).toBe("codex");
+    expect(parsed.sourceModel).toBe("gpt-5.4");
+    expect(parsed.sourceWorkspaceRoot).toBe("C:\\Users\\lucas\\Desktop\\Projects\\2048");
+    expect(parsed.title).toContain("Fix tile movement");
+    expect(parsed.messages.map((message) => message.role)).toEqual(["user", "tool", "assistant"]);
   });
 });
 

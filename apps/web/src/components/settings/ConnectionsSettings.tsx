@@ -1,4 +1,4 @@
-import { PlusIcon, QrCodeIcon } from "lucide-react";
+import { ExternalLinkIcon, PlusIcon, QrCodeIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   type AuthClientSession,
@@ -13,6 +13,7 @@ import { useAccountState } from "../../hooks/useAccountState";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
+import { V3SignInButton } from "../../v3/ui/SignInButton";
 import {
   SettingsPageContainer,
   SettingsRow,
@@ -52,6 +53,7 @@ import { setPairingTokenOnUrl } from "../../pairingUrl";
 import {
   createServerPairingCredential,
   fetchSessionState,
+  isReservedV3CloudWebsiteUrl,
   revokeOtherServerClientSessions,
   revokeServerClientSession,
   revokeServerPairingLink,
@@ -75,6 +77,8 @@ const accessTimestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
 });
+
+const DEFAULT_V3_CLOUD_WEBSITE_URL = "https://v3.agaminggod.com/app/";
 
 function formatAccessTimestamp(value: string): string {
   const parsed = new Date(value);
@@ -823,8 +827,12 @@ export function ConnectionsSettings({
     ? desktopServerExposureState?.mode === "network-accessible"
     : currentAuthPolicy === "remote-reachable";
   const driveDiscoveredServerUrl = account.driveSnapshot?.serverUrl?.trim() ?? "";
-  const effectiveV3ServerNodeUrl =
-    v3ServerNodeUrlOverride.trim() || driveDiscoveredServerUrl || null;
+  const isCloudWebsiteConfiguredAsServerOverride =
+    isReservedV3CloudWebsiteUrl(v3ServerNodeUrlOverride);
+  const manualServerNodeUrlOverride = isCloudWebsiteConfiguredAsServerOverride
+    ? ""
+    : v3ServerNodeUrlOverride.trim();
+  const effectiveV3ServerNodeUrl = manualServerNodeUrlOverride || driveDiscoveredServerUrl || null;
 
   const handleDesktopServerExposureChange = useCallback(
     async (checked: boolean) => {
@@ -1002,6 +1010,15 @@ export function ConnectionsSettings({
 
   const handleSaveV3ServerNodeOverride = useCallback(() => {
     const nextValue = v3ServerNodeUrlOverrideDraft.trim();
+    if (isReservedV3CloudWebsiteUrl(nextValue)) {
+      toastManager.add({
+        type: "error",
+        title: "Use a server-node URL",
+        description:
+          "v3.agaminggod.com is the browser cloud website. Leave this blank unless you have a reachable server-node API URL.",
+      });
+      return;
+    }
     updateSettings({ v3ServerNodeUrlOverride: nextValue });
     toastManager.add({
       type: "success",
@@ -1012,6 +1029,14 @@ export function ConnectionsSettings({
           : "Primary connections will fall back to Drive discovery and local bootstrap again.",
     });
   }, [updateSettings, v3ServerNodeUrlOverrideDraft]);
+
+  const handleOpenV3CloudWebsite = useCallback(() => {
+    if (window.desktopBridge?.openExternal) {
+      void window.desktopBridge.openExternal(DEFAULT_V3_CLOUD_WEBSITE_URL);
+      return;
+    }
+    window.open(DEFAULT_V3_CLOUD_WEBSITE_URL, "_blank", "noopener");
+  }, []);
 
   const handleResetV3ServerNodeOverride = useCallback(() => {
     setV3ServerNodeUrlOverrideDraft("");
@@ -1051,6 +1076,18 @@ export function ConnectionsSettings({
   useEffect(() => {
     setV3ServerNodeUrlOverrideDraft(v3ServerNodeUrlOverride);
   }, [v3ServerNodeUrlOverride]);
+
+  useEffect(() => {
+    if (!isReservedV3CloudWebsiteUrl(v3ServerNodeUrlOverride)) return;
+    setV3ServerNodeUrlOverrideDraft("");
+    updateSettings({ v3ServerNodeUrlOverride: "" });
+    toastManager.add({
+      type: "info",
+      title: "Cleared cloud website override",
+      description:
+        "v3.agaminggod.com is the browser cloud website, not the server-node API override.",
+    });
+  }, [updateSettings, v3ServerNodeUrlOverride]);
 
   useEffect(() => {
     if (!canManageLocalBackend) return;
@@ -1312,10 +1349,45 @@ export function ConnectionsSettings({
 
       <SettingsSection title="V3 connections">
         <SettingsRow
-          title="Server node URL override"
-          description="Force this client to talk to a specific V3 server node instead of the one auto-discovered from Drive App Data, the desktop bootstrap, or env defaults. Useful when testing a staging server or routing through a custom hostname; leave blank to let V3 pick automatically."
+          title="V3 cloud website"
+          description="Open the browser cloud app at v3.agaminggod.com/app. Sign in with Google first so the website can discover your V3 installs and show remote chats for the same account."
           status={
             <div className="space-y-1 text-xs text-muted-foreground">
+              {account.isSignedIn ? (
+                <>
+                  <div>Signed in as {account.displayName ?? account.email}.</div>
+                  <div>
+                    The website is not a server-node override. Remote control still depends on a
+                    Drive-published or paired server node.
+                  </div>
+                </>
+              ) : (
+                <div>Sign in with Google to link this client to the V3 cloud website.</div>
+              )}
+            </div>
+          }
+          control={
+            account.isSignedIn ? (
+              <Button size="xs" variant="outline" onClick={handleOpenV3CloudWebsite}>
+                <ExternalLinkIcon className="size-3" />
+                Open V3 cloud
+              </Button>
+            ) : (
+              <V3SignInButton className="rounded-md" />
+            )
+          }
+        />
+        <SettingsRow
+          title="Server node URL override"
+          description="Force this client to talk to a specific V3 server-node API URL instead of the one auto-discovered from Drive App Data, the desktop bootstrap, or env defaults. Do not use the V3 cloud website here."
+          status={
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {isCloudWebsiteConfiguredAsServerOverride ? (
+                <div className="text-warning-foreground">
+                  Cleared legacy cloud website override; v3.agaminggod.com belongs in the cloud
+                  website link above.
+                </div>
+              ) : null}
               {driveDiscoveredServerUrl ? (
                 <div>Drive-discovered server: {driveDiscoveredServerUrl}</div>
               ) : (

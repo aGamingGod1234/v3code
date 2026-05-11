@@ -29,8 +29,10 @@ const PROJECT_FAVICON_CACHE_CONTROL = "public, max-age=3600";
 const FALLBACK_PROJECT_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#6b728080" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-fallback="project-favicon"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>`;
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
+const LEGACY_ROOT_PATH = "/";
 const LEGACY_PAIR_PATH = "/pair";
-const CLOUD_LOGIN_PATH = "/login";
+const CLOUD_APP_PATH = "/app/";
+const CLOUD_LOGIN_PATH = "/app/login";
 
 export const browserApiCorsLayer = HttpRouter.cors({
   allowedMethods: ["GET", "POST", "OPTIONS"],
@@ -56,6 +58,10 @@ export function resolveDevRedirectUrl(devUrl: URL, requestUrl: URL): string {
 
 export function shouldRedirectPairToLogin(mode: RuntimeMode, pathname: string): boolean {
   return mode === "server-node" && pathname === LEGACY_PAIR_PATH;
+}
+
+export function shouldRedirectRootToCloudApp(mode: RuntimeMode, pathname: string): boolean {
+  return mode === "server-node" && pathname === LEGACY_ROOT_PATH;
 }
 
 const requireAuthenticatedRequest = Effect.gen(function* () {
@@ -354,6 +360,9 @@ export const staticAndDevRouteLayer = HttpRouter.add(
     }
 
     const config = yield* ServerConfig;
+    if (shouldRedirectRootToCloudApp(config.mode, url.value.pathname)) {
+      return HttpServerResponse.redirect(CLOUD_APP_PATH, { status: 302 });
+    }
     if (shouldRedirectPairToLogin(config.mode, url.value.pathname)) {
       return HttpServerResponse.redirect(CLOUD_LOGIN_PATH, { status: 302 });
     }

@@ -10,6 +10,8 @@ export interface PrimaryEnvironmentTarget {
 }
 
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
+const RESERVED_V3_CLOUD_WEBSITE_HOSTNAME = "v3.agaminggod.com";
+const RESERVED_V3_CLOUD_WEBSITE_PATHS = new Set(["", "/", "/app", "/app/"]);
 
 function getDesktopLocalEnvironmentBootstrap(): DesktopEnvironmentBootstrap | null {
   return window.desktopBridge?.getLocalEnvironmentBootstrap?.() ?? null;
@@ -43,6 +45,25 @@ function normalizeHostname(hostname: string): string {
 
 export function isLoopbackHostname(hostname: string): boolean {
   return LOOPBACK_HOSTNAMES.has(normalizeHostname(hostname));
+}
+
+export function isReservedV3CloudWebsiteUrl(rawValue: string): boolean {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(trimmed, window.location.origin);
+  } catch {
+    return false;
+  }
+
+  return (
+    normalizeHostname(url.hostname) === RESERVED_V3_CLOUD_WEBSITE_HOSTNAME &&
+    RESERVED_V3_CLOUD_WEBSITE_PATHS.has(url.pathname)
+  );
 }
 
 function resolveHttpRequestBaseUrl(httpBaseUrl: string): string {
@@ -102,6 +123,9 @@ function resolveConfiguredPrimaryTarget(): PrimaryEnvironmentTarget | null {
 function resolveManualOverridePrimaryTarget(): PrimaryEnvironmentTarget | null {
   const override = readBrowserClientSettings()?.v3ServerNodeUrlOverride?.trim();
   if (!override) {
+    return null;
+  }
+  if (isReservedV3CloudWebsiteUrl(override)) {
     return null;
   }
 

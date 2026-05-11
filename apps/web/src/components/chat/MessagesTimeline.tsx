@@ -61,6 +61,8 @@ import {
   textContainsInlineTerminalContextLabels,
 } from "./userMessageTerminalContexts";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import { type ModelRunStats } from "../../lib/modelRunStats";
+import { AssistantModelRunStats } from "./ModelRunStats";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via useContext.
@@ -86,9 +88,12 @@ interface TimelineRowSharedState {
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  detailedModelSpecsEnabled: boolean;
+  modelStatsByAssistantMessageId: ReadonlyMap<MessageId, ModelRunStats>;
 }
 
 const TimelineRowCtx = createContext<TimelineRowSharedState>(null!);
+const EMPTY_MODEL_STATS = new Map<MessageId, ModelRunStats>();
 
 // ---------------------------------------------------------------------------
 // Props (public API)
@@ -118,6 +123,8 @@ interface MessagesTimelineProps {
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
   onIsAtEndChange: (isAtEnd: boolean) => void;
+  detailedModelSpecsEnabled?: boolean;
+  modelStatsByAssistantMessageId?: ReadonlyMap<MessageId, ModelRunStats>;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +155,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   timestampFormat,
   workspaceRoot,
   onIsAtEndChange,
+  detailedModelSpecsEnabled = false,
+  modelStatsByAssistantMessageId = EMPTY_MODEL_STATS,
 }: MessagesTimelineProps) {
   const rawRows = useMemo(
     () =>
@@ -215,6 +224,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
+      detailedModelSpecsEnabled,
+      modelStatsByAssistantMessageId,
     }),
     [
       activeTurnInProgress,
@@ -233,6 +244,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
+      detailedModelSpecsEnabled,
+      modelStatsByAssistantMessageId,
     ],
   );
 
@@ -433,6 +446,10 @@ function TimelineRowContent({ row }: { row: TimelineRow }) {
             showCopyButton: row.showAssistantCopyButton,
             streaming: row.message.streaming || assistantTurnStillInProgress,
           });
+          const modelStats =
+            ctx.detailedModelSpecsEnabled && !row.message.streaming && !assistantTurnStillInProgress
+              ? (ctx.modelStatsByAssistantMessageId.get(row.message.id) ?? null)
+              : null;
           return (
             <>
               {row.showCompletionDivider && (
@@ -483,6 +500,7 @@ function TimelineRowContent({ row }: { row: TimelineRow }) {
                     </div>
                   ) : null}
                 </div>
+                {modelStats ? <AssistantModelRunStats stats={modelStats} /> : null}
               </div>
             </>
           );

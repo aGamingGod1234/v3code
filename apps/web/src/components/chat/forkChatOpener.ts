@@ -12,15 +12,24 @@ import { scopedThreadKey } from "@v3tools/client-runtime";
 type Listener = (ref: ScopedThreadRef) => void;
 
 const listeners = new Set<Listener>();
+let pendingRef: ScopedThreadRef | null = null;
 
 export function subscribeForkChatOpenRequests(listener: Listener): () => void {
   listeners.add(listener);
+  if (pendingRef !== null) {
+    queueMicrotask(() => {
+      if (listeners.has(listener) && pendingRef !== null) {
+        listener(pendingRef);
+      }
+    });
+  }
   return () => {
     listeners.delete(listener);
   };
 }
 
 export function requestOpenForkChatDialog(ref: ScopedThreadRef): void {
+  pendingRef = ref;
   for (const listener of listeners) {
     try {
       listener(ref);
@@ -28,6 +37,12 @@ export function requestOpenForkChatDialog(ref: ScopedThreadRef): void {
       // Listeners are light-weight; swallow so a broken subscriber
       // can't stop other subscribers from receiving the event.
     }
+  }
+}
+
+export function clearForkChatOpenRequest(ref: ScopedThreadRef): void {
+  if (pendingRef !== null && matchesScopedThreadRef(pendingRef, ref)) {
+    pendingRef = null;
   }
 }
 

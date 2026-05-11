@@ -64,9 +64,10 @@ falls back to relative paths.
 ## Routing fallback
 
 Pages serves `index.html` for unknown paths by default, which is
-exactly what a TanStack Router SPA needs. `public/_redirects` adds a
-belt-and-braces rule so deep-link refreshes don't 404 even if an
-ingress strips the default behaviour.
+exactly what a TanStack Router SPA needs. `public/_redirects` maps root
+routes to the built root `index.html` and `/app/*` routes to the mirrored
+`app/index.html`, so the same cloud bundle works behind the server-node
+`/app` mount and on Pages.
 
 ## Limitations
 

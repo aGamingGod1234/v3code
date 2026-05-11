@@ -244,9 +244,9 @@ export type DeviceApprovalStreamEvent = typeof DeviceApprovalStreamEvent.Type;
 //   4. Server exchanges code for access_token, fetches /user, stores
 //      encrypted token on v3_users, redirects back to /app/.
 //
-// Desktop (Electron) shells use the same server-hosted endpoint; the
-// difference is purely which origin the user ends up on after the
-// redirect.
+// Desktop (Electron) shells can also obtain a token through GitHub
+// Device Flow, then call /api/auth/github/bootstrap so the server
+// validates and stores the token against the signed-in V3 user.
 // ---------------------------------------------------------------------------
 
 export const GitHubOAuthScope = TrimmedNonEmptyString.pipe(Schema.brand("GitHubOAuthScope"));

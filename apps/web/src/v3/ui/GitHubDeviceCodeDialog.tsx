@@ -1,7 +1,7 @@
 // Device-code dialog. Reads cached state from main via getDeviceFlowStatus
-// on a 1 s tick (no network from the renderer). Main process owns the polling
-// cadence; this dialog only renders the user code, an "Open verification URL"
-// button, live state text, and Cancel.
+// on a 1 s tick. Main process owns the GitHub polling cadence; once the flow
+// succeeds this dialog consumes the token once so the server can bind it to
+// the signed-in V3 user.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2Icon, CopyIcon, ExternalLinkIcon, LoaderIcon } from "lucide-react";
@@ -17,8 +17,17 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { toastManager } from "../../components/ui/toast";
-import { cancelDeviceFlow, getDeviceFlowStatus, startDeviceFlow } from "../auth/githubBridge";
-import type { GitHubDeviceFlowStart, GitHubDeviceFlowStatus } from "@v3tools/contracts";
+import {
+  cancelDeviceFlow,
+  consumeDeviceFlowToken,
+  getDeviceFlowStatus,
+  startDeviceFlow,
+} from "../auth/githubBridge";
+import type {
+  GitHubDeviceFlowStart,
+  GitHubDeviceFlowStatus,
+  GitHubTokenBundle,
+} from "@v3tools/contracts";
 
 const POLL_MS = 1000;
 
@@ -49,7 +58,7 @@ interface GitHubDeviceCodeDialogProps {
   readonly scopes: ReadonlyArray<string>;
   readonly clientIdOverride: string | null;
   readonly onOpenChange: (next: boolean) => void;
-  readonly onSuccess: () => void;
+  readonly onSuccess: (token: GitHubTokenBundle) => Promise<void> | void;
 }
 
 export function GitHubDeviceCodeDialog({
@@ -63,10 +72,12 @@ export function GitHubDeviceCodeDialog({
   const [status, setStatus] = useState<GitHubDeviceFlowStatus | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const handleRef = useRef<string | null>(null);
+  const completedRef = useRef(false);
 
   const cleanup = useCallback(() => {
     const handle = handleRef.current;
     handleRef.current = null;
+    completedRef.current = false;
     if (handle) {
       void cancelDeviceFlow(handle).catch(() => {});
     }
@@ -120,8 +131,18 @@ export function GitHubDeviceCodeDialog({
         if (cancelled) return;
         setStatus(next);
         if (next.state === "success") {
-          onSuccess();
-          onOpenChange(false);
+          if (completedRef.current) return;
+          completedRef.current = true;
+          try {
+            const token = await consumeDeviceFlowToken(handle);
+            handleRef.current = null;
+            await onSuccess(token);
+            onOpenChange(false);
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            completedRef.current = false;
+            setStartError(`GitHub connected locally, but V3 could not finish setup: ${message}`);
+          }
           return;
         }
         if (TERMINAL_STATES.has(next.state)) {

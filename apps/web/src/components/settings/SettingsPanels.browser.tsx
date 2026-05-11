@@ -396,6 +396,11 @@ const createDesktopBridgeStub = (overrides?: {
         error: null,
         lastPolledAt: null,
       }),
+      consumeDeviceFlowToken: vi.fn().mockResolvedValue({
+        accessToken: "mock-gh-access-token",
+        scopes: [],
+        tokenType: "bearer",
+      }),
       cancelDeviceFlow: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockResolvedValue({
         connected: false,
@@ -437,6 +442,16 @@ const createDesktopBridgeStub = (overrides?: {
       listLocal: vi.fn().mockResolvedValue({ entries: [], scannedRoots: [] }),
       scanFolder: vi.fn().mockResolvedValue({ entries: [], scannedRoots: [] }),
       readPreview: vi.fn().mockResolvedValue({ previewLine: null }),
+      readSummary: vi.fn().mockResolvedValue({
+        format: "codex",
+        title: null,
+        sourceProvider: null,
+        sourceModel: null,
+        sourceWorkspaceRoot: null,
+        startedAt: null,
+        references: { skillIds: [], mcpServerIds: [], modelIds: [] },
+        messageCount: 0,
+      }),
       readTranscript: vi.fn().mockResolvedValue({ content: "" }),
       closeSession: vi.fn().mockResolvedValue(undefined),
     },

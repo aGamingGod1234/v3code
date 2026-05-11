@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isLoopbackHostname, resolveDevRedirectUrl, shouldRedirectPairToLogin } from "./http.ts";
+import {
+  isLoopbackHostname,
+  resolveDevRedirectUrl,
+  shouldRedirectPairToLogin,
+  shouldRedirectRootToCloudApp,
+} from "./http.ts";
 
 describe("http dev routing", () => {
   it("treats localhost and loopback addresses as local", () => {
@@ -30,5 +35,12 @@ describe("http dev routing", () => {
     expect(shouldRedirectPairToLogin("web", "/pair")).toBe(false);
     expect(shouldRedirectPairToLogin("desktop", "/pair")).toBe(false);
     expect(shouldRedirectPairToLogin("server-node", "/pairing")).toBe(false);
+  });
+
+  it("redirects the legacy root route only for server-node cloud deployments", () => {
+    expect(shouldRedirectRootToCloudApp("server-node", "/")).toBe(true);
+    expect(shouldRedirectRootToCloudApp("web", "/")).toBe(false);
+    expect(shouldRedirectRootToCloudApp("desktop", "/")).toBe(false);
+    expect(shouldRedirectRootToCloudApp("server-node", "/app")).toBe(false);
   });
 });

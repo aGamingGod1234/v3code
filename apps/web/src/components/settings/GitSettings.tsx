@@ -49,9 +49,9 @@ export function GitSettings() {
         <header>
           <h3 className="text-sm font-semibold text-foreground">GitHub OAuth Client ID</h3>
           <p className="text-xs text-muted-foreground">
-            Legacy desktop Device Flow needs a public OAuth Client ID. The main GitHub sign-in
-            button uses the OAuth redirect flow; this setting remains for development builds that
-            still exercise Device Flow.
+            Desktop GitHub sign-in uses GitHub Device Flow, which only needs a public OAuth Client
+            ID. Browser/server-node sign-in can still use the server-hosted redirect flow when the
+            node has a GitHub client secret configured.
           </p>
         </header>
         <label className="flex items-start gap-3 rounded-lg border border-border bg-card/30 p-3 text-sm">

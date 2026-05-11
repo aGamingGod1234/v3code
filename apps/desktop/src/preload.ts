@@ -48,6 +48,7 @@ const V3_GITHUB_SET_CLIENT_ID_OVERRIDE_CHANNEL = "desktop:v3-github-set-client-i
 const V3_GITHUB_GET_CLIENT_CONFIG_CHANNEL = "desktop:v3-github-get-client-config";
 const V3_GITHUB_START_DEVICE_FLOW_CHANNEL = "desktop:v3-github-start-device-flow";
 const V3_GITHUB_GET_DEVICE_FLOW_STATUS_CHANNEL = "desktop:v3-github-get-device-flow-status";
+const V3_GITHUB_CONSUME_DEVICE_FLOW_TOKEN_CHANNEL = "desktop:v3-github-consume-device-flow-token";
 const V3_GITHUB_CANCEL_DEVICE_FLOW_CHANNEL = "desktop:v3-github-cancel-device-flow";
 const V3_GITHUB_GET_STATUS_CHANNEL = "desktop:v3-github-get-status";
 const V3_GITHUB_DISCONNECT_CHANNEL = "desktop:v3-github-disconnect";
@@ -57,8 +58,12 @@ const V3_CHAT_IMPORT_OPEN_SESSION_CHANNEL = "desktop:v3-chat-import-open-session
 const V3_CHAT_IMPORT_LIST_LOCAL_CHANNEL = "desktop:v3-chat-import-list-local";
 const V3_CHAT_IMPORT_SCAN_FOLDER_CHANNEL = "desktop:v3-chat-import-scan-folder";
 const V3_CHAT_IMPORT_READ_PREVIEW_CHANNEL = "desktop:v3-chat-import-read-preview";
+const V3_CHAT_IMPORT_READ_SUMMARY_CHANNEL = "desktop:v3-chat-import-read-summary";
 const V3_CHAT_IMPORT_READ_TRANSCRIPT_CHANNEL = "desktop:v3-chat-import-read-transcript";
 const V3_CHAT_IMPORT_CLOSE_SESSION_CHANNEL = "desktop:v3-chat-import-close-session";
+const V3_OPENCHROME_GET_STATUS_CHANNEL = "desktop:v3-openchrome-get-status";
+const V3_OPENCHROME_INSTALL_CHANNEL = "desktop:v3-openchrome-install";
+const V3_OPENCHROME_OPEN_EXTENSION_SETUP_CHANNEL = "desktop:v3-openchrome-open-extension-setup";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getAppBranding: () => {
@@ -153,6 +158,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     startDeviceFlow: (input) => ipcRenderer.invoke(V3_GITHUB_START_DEVICE_FLOW_CHANNEL, input),
     getDeviceFlowStatus: (input) =>
       ipcRenderer.invoke(V3_GITHUB_GET_DEVICE_FLOW_STATUS_CHANNEL, input),
+    consumeDeviceFlowToken: (input) =>
+      ipcRenderer.invoke(V3_GITHUB_CONSUME_DEVICE_FLOW_TOKEN_CHANNEL, input),
     cancelDeviceFlow: (input) => ipcRenderer.invoke(V3_GITHUB_CANCEL_DEVICE_FLOW_CHANNEL, input),
     getStatus: () => ipcRenderer.invoke(V3_GITHUB_GET_STATUS_CHANNEL),
     disconnect: () => ipcRenderer.invoke(V3_GITHUB_DISCONNECT_CHANNEL),
@@ -164,7 +171,13 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     listLocal: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_LIST_LOCAL_CHANNEL, input),
     scanFolder: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_SCAN_FOLDER_CHANNEL, input),
     readPreview: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_READ_PREVIEW_CHANNEL, input),
+    readSummary: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_READ_SUMMARY_CHANNEL, input),
     readTranscript: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_READ_TRANSCRIPT_CHANNEL, input),
     closeSession: (input) => ipcRenderer.invoke(V3_CHAT_IMPORT_CLOSE_SESSION_CHANNEL, input),
+  },
+  openChrome: {
+    getStatus: () => ipcRenderer.invoke(V3_OPENCHROME_GET_STATUS_CHANNEL),
+    install: () => ipcRenderer.invoke(V3_OPENCHROME_INSTALL_CHANNEL),
+    openExtensionSetup: () => ipcRenderer.invoke(V3_OPENCHROME_OPEN_EXTENSION_SETUP_CHANNEL),
   },
 } satisfies DesktopBridge);

@@ -5,6 +5,7 @@ import { useRouter } from "@tanstack/react-router";
 import type { useSortable } from "@dnd-kit/sortable";
 import {
   type ContextMenuItem,
+  type DeviceId,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
   type ThreadEnvMode,
@@ -59,6 +60,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { requestOpenForkChatDialog } from "../chat/forkChatOpener";
 import { SidebarProjectThreadList } from "./SidebarProjectThreadList";
 
 const THREAD_PREVIEW_LIMIT = 6;
@@ -113,6 +115,8 @@ export interface SidebarProjectItemProps {
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   isManualProjectSorting: boolean;
   dragHandleProps: SortableProjectHandleProps | null;
+  threadDeviceIdFilter?: DeviceId | null;
+  currentDeviceIdForThreadFallback?: DeviceId | null;
 }
 
 export const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjectItemProps) {
@@ -133,6 +137,8 @@ export const SidebarProjectItem = memo(function SidebarProjectItem(props: Sideba
     suppressProjectClickForContextMenuRef,
     isManualProjectSorting,
     dragHandleProps,
+    threadDeviceIdFilter,
+    currentDeviceIdForThreadFallback,
   } = props;
   const threadSortOrder = useSettings<SidebarThreadSortOrder>(
     (settings) => settings.sidebarThreadSortOrder,
@@ -241,7 +247,15 @@ export const SidebarProjectItem = memo(function SidebarProjectItem(props: Sideba
   // thread-list change).
   const sidebarThreadByKeyRef = useRef(sidebarThreadByKey);
   sidebarThreadByKeyRef.current = sidebarThreadByKey;
-  const projectThreads = sidebarThreads;
+  const projectThreads = useMemo(() => {
+    if (threadDeviceIdFilter === undefined) {
+      return sidebarThreads;
+    }
+    return sidebarThreads.filter(
+      (thread) =>
+        (thread.hostDeviceId ?? currentDeviceIdForThreadFallback) === threadDeviceIdFilter,
+    );
+  }, [currentDeviceIdForThreadFallback, sidebarThreads, threadDeviceIdFilter]);
   const projectExpanded = useUiStateStore(
     (state) => state.projectExpandedById[project.projectKey] ?? true,
   );
@@ -1086,6 +1100,7 @@ export const SidebarProjectItem = memo(function SidebarProjectItem(props: Sideba
         [
           { id: "rename", label: "Rename thread" },
           { id: "mark-unread", label: "Mark unread" },
+          { id: "transfer", label: "Transfer chat" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
           { id: "delete", label: "Delete", destructive: true },
@@ -1102,6 +1117,28 @@ export const SidebarProjectItem = memo(function SidebarProjectItem(props: Sideba
 
       if (clicked === "mark-unread") {
         markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+        return;
+      }
+      if (clicked === "transfer") {
+        const orchestrationStatus = thread.session?.orchestrationStatus ?? null;
+        if (orchestrationStatus === "running" || orchestrationStatus === "starting") {
+          toastManager.add({
+            type: "error",
+            title: "Pause this chat first",
+            description: "Stop the active session before transferring this chat.",
+          });
+          return;
+        }
+        if (thread.hasPendingApprovals) {
+          toastManager.add({
+            type: "error",
+            title: "Resolve approvals first",
+            description: "Pending approvals must be resolved before transferring this chat.",
+          });
+          return;
+        }
+        requestOpenForkChatDialog(threadRef);
+        void navigateToThread(threadRef);
         return;
       }
       if (clicked === "copy-path") {
@@ -1141,6 +1178,7 @@ export const SidebarProjectItem = memo(function SidebarProjectItem(props: Sideba
       deleteThread,
       markThreadUnread,
       memberProjectByScopedKey,
+      navigateToThread,
       project.cwd,
     ],
   );

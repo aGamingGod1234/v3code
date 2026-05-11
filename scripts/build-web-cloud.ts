@@ -18,12 +18,14 @@
  */
 
 import * as NodePath from "node:path";
+import * as FS from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const scriptUrl = import.meta.url;
 const scriptDir = NodePath.dirname(fileURLToPath(scriptUrl));
 const webDir = NodePath.resolve(scriptDir, "..", "apps", "web");
+const distCloudDir = NodePath.resolve(webDir, "dist-cloud");
 
 const extra = process.argv.slice(2);
 const bunFromLifecycle = process.env.npm_execpath;
@@ -42,6 +44,22 @@ if (!env.VITE_V3_CLOUD_MODE_BASE) {
 }
 
 const args = ["x", "vite", "build", "--outDir", "dist-cloud", "--emptyOutDir", ...extra];
+const isWatchMode = extra.includes("--watch") || extra.includes("-w");
+const cloudModeBase = env.VITE_V3_CLOUD_MODE_BASE?.replace(/\/+$/, "") ?? "";
+
+const mirrorAppBaseForStaticHosts = async (): Promise<void> => {
+  if (cloudModeBase !== "/app") {
+    return;
+  }
+
+  const appDir = NodePath.join(distCloudDir, "app");
+  await FS.rm(appDir, { recursive: true, force: true });
+  await FS.mkdir(appDir, { recursive: true });
+  await FS.copyFile(NodePath.join(distCloudDir, "index.html"), NodePath.join(appDir, "index.html"));
+  await FS.cp(NodePath.join(distCloudDir, "assets"), NodePath.join(appDir, "assets"), {
+    recursive: true,
+  });
+};
 
 const child = spawn(bunExecutable, args, {
   cwd: webDir,
@@ -60,5 +78,15 @@ child.on("exit", (code, signal) => {
     process.kill(process.pid, signal);
     return;
   }
-  process.exit(code ?? 1);
+  if (code !== 0 || isWatchMode) {
+    process.exit(code ?? 1);
+    return;
+  }
+
+  void mirrorAppBaseForStaticHosts()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(`Failed to mirror cloud build under /app: ${error.message}`);
+      process.exit(1);
+    });
 });

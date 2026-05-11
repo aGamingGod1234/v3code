@@ -1,8 +1,12 @@
 import { type DeviceId, type ScopedThreadRef } from "@v3tools/contracts";
-import { GitForkIcon } from "lucide-react";
+import { SendIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
-import { matchesScopedThreadRef, subscribeForkChatOpenRequests } from "./forkChatOpener";
+import {
+  clearForkChatOpenRequest,
+  matchesScopedThreadRef,
+  subscribeForkChatOpenRequests,
+} from "./forkChatOpener";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -100,6 +104,7 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
       subscribeForkChatOpenRequests((requestedRef) => {
         if (!matchesScopedThreadRef(requestedRef, threadRef)) return;
         if (isLive || hasPendingApprovals) return;
+        clearForkChatOpenRequest(threadRef);
         handleOpenChange(true);
       }),
     [handleOpenChange, hasPendingApprovals, isLive, threadRef],
@@ -133,10 +138,10 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
   }
 
   const disabledReason = isLive
-    ? "Pause or stop the active session before forking this chat."
+    ? "Pause or stop the active session before transferring this chat."
     : hasPendingApprovals
-      ? "Resolve pending approvals before forking this chat."
-      : "Fork this chat into a fresh thread";
+      ? "Resolve pending approvals before transferring this chat."
+      : "Transfer this chat into a fresh thread";
 
   return (
     <>
@@ -150,9 +155,9 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
               className="shrink-0"
               onClick={() => handleOpenChange(true)}
               disabled={isLive || hasPendingApprovals}
-              aria-label="Fork chat"
+              aria-label="Transfer chat"
             >
-              <GitForkIcon className="size-3" />
+              <SendIcon className="size-3" />
             </Button>
           }
         />
@@ -161,10 +166,11 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogPopup>
           <DialogHeader>
-            <DialogTitle>Fork chat</DialogTitle>
+            <DialogTitle>Transfer chat</DialogTitle>
             <DialogDescription>
-              Copy the full history of <strong>{thread.title}</strong> into a new thread. The target
-              device will choose its own local folder before work continues there.
+              Copy the full chat context of <strong>{thread.title}</strong> to another signed-in
+              device over the authenticated mesh. The receiving device picks the workspace folder
+              before work continues there.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -230,7 +236,7 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
                   id="fork-chat-title"
                   value={title}
                   onChange={(event) => setTitle(event.currentTarget.value)}
-                  placeholder={`Fork of ${thread.title}`}
+                  placeholder={`Transfer of ${thread.title}`}
                   disabled={submitting}
                 />
               </div>
@@ -246,7 +252,7 @@ export const ForkChatButton = memo(function ForkChatButton({ threadRef }: ForkCh
               Cancel
             </Button>
             <Button type="button" onClick={handleConfirm} disabled={submitting}>
-              {submitting ? "Forking..." : "Fork chat"}
+              {submitting ? "Transferring..." : "Transfer chat"}
             </Button>
           </DialogFooter>
         </DialogPopup>

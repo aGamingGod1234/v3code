@@ -96,6 +96,7 @@ export const parseClaudeSession = (text: string): ParsedChat => {
   const messages: ParsedMessage[] = [];
   let title: string | null = null;
   let model: string | null = null;
+  let sourceWorkspaceRoot: string | null = null;
   let startedAt: string | null = null;
 
   for (const raw of lines) {
@@ -115,6 +116,17 @@ export const parseClaudeSession = (text: string): ParsedChat => {
     }
 
     if (model === null) model = collectModel(env);
+    if (sourceWorkspaceRoot === null) {
+      sourceWorkspaceRoot =
+        stringField(env, "cwd") ??
+        stringField(env, "workspaceRoot") ??
+        stringField(env, "workspace_root") ??
+        (isRecord(env.message)
+          ? (stringField(env.message, "cwd") ??
+            stringField(env.message, "workspaceRoot") ??
+            stringField(env.message, "workspace_root"))
+          : null);
+    }
     if (startedAt === null) startedAt = stringField(env, "timestamp");
 
     const message = envelopeToMessage(env);
@@ -133,6 +145,7 @@ export const parseClaudeSession = (text: string): ParsedChat => {
     title,
     sourceProvider: "claudeAgent",
     sourceModel: model,
+    sourceWorkspaceRoot,
     startedAt,
     messages,
     references: collectReferences(messages, [model]),

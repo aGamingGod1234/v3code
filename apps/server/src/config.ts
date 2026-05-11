@@ -110,9 +110,9 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   // `githubClientId` + `githubClientSecret` populate from
   // `V3CODE_GITHUB_CLIENT_ID` + `V3CODE_GITHUB_CLIENT_SECRET` env or
   // `[auth].github_client_id` / `[auth].github_client_secret` in
-  // config.toml. Both must be set for GitHub sign-in to work; if either
-  // is missing the `GitHubIdentityService` falls back to a
-  // `not-configured` stub that returns a tagged error on every call.
+  // config.toml. Both must be set for browser redirect GitHub sign-in.
+  // Desktop Device Flow can still bootstrap a pre-obtained token without
+  // a server-side client secret.
   //
   // `githubOauthScopes` is a space-separated scope list sent to GitHub
   // during the authorize redirect. Defaults to `read:user repo` so the

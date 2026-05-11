@@ -14,6 +14,7 @@ import { useThreadSelectionStore } from "../../threadSelectionStore";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import type { SidebarThreadSummary } from "../../types";
 import { useUiStateStore } from "../../uiStateStore";
+import { setThreadDragData } from "../../multiChatDrag";
 import { resolveThreadRowClassName, resolveThreadStatusPill } from "../Sidebar.logic";
 import {
   prStatusIndicator,
@@ -173,6 +174,12 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
     },
     [navigateToThread, threadRef],
   );
+  const handleRowDragStart = useCallback(
+    (event: React.DragEvent) => {
+      setThreadDragData(event.dataTransfer, threadRef);
+    },
+    [threadRef],
+  );
   const handleRowContextMenu = useCallback(
     (event: React.MouseEvent) => {
       event.preventDefault();
@@ -309,7 +316,9 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
           isActive,
           isSelected,
         })} relative isolate`}
+        draggable={renamingThreadKey !== threadKey}
         onClick={handleRowClick}
+        onDragStart={handleRowDragStart}
         onKeyDown={handleRowKeyDown}
         onContextMenu={handleRowContextMenu}
       >

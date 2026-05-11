@@ -1,8 +1,9 @@
 // V3 GitHub Device Flow (main process).
 //
 // Token handling lives entirely here — the renderer drives the dialog UI by
-// calling start/getDeviceFlowStatus/cancel against opaque deviceCodeHandles
-// and never sees the raw access token. Polling cadence is owned by main:
+// calling start/getDeviceFlowStatus/cancel against opaque deviceCodeHandles.
+// After success the renderer can consume the token once to bootstrap it into
+// the authenticated V3 server session. Polling cadence is owned by main:
 // after `startDeviceFlow`, this module schedules its own setTimeout-based
 // poll loop against GitHub's token endpoint. The renderer's
 // `getDeviceFlowStatus` IPC just reads the cached state.
@@ -29,6 +30,7 @@ import type {
   GitHubDeviceFlowStart,
   GitHubDeviceFlowState,
   GitHubDeviceFlowStatus,
+  GitHubTokenBundle,
   GitHubTokenValidation,
 } from "@v3tools/contracts";
 import { EMBEDDED_GITHUB_CLIENT_ID } from "./embeddedAuthConfig.ts";
@@ -38,6 +40,7 @@ export const V3_GITHUB_AUTH_CHANNELS = {
   GET_CLIENT_CONFIG: "desktop:v3-github-get-client-config",
   START_DEVICE_FLOW: "desktop:v3-github-start-device-flow",
   GET_DEVICE_FLOW_STATUS: "desktop:v3-github-get-device-flow-status",
+  CONSUME_DEVICE_FLOW_TOKEN: "desktop:v3-github-consume-device-flow-token",
   CANCEL_DEVICE_FLOW: "desktop:v3-github-cancel-device-flow",
   GET_STATUS: "desktop:v3-github-get-status",
   DISCONNECT: "desktop:v3-github-disconnect",
@@ -97,6 +100,7 @@ interface DeviceFlowEntry {
   pollIntervalSeconds: number;
   cancelToken: AbortController;
   pollTimer: NodeJS.Timeout | null;
+  bootstrapToken: GitHubTokenBundle | null;
 }
 
 interface CachedStatus {
@@ -388,6 +392,11 @@ const onDeviceFlowSuccess = async (entry: DeviceFlowEntry, result: TokenSuccess)
     await writeTokenAtomically(blob);
     state.lastValidationAt = Date.now();
     await refreshCachedStatus();
+    entry.bootstrapToken = {
+      accessToken: result.accessToken as GitHubTokenBundle["accessToken"],
+      scopes: scopes.map((scope) => scope as GitHubTokenBundle["scopes"][number]),
+      tokenType: "bearer",
+    };
     entry.state = "success";
     entry.error = null;
     log("device-flow-success", { login: profile.login, scopeCount: scopes.length });
@@ -488,6 +497,7 @@ export const startDeviceFlow = async (input: {
     pollIntervalSeconds: interval,
     cancelToken: new AbortController(),
     pollTimer: null,
+    bootstrapToken: null,
   };
   state.inFlight.set(handle, entry);
   schedulePoll(entry);
@@ -528,6 +538,22 @@ export const getDeviceFlowStatus = (input: {
     error: entry.error,
     lastPolledAt: entry.lastPolledAt,
   };
+};
+
+export const consumeDeviceFlowToken = (input: {
+  readonly deviceCodeHandle: string;
+}): GitHubTokenBundle => {
+  const entry = state.inFlight.get(input.deviceCodeHandle);
+  if (!entry) {
+    throw new Error("unknown-handle");
+  }
+  if (entry.state !== "success" || entry.bootstrapToken === null) {
+    throw new Error("device-flow-token-unavailable");
+  }
+  const token = entry.bootstrapToken;
+  entry.bootstrapToken = null;
+  state.inFlight.delete(input.deviceCodeHandle);
+  return token;
 };
 
 export const cancelDeviceFlow = (input: { readonly deviceCodeHandle: string }): void => {
@@ -628,6 +654,14 @@ export const registerV3GitHubAuthIpc = (): void => {
     if (typeof handle !== "string") throw new Error("deviceCodeHandle required");
     return getDeviceFlowStatus({ deviceCodeHandle: handle });
   });
+  ipcMain.handle(
+    V3_GITHUB_AUTH_CHANNELS.CONSUME_DEVICE_FLOW_TOKEN,
+    async (_event, raw: unknown) => {
+      const handle = (raw as { deviceCodeHandle?: unknown })?.deviceCodeHandle;
+      if (typeof handle !== "string") throw new Error("deviceCodeHandle required");
+      return consumeDeviceFlowToken({ deviceCodeHandle: handle });
+    },
+  );
   ipcMain.handle(V3_GITHUB_AUTH_CHANNELS.CANCEL_DEVICE_FLOW, async (_event, raw: unknown) => {
     const handle = (raw as { deviceCodeHandle?: unknown })?.deviceCodeHandle;
     if (typeof handle !== "string") throw new Error("deviceCodeHandle required");

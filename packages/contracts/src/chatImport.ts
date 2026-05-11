@@ -68,6 +68,7 @@ export const ParsedChat = Schema.Struct({
   title: Schema.NullOr(TrimmedNonEmptyString),
   sourceProvider: Schema.NullOr(Schema.String),
   sourceModel: Schema.NullOr(Schema.String),
+  sourceWorkspaceRoot: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
   startedAt: Schema.NullOr(Schema.String),
   messages: Schema.Array(ParsedMessage),
   references: ParsedReferences,

@@ -231,6 +231,11 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
         error: null,
         lastPolledAt: null,
       }),
+      consumeDeviceFlowToken: async () => ({
+        accessToken: "mock-gh-access-token",
+        scopes: [],
+        tokenType: "bearer",
+      }),
       cancelDeviceFlow: async () => undefined,
       getStatus: async () => ({
         connected: false,
@@ -270,6 +275,16 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       listLocal: async () => ({ entries: [], scannedRoots: [] }),
       scanFolder: async () => ({ entries: [], scannedRoots: [] }),
       readPreview: async () => ({ previewLine: null }),
+      readSummary: async () => ({
+        format: "codex",
+        title: null,
+        sourceProvider: null,
+        sourceModel: null,
+        sourceWorkspaceRoot: null,
+        startedAt: null,
+        references: { skillIds: [], mcpServerIds: [], modelIds: [] },
+        messageCount: 0,
+      }),
       readTranscript: async () => ({ content: "" }),
       closeSession: async () => {},
     },

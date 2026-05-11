@@ -57,7 +57,12 @@ import { EditorId } from "./editor.ts";
 import type { GitHubTokenBundle, GoogleTokenBundle } from "./identity.ts";
 import type { MeshForkChatResult } from "./mesh/chat.ts";
 import { ServerSettings, type ClientSettings, type ServerSettingsPatch } from "./settings.ts";
-import type { ChatImportParserStatus, ChatImportProvider } from "./chatImport.ts";
+import type {
+  ChatImportFormat,
+  ChatImportParserStatus,
+  ChatImportProvider,
+  ParsedReferences,
+} from "./chatImport.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -202,6 +207,39 @@ export interface V3WizardWriteConfigResult {
   readonly bytesWritten: number;
 }
 
+export interface DesktopOpenChromeSetupStatus {
+  readonly projectDir: string;
+  readonly extensionDir: string;
+  readonly serverEntryPath: string;
+  readonly installScriptPath: string;
+  readonly startupLauncherPath: string;
+  readonly codexConfigPath: string;
+  readonly pairTokenPath: string;
+  readonly installScriptExists: boolean;
+  readonly extensionManifestExists: boolean;
+  readonly serverEntryExists: boolean;
+  readonly startupLauncherExists: boolean;
+  readonly mcpConfigured: boolean;
+  readonly pairToken: string | null;
+  readonly bridgeReachable: boolean;
+  readonly installable: boolean;
+  readonly installed: boolean;
+  readonly issues: readonly string[];
+}
+
+export interface DesktopOpenChromeInstallResult {
+  readonly exitCode: number | null;
+  readonly timedOut: boolean;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly status: DesktopOpenChromeSetupStatus;
+}
+
+export interface DesktopOpenChromeSetupOpenResult {
+  readonly openedExtensionFolder: boolean;
+  readonly openedExtensionsPage: boolean;
+}
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   // Machine hostname (from `os.hostname()`). Used as the default
@@ -288,11 +326,19 @@ export interface DesktopBridge {
     readonly getDeviceFlowStatus: (input: {
       readonly deviceCodeHandle: string;
     }) => Promise<GitHubDeviceFlowStatus>;
+    readonly consumeDeviceFlowToken: (input: {
+      readonly deviceCodeHandle: string;
+    }) => Promise<GitHubTokenBundle>;
     readonly cancelDeviceFlow: (input: { readonly deviceCodeHandle: string }) => Promise<void>;
     readonly getStatus: () => Promise<GitHubAuthStatus>;
     readonly disconnect: () => Promise<{ readonly localCleared: boolean }>;
     readonly validateToken: () => Promise<GitHubTokenValidation>;
     readonly manualRevokeUrl: () => Promise<string>;
+  };
+  openChrome?: {
+    readonly getStatus: () => Promise<DesktopOpenChromeSetupStatus>;
+    readonly install: () => Promise<DesktopOpenChromeInstallResult>;
+    readonly openExtensionSetup: () => Promise<DesktopOpenChromeSetupOpenResult>;
   };
   // V3 (Phase 2d): server-node setup wizard IPC. Grouped under a single
   // object so the renderer can pass the whole namespace around as a
@@ -333,6 +379,10 @@ export interface DesktopBridge {
       readonly sessionId: string;
       readonly transcriptId: string;
     }) => Promise<DesktopTranscriptPreview>;
+    readonly readSummary: (input: {
+      readonly sessionId: string;
+      readonly transcriptId: string;
+    }) => Promise<DesktopParsedTranscriptSummary>;
     readonly readTranscript: (input: {
       readonly sessionId: string;
       readonly transcriptId: string;
@@ -346,7 +396,7 @@ export interface DesktopChatImportSession {
 }
 
 export type DesktopTranscriptFormat = ChatImportProvider | "unknown";
-export type DesktopTranscriptScanProvider = ChatImportProvider;
+export type DesktopTranscriptScanProvider = ChatImportProvider | "all";
 export type DesktopTranscriptScanFormat = DesktopTranscriptScanProvider | "auto";
 
 export interface DesktopTranscriptEntry {
@@ -376,6 +426,17 @@ export interface DesktopTranscriptListing {
 
 export interface DesktopTranscriptPreview {
   readonly previewLine: string | null;
+}
+
+export interface DesktopParsedTranscriptSummary {
+  readonly format: ChatImportFormat;
+  readonly title: string | null;
+  readonly sourceProvider: string | null;
+  readonly sourceModel: string | null;
+  readonly sourceWorkspaceRoot?: string | null;
+  readonly startedAt: string | null;
+  readonly references: ParsedReferences;
+  readonly messageCount: number;
 }
 
 export interface DesktopTranscriptFile {

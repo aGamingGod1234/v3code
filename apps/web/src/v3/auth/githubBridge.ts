@@ -7,6 +7,7 @@ import type {
   GitHubDeviceFlowClientConfig,
   GitHubDeviceFlowStart,
   GitHubDeviceFlowStatus,
+  GitHubTokenBundle,
   GitHubTokenValidation,
 } from "@v3tools/contracts";
 
@@ -40,6 +41,10 @@ export const startDeviceFlow = async (input: {
 export const getDeviceFlowStatus = async (
   deviceCodeHandle: string,
 ): Promise<GitHubDeviceFlowStatus> => requireBridge().getDeviceFlowStatus({ deviceCodeHandle });
+
+export const consumeDeviceFlowToken = async (
+  deviceCodeHandle: string,
+): Promise<GitHubTokenBundle> => requireBridge().consumeDeviceFlowToken({ deviceCodeHandle });
 
 export const cancelDeviceFlow = async (deviceCodeHandle: string): Promise<void> => {
   await requireBridge().cancelDeviceFlow({ deviceCodeHandle });

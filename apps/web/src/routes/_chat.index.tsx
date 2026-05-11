@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { MultiChatWorkspace } from "../components/multiChat/MultiChatWorkspace";
+import { NoActiveThreadState } from "../components/NoActiveThreadState";
 
 function ChatIndexRouteView() {
-  return <MultiChatWorkspace routeThreadRef={null} />;
+  return <NoActiveThreadState />;
 }
 
 export const Route = createFileRoute("/_chat/")({

@@ -11,6 +11,7 @@ import {
 import { DateTime } from "effect";
 import type { DeviceInfo } from "@v3tools/contracts";
 import { scopeThreadRef, scopedThreadKey } from "@v3tools/client-runtime";
+import type { ReactNode } from "react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import type { SidebarThreadSummary } from "../../types";
@@ -18,6 +19,7 @@ import { ChatItem } from "./ChatItem";
 
 interface DeviceGroupProps {
   readonly chats: ReadonlyArray<SidebarThreadSummary>;
+  readonly children?: ReactNode;
   readonly currentDeviceId: DeviceInfo["id"] | null;
   readonly device: DeviceInfo;
   readonly routeThreadKey: string | null;
@@ -58,11 +60,21 @@ function buildDeviceTooltip(device: DeviceInfo): string {
   return `${name} · last seen ${formatted}`;
 }
 
-export function DeviceGroup({ chats, currentDeviceId, device, routeThreadKey }: DeviceGroupProps) {
+export function DeviceGroup({
+  chats,
+  children,
+  currentDeviceId,
+  device,
+  routeThreadKey,
+}: DeviceGroupProps) {
   const isCurrentDevice = device.id === currentDeviceId;
+  const hasChildren = children !== undefined && children !== null;
 
   return (
-    <Collapsible defaultOpen={isCurrentDevice || device.online}>
+    <Collapsible
+      key={`${device.id}:${isCurrentDevice ? "current" : "other"}:${device.online ? "online" : "offline"}`}
+      defaultOpen={isCurrentDevice || device.online}
+    >
       <CollapsibleTrigger
         title={buildDeviceTooltip(device)}
         className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-accent"
@@ -91,7 +103,9 @@ export function DeviceGroup({ chats, currentDeviceId, device, routeThreadKey }: 
       </CollapsibleTrigger>
 
       <CollapsibleContent className="pt-1">
-        {chats.length === 0 ? (
+        {hasChildren ? (
+          children
+        ) : chats.length === 0 ? (
           <div className="px-10 py-1 text-[11px] text-muted-foreground/70">
             {isCurrentDevice ? "No chats yet on this device." : "Chat attribution lands next."}
           </div>

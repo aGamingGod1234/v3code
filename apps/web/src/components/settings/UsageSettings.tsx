@@ -1,4 +1,4 @@
-import { DownloadIcon } from "lucide-react";
+import { BarChart3Icon, DownloadIcon } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -12,6 +12,15 @@ import {
   providerLimitSummary,
   type ProviderLimitSnapshot,
 } from "../../lib/providerUsage";
+import {
+  aggregateModelRunStats,
+  buildModelUsageBuckets,
+  collectModelRunStats,
+  formatModelStatDuration,
+  formatTokenRate,
+  formatTokens,
+  type ModelUsageBucket,
+} from "../../lib/modelRunStats";
 import { selectThreadsAcrossEnvironments, useStore } from "../../store";
 import type { Thread } from "../../types";
 import { Button } from "../ui/button";
@@ -79,6 +88,10 @@ export function UsageSettings() {
     let activeDurationMs = 0;
     let limitReportCount = 0;
     const latestLimitReports: ProviderLimitSnapshot[] = [];
+    const modelRuns = collectModelRunStats(threads);
+    const modelStats = aggregateModelRunStats(modelRuns);
+    const weeklyUsage = buildModelUsageBuckets(modelRuns, "week").slice(-12);
+    const monthlyUsage = buildModelUsageBuckets(modelRuns, "month").slice(-12);
 
     for (const thread of threads) {
       const provider = thread.modelSelection.provider;
@@ -114,6 +127,9 @@ export function UsageSettings() {
       activeDurationMs,
       limitReportCount,
       latestLimitReports: latestLimitReports.slice(0, 5),
+      modelStats,
+      weeklyUsage,
+      monthlyUsage,
     };
   }, [nowMs, threads]);
 
@@ -181,6 +197,47 @@ export function UsageSettings() {
           <Stat label="Latest turns" value={stats.turns} />
           <Stat label="Active runtime" value={formatDuration(stats.activeDurationMs)} />
           <Stat label="Limit reports" value={stats.limitReportCount} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Detailed model specs</h3>
+            <p className="text-xs text-muted-foreground">
+              Show per-response timing, token, speed, and tool-call details in chats.
+            </p>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={usage.detailedModelSpecsEnabled}
+              onChange={(event) =>
+                updateSettings({
+                  usage: {
+                    ...usage,
+                    detailedModelSpecsEnabled: event.currentTarget.checked,
+                  },
+                })
+              }
+              className="h-4 w-4 accent-primary"
+            />
+            Enabled
+          </label>
+        </header>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <Stat label="Completed runs" value={stats.modelStats.runs} />
+          <Stat
+            label="Avg TTFT"
+            value={formatModelStatDuration(stats.modelStats.timeToFirstTokenMs)}
+          />
+          <Stat label="Output speed" value={formatTokenRate(stats.modelStats.tokensPerSecond)} />
+          <Stat label="Model tokens" value={formatTokens(stats.modelStats.totalTokens)} />
+          <Stat label="Tool calls" value={stats.modelStats.toolCalls} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <UsageBarChart title="Weekly usage" buckets={stats.weeklyUsage} />
+          <UsageBarChart title="Monthly usage" buckets={stats.monthlyUsage} />
         </div>
       </section>
 
@@ -297,6 +354,50 @@ function Stat({ label, value }: { readonly label: string; readonly value: ReactN
     <div className="rounded-lg border border-border bg-card/40 p-3">
       <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 text-xl font-semibold text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function UsageBarChart({
+  title,
+  buckets,
+}: {
+  readonly title: string;
+  readonly buckets: ReadonlyArray<ModelUsageBucket>;
+}) {
+  const maxTokens = Math.max(1, ...buckets.map((bucket) => bucket.totalTokens));
+
+  return (
+    <div className="rounded-lg border border-border bg-card/40 p-3">
+      <div className="mb-3 flex items-center gap-2">
+        <BarChart3Icon className="size-3.5 text-muted-foreground" />
+        <h4 className="text-xs font-semibold text-foreground">{title}</h4>
+      </div>
+      {buckets.length > 0 ? (
+        <div className="space-y-2">
+          {buckets.map((bucket) => {
+            const width = Math.max(4, Math.round((bucket.totalTokens / maxTokens) * 100));
+            return (
+              <div
+                key={bucket.key}
+                className="grid grid-cols-[5.5rem_minmax(0,1fr)_4rem] items-center gap-2 text-[11px]"
+              >
+                <span className="truncate text-muted-foreground">{bucket.label}</span>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
+                </div>
+                <span className="text-right font-medium text-foreground">
+                  {formatTokens(bucket.totalTokens)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-md border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground">
+          No completed model runs with token usage yet.
+        </div>
+      )}
     </div>
   );
 }

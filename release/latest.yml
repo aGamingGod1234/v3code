@@ -1,8 +1,8 @@
-version: 0.0.25-v3.20260507.settings-github-oauth-search
+version: 0.0.25
 files:
-  - url: V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe
-    sha512: MP5a9pv6sXd8apetTxnhuiknNnOikOBtSK+W1alo6hR0jEeNbn+SG7cl6aTlxcU/v76QVL7L6NYplcHWgK8OOg==
-    size: 119785259
-path: V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe
-sha512: MP5a9pv6sXd8apetTxnhuiknNnOikOBtSK+W1alo6hR0jEeNbn+SG7cl6aTlxcU/v76QVL7L6NYplcHWgK8OOg==
-releaseDate: '2026-05-07T03:04:53.124Z'
+  - url: V3-Code-0.0.25-x64.exe
+    sha512: 89C7DpXzFd1dt+zWwISIqHXcITCreshamKZ7pudIi2vIQxWEKkXRLocMyaKNXULp/G5/K/nElxcsUXT/Gst5TA==
+    size: 119807958
+path: V3-Code-0.0.25-x64.exe
+sha512: 89C7DpXzFd1dt+zWwISIqHXcITCreshamKZ7pudIi2vIQxWEKkXRLocMyaKNXULp/G5/K/nElxcsUXT/Gst5TA==
+releaseDate: '2026-05-09T08:57:42.081Z'

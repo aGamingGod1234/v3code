@@ -85,6 +85,7 @@ import { registerV3SetupWizardIpc } from "./v3SetupWizard.ts";
 import { registerV3ChatImportIpc } from "./v3ChatImport.ts";
 import { registerV3GitHubAuthIpc } from "./v3GitHubAuth.ts";
 import { registerV3SpawnDiscoveryIpc } from "./spawnDiscovery.ts";
+import { registerOpenChromeSetupIpc } from "./openChromeSetup.ts";
 import {
   EMBEDDED_GITHUB_CLIENT_ID,
   EMBEDDED_GITHUB_CLIENT_SECRET,
@@ -1861,6 +1862,7 @@ function registerIpcHandlers(): void {
   registerV3ChatImportIpc();
   registerV3GitHubAuthIpc();
   registerV3SpawnDiscoveryIpc();
+  registerOpenChromeSetupIpc({ ipcMain, shell });
 
   ipcMain.removeHandler(CREATE_DIRECTORY_CHANNEL);
   ipcMain.handle(CREATE_DIRECTORY_CHANNEL, async (_event, raw: unknown) => {

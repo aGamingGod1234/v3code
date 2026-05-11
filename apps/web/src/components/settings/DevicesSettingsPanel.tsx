@@ -52,8 +52,8 @@ function ServerNodeSetupPrompt({
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 Each install is running its own local V3 server right now, so chats and sessions
                 don&rsquo;t follow you between them. Pick one always-on machine to host a server
-                node and the rest will connect to it. Devices only appear in the list below once
-                they&rsquo;ve actually paired with this client.
+                node and the rest will connect to it. All Google-signed installs are listed below;
+                paired clients also show live online or offline status.
               </p>
             </div>
             <ol className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -173,6 +173,10 @@ export function DevicesSettingsPanel() {
     }
     return left.name.localeCompare(right.name);
   });
+  const registeredDeviceIds = new Set<string>(sortedDevices.map((device) => device.id));
+  const driveOnlyDevices =
+    account.driveSnapshot?.devices.filter((device) => !registeredDeviceIds.has(device.device_id)) ??
+    [];
 
   // Cross-device sync needs exactly one device to run a server node;
   // if we see multiple devices on the Google account but no published
@@ -210,7 +214,9 @@ export function DevicesSettingsPanel() {
           </div>
         ) : null}
 
-        {sortedDevices.length === 0 && !account.isDeviceStatePending ? (
+        {sortedDevices.length === 0 &&
+        driveOnlyDevices.length === 0 &&
+        !account.isDeviceStatePending ? (
           <div className="border-t border-border/60 px-4 py-4 text-sm text-muted-foreground sm:px-5">
             No V3 devices are registered yet.
           </div>
@@ -333,6 +339,27 @@ export function DevicesSettingsPanel() {
             </SettingsRow>
           );
         })}
+
+        {driveOnlyDevices.map((device) => (
+          <SettingsRow
+            key={`drive:${device.device_id}`}
+            title={
+              <span className="inline-flex items-center gap-2">
+                <span>{device.name}</span>
+                <Badge size="sm" variant="outline">
+                  Offline
+                </Badge>
+                <Badge size="sm" variant="secondary">
+                  Google signed in
+                </Badge>
+              </span>
+            }
+            description="Install signed into this Google account"
+            status={`Not paired with this server node yet. Added ${new Date(
+              device.added_at,
+            ).toLocaleString()}.`}
+          />
+        ))}
       </SettingsSection>
     </SettingsPageContainer>
   );

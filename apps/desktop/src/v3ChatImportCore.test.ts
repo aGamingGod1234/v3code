@@ -10,6 +10,7 @@ import {
   listLocal,
   openSession,
   readPreview,
+  readTranscriptSummary,
   readTranscript,
   scanFolder,
 } from "./v3ChatImportCore.ts";
@@ -177,6 +178,25 @@ describe("listLocal — sort order", () => {
   });
 });
 
+describe("listLocal — All provider", () => {
+  it("scans only supported import roots", async () => {
+    await seedCodexSession("2026", "04", "29", "rollout-foo.jsonl", `{"a":1}\n`);
+    await seedClaudeProject("C--Users-foo", ["alpha"]);
+    await writeFile(
+      Path.join(homeDir, ".gemini", "session.jsonl"),
+      `{"type":"message","text":"hi"}`,
+    );
+
+    const { sessionId } = openSession(homeDir);
+    const result = await listLocal(sessionId, homeDir, "all");
+    const scannedFormats = result.scannedRoots.map((root) => root.format);
+    expect(scannedFormats).toEqual(["codex", "claude", "anthropic-console"]);
+    expect(result.entries.some((entry) => entry.provider === "codex")).toBe(true);
+    expect(result.entries.some((entry) => entry.provider === "claude")).toBe(true);
+    expect(result.entries.some((entry) => entry.provider === "gemini-cli")).toBe(false);
+  });
+});
+
 describe("scanFolder — manual fallback with auto-detect", () => {
   it("detects format per file and adds the folder to the session allowlist", async () => {
     const customRoot = Path.join(homeDir, "my-archive");
@@ -300,6 +320,41 @@ describe("readPreview", () => {
 });
 
 describe("readTranscript", () => {
+  it("parses a review summary without returning raw transcript content", async () => {
+    await seedCodexSession(
+      "2026",
+      "04",
+      "29",
+      "rollout-summary.jsonl",
+      [
+        JSON.stringify({
+          timestamp: "2026-04-29T00:00:00Z",
+          msg: { type: "session_meta", cwd: "C:/Work/Demo", model: "gpt-5-codex" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-04-29T00:00:00Z",
+          msg: { type: "user_message", content: "Hi" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-04-29T00:00:01Z",
+          msg: { type: "assistant_message", content: "Hello" },
+        }),
+      ].join("\n"),
+    );
+    const { sessionId } = openSession(homeDir);
+    const listing = await listLocal(sessionId, homeDir);
+    const entry = listing.entries[0];
+    expect(entry).toBeDefined();
+    if (!entry) return;
+
+    const summary = await readTranscriptSummary(sessionId, entry.transcriptId);
+
+    expect(summary.format).toBe("codex");
+    expect(summary.sourceWorkspaceRoot).toBe("C:/Work/Demo");
+    expect(summary.messageCount).toBe(2);
+    expect(summary).not.toHaveProperty("content");
+  });
+
   it("returns the file content for an allowed transcriptId", async () => {
     const path = await seedCodexSession(
       "2026",

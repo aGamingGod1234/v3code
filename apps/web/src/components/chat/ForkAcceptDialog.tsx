@@ -1,6 +1,6 @@
 import { scopeProjectRef } from "@v3tools/client-runtime";
 import { type ScopedThreadRef } from "@v3tools/contracts";
-import { FolderTreeIcon, GitForkIcon } from "lucide-react";
+import { FolderTreeIcon, SendIcon } from "lucide-react";
 import { memo, useCallback, useMemo, useState } from "react";
 
 import { readEnvironmentApi } from "~/environmentApi";
@@ -52,7 +52,7 @@ export const ForkAcceptDialog = memo(function ForkAcceptDialog({
       toastManager.add({
         type: "error",
         title: "Desktop folder picker unavailable",
-        description: "Open this chat in the desktop app to choose a local folder for the fork.",
+        description: "Open this chat in the desktop app to choose a local folder for the transfer.",
       });
       return;
     }
@@ -75,15 +75,15 @@ export const ForkAcceptDialog = memo(function ForkAcceptDialog({
 
       toastManager.add({
         type: "success",
-        title: "Fork folder saved",
-        description: `This fork will now use ${selectedPath}.`,
+        title: "Transfer folder saved",
+        description: `This transferred chat will now use ${selectedPath}.`,
       });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown error choosing a folder for this fork.";
       toastManager.add({
         type: "error",
-        title: "Could not prepare fork",
+        title: "Could not prepare transfer",
         description: message,
       });
     } finally {
@@ -98,14 +98,14 @@ export const ForkAcceptDialog = memo(function ForkAcceptDialog({
   return (
     <div className="border-b border-border px-3 py-3 sm:px-5">
       <Alert variant="info">
-        <GitForkIcon className="mt-0.5 size-4" />
-        <AlertTitle>Choose a local folder for this fork</AlertTitle>
+        <SendIcon className="mt-0.5 size-4" />
+        <AlertTitle>Choose a local folder for this transferred chat</AlertTitle>
         <AlertDescription>
           <span>
             {sourceDeviceName
-              ? `This chat was forked from ${sourceDeviceName}.`
-              : "This chat was forked from another chat."}{" "}
-            Pick the folder this device should use for the new working copy before you continue.
+              ? `This chat was transferred from ${sourceDeviceName}.`
+              : "This chat was transferred from another chat."}{" "}
+            Pick the folder this device should use before you continue.
           </span>
           {project?.cwd ? (
             <span className="text-xs">

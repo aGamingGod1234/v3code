@@ -690,7 +690,7 @@ function applyPromptForward(
     const targetPath = `/${encodeURIComponent(environmentId)}/${encodeURIComponent(item.threadId)}`;
     toastManager.add({
       type: "info",
-      title: "Fork ready on this device",
+      title: "Transferred chat ready on this device",
       description: `${item.title} is waiting for a local folder before work continues.`,
       actionProps: {
         children: "Open chat",

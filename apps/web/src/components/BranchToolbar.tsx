@@ -1,6 +1,7 @@
 import { scopeProjectRef, scopeThreadRef } from "@v3tools/client-runtime";
 import type { EnvironmentId, ThreadId } from "@v3tools/contracts";
 import { memo, useMemo } from "react";
+import type { ReactNode } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { useStore } from "../store";
@@ -28,6 +29,7 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
+  statsSlot?: ReactNode;
 }
 
 export const BranchToolbar = memo(function BranchToolbar({
@@ -43,6 +45,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
+  statsSlot,
 }: BranchToolbarProps) {
   const threadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
@@ -80,8 +83,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   if (!hasActiveThread || !activeProject) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-208 items-center justify-between px-2.5 pb-3 pt-1 sm:px-3">
-      <div className="flex items-center gap-1">
+    <div className="mx-auto grid w-full max-w-208 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-2.5 pb-3 pt-1 sm:px-3">
+      <div className="flex min-w-0 items-center gap-1 justify-self-start">
         {showEnvironmentPicker && (
           <>
             <BranchToolbarEnvironmentSelector
@@ -101,17 +104,21 @@ export const BranchToolbar = memo(function BranchToolbar({
         />
       </div>
 
-      <BranchToolbarBranchSelector
-        environmentId={environmentId}
-        threadId={threadId}
-        {...(draftId ? { draftId } : {})}
-        envLocked={envLocked}
-        {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
-        {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
-        {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
-        {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
-        {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
-      />
+      <div className="min-w-0 justify-self-center">{statsSlot}</div>
+
+      <div className="min-w-0 justify-self-end">
+        <BranchToolbarBranchSelector
+          environmentId={environmentId}
+          threadId={threadId}
+          {...(draftId ? { draftId } : {})}
+          envLocked={envLocked}
+          {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
+          {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
+          {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
+          {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
+          {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+        />
+      </div>
     </div>
   );
 });

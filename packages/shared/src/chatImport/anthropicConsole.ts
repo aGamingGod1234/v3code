@@ -51,6 +51,7 @@ export const parseAnthropicConsoleExport = (text: string): ParsedChat => {
       title: null,
       sourceProvider: "claudeAgent",
       sourceModel: null,
+      sourceWorkspaceRoot: null,
       startedAt: null,
       messages: [],
       references: { skillIds: [], mcpServerIds: [], modelIds: [] },
@@ -60,6 +61,7 @@ export const parseAnthropicConsoleExport = (text: string): ParsedChat => {
   let raw: ReadonlyArray<unknown> = [];
   let title: string | null = null;
   let model: string | null = null;
+  let sourceWorkspaceRoot: string | null = null;
   let startedAt: string | null = null;
 
   if (Array.isArray(parsed)) {
@@ -67,6 +69,10 @@ export const parseAnthropicConsoleExport = (text: string): ParsedChat => {
   } else if (isRecord(parsed)) {
     title = stringField(parsed, "name") ?? stringField(parsed, "title");
     model = stringField(parsed, "model");
+    sourceWorkspaceRoot =
+      stringField(parsed, "cwd") ??
+      stringField(parsed, "workspaceRoot") ??
+      stringField(parsed, "workspace_root");
     startedAt = stringField(parsed, "created_at") ?? stringField(parsed, "started_at");
     if (Array.isArray(parsed.messages)) raw = parsed.messages;
   }
@@ -90,6 +96,7 @@ export const parseAnthropicConsoleExport = (text: string): ParsedChat => {
     title,
     sourceProvider: "claudeAgent",
     sourceModel: model,
+    sourceWorkspaceRoot,
     startedAt,
     messages,
     references: collectReferences(messages, [model]),

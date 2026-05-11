@@ -12,8 +12,10 @@ import * as OS from "node:os";
 import * as Path from "node:path";
 
 import type {
+  ChatImportFormat,
   ChatImportParserStatus,
   ChatImportProvider,
+  DesktopParsedTranscriptSummary,
   DesktopTranscriptEntry,
   DesktopTranscriptFile,
   DesktopTranscriptFormat,
@@ -22,7 +24,9 @@ import type {
   DesktopTranscriptScanFormat,
   DesktopTranscriptScanProvider,
   DesktopTranscriptScannedRoot,
+  ParsedChat,
 } from "@v3tools/contracts";
+import { parseChatImport } from "@v3tools/shared/chatImport";
 
 const PREVIEW_BYTES = 64 * 1024;
 const PREVIEW_LINE_MAX = 200;
@@ -34,6 +38,7 @@ const MANUAL_MAX_DEPTH = 6;
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 const SKIP_DIRS = new Set(["node_modules", ".git", "memory"]);
 const DEFAULT_SCAN_PROVIDER: DesktopTranscriptScanProvider = "codex";
+const ALL_SCAN_PROVIDERS: readonly ChatImportProvider[] = ["codex", "claude", "anthropic-console"];
 
 const PROVIDER_LABEL: Record<ChatImportProvider, string> = {
   codex: "Codex",
@@ -47,6 +52,9 @@ const PROVIDER_LABEL: Record<ChatImportProvider, string> = {
 };
 
 const READY_FORMATS = new Set<DesktopTranscriptFormat>(["codex", "claude", "anthropic-console"]);
+
+const isReadyImportFormat = (format: DesktopTranscriptFormat): format is ChatImportFormat =>
+  READY_FORMATS.has(format);
 
 interface SessionState {
   readonly sessionId: string;
@@ -65,6 +73,10 @@ interface TranscriptRecord {
   readonly modifiedAt: string;
   readonly bytes: number;
   readonly displayPath: string;
+}
+
+interface ReadableTranscriptRecord extends TranscriptRecord {
+  readonly format: ChatImportFormat;
 }
 
 const sessions = new Map<string, SessionState>();
@@ -395,7 +407,7 @@ const detectFormatFromContentHead = async (filePath: string): Promise<DesktopTra
 };
 
 const resolveScannedFormat = async (
-  provider: DesktopTranscriptScanProvider,
+  provider: ChatImportProvider,
   filePath: string,
 ): Promise<DesktopTranscriptFormat> => {
   const pathFormat = detectFormatFromPath(filePath);
@@ -426,6 +438,8 @@ const providerRootPath = (
 ): string | null => {
   const appData = process.env.APPDATA?.trim() || Path.join(homeDir, "AppData", "Roaming");
   switch (provider) {
+    case "all":
+      return null;
     case "codex":
       return Path.join(homeDir, ".codex", "sessions");
     case "claude":
@@ -448,7 +462,7 @@ const providerRootPath = (
 interface ScanRootInput {
   readonly absolutePath: string;
   readonly format: DesktopTranscriptScanFormat;
-  readonly provider: DesktopTranscriptScanProvider;
+  readonly provider: ChatImportProvider;
 }
 
 const scanRoot = async (
@@ -521,6 +535,14 @@ const builtInRoots = (
   homeDir: string,
   provider: DesktopTranscriptScanProvider = DEFAULT_SCAN_PROVIDER,
 ): ReadonlyArray<ScanRootInput> => {
+  if (provider === "all") {
+    return ALL_SCAN_PROVIDERS.flatMap((scanProvider) => {
+      const rootPath = providerRootPath(homeDir, scanProvider);
+      return rootPath
+        ? [{ absolutePath: rootPath, format: scanProvider, provider: scanProvider }]
+        : [];
+    });
+  }
   const rootPath = providerRootPath(homeDir, provider);
   if (!rootPath) return [];
   return [{ absolutePath: rootPath, format: provider, provider }];
@@ -633,8 +655,13 @@ export const scanFolder = async (
 ): Promise<DesktopTranscriptListing> => {
   const session = requireSession(sessionId);
   const visited = new Set<string>();
+  const scanProvider = provider === "all" ? "custom" : provider;
   const scannedRoots: DesktopTranscriptScannedRoot[] = [
-    await scanRoot({ absolutePath: folderPath, format: "auto", provider }, session, visited),
+    await scanRoot(
+      { absolutePath: folderPath, format: "auto", provider: scanProvider },
+      session,
+      visited,
+    ),
   ];
   touchSession(session);
   return buildListingFromSession(session, scannedRoots);
@@ -725,11 +752,10 @@ const isAllowed = (session: SessionState, candidateReal: string): boolean => {
   return false;
 };
 
-export const readTranscript = async (
-  sessionId: string,
+const requireReadableTranscriptRecord = (
+  session: SessionState,
   transcriptId: string,
-): Promise<DesktopTranscriptFile> => {
-  const session = requireSession(sessionId);
+): ReadableTranscriptRecord => {
   const record = session.transcripts.get(transcriptId);
   if (!record) {
     throw new Error("not-found");
@@ -737,9 +763,44 @@ export const readTranscript = async (
   if (!isAllowed(session, record.realPath)) {
     throw new Error("not-allowed");
   }
-  if (record.parserStatus !== "ready") {
+  const format = record.format;
+  if (record.parserStatus !== "ready" || !isReadyImportFormat(format)) {
     throw new Error("unsupported-provider");
   }
+  return { ...record, format };
+};
+
+const summarizeParsedTranscript = (parsed: ParsedChat): DesktopParsedTranscriptSummary => ({
+  format: parsed.format,
+  title: parsed.title,
+  sourceProvider: parsed.sourceProvider,
+  sourceModel: parsed.sourceModel,
+  sourceWorkspaceRoot: parsed.sourceWorkspaceRoot ?? null,
+  startedAt: parsed.startedAt,
+  references: parsed.references,
+  messageCount: parsed.messages.length,
+});
+
+export const readTranscriptSummary = async (
+  sessionId: string,
+  transcriptId: string,
+): Promise<DesktopParsedTranscriptSummary> => {
+  const session = requireSession(sessionId);
+  const record = requireReadableTranscriptRecord(session, transcriptId);
+  const content = await FS.readFile(record.realPath, "utf8");
+  const outcome = parseChatImport(content, record.format);
+  if (!outcome.ok) {
+    throw new Error(outcome.error.message);
+  }
+  return summarizeParsedTranscript(outcome.parsed);
+};
+
+export const readTranscript = async (
+  sessionId: string,
+  transcriptId: string,
+): Promise<DesktopTranscriptFile> => {
+  const session = requireSession(sessionId);
+  const record = requireReadableTranscriptRecord(session, transcriptId);
   const content = await FS.readFile(record.realPath, "utf8");
   return { content };
 };

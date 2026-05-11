@@ -8,14 +8,12 @@
 //     original page. Works because browser cookies carry the V3 session
 //     through the whole dance.
 //
-//   * Desktop (Electron): defers to the main process via
-//     `desktopBridge.openV3GitHubSignIn`, which starts a loopback HTTP
-//     server on 127.0.0.1, opens the system browser at GitHub's
-//     consent screen, captures the `code` on the loopback, and
-//     exchanges it for an access token. The renderer then POSTs the
-//     token to `/api/auth/github/bootstrap` so the server binds it to
-//     the signed-in V3 user. This keeps the OAuth consent UI in the
-//     user's real browser instead of hijacking the Electron window.
+//   * Desktop (Electron): the UI prefers GitHub Device Flow via
+//     `desktopBridge.github`. The main process polls GitHub, then the
+//     renderer consumes the token once and POSTs it to
+//     `/api/auth/github/bootstrap` so the server binds it to the
+//     signed-in V3 user. The legacy loopback helper remains for builds
+//     that explicitly embed a confidential desktop OAuth app.
 //
 // This module also exposes:
 //   - `fetchGitHubConnectionStatus` — reads /api/auth/github/status
@@ -31,6 +29,7 @@ import {
   GitHubClientPublicConfig,
   GitHubConnectionStatus,
   GitHubDisconnectResult,
+  GitHubTokenBundle,
 } from "@v3tools/contracts";
 import { Schema } from "effect";
 
@@ -80,6 +79,33 @@ export interface DesktopConnectGitHubResult {
   readonly username: string;
 }
 
+export const bootstrapGitHubToken = async (
+  handoff: GitHubTokenBundle,
+): Promise<DesktopConnectGitHubResult> => {
+  const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/auth/github/bootstrap"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      accessToken: handoff.accessToken,
+      scopes: handoff.scopes,
+    }),
+  }).catch((cause) => {
+    throw new V3GitHubConnectError("network", "Failed to reach the V3 server.", { cause });
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new V3GitHubConnectError(
+      "bootstrap-failed",
+      `GitHub bootstrap rejected (${response.status}): ${text || "unknown error"}`,
+    );
+  }
+
+  const body = Schema.decodeUnknownSync(GitHubBootstrapResult)(await response.json());
+  return { connected: true, username: body.username };
+};
+
 /**
  * Desktop-only: drive the loopback-based GitHub OAuth flow via the
  * Electron bridge and then POST the resulting access token to the V3
@@ -109,28 +135,7 @@ export const startConnectGitHubDesktop = async (
     throw new V3GitHubConnectError(code, message, { cause });
   });
 
-  const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/auth/github/bootstrap"), {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      accessToken: handoff.accessToken,
-      scopes: handoff.scopes,
-    }),
-  }).catch((cause) => {
-    throw new V3GitHubConnectError("network", "Failed to reach the V3 server.", { cause });
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new V3GitHubConnectError(
-      "bootstrap-failed",
-      `GitHub bootstrap rejected (${response.status}): ${text || "unknown error"}`,
-    );
-  }
-
-  const body = Schema.decodeUnknownSync(GitHubBootstrapResult)(await response.json());
-  return { connected: true, username: body.username };
+  return bootstrapGitHubToken(handoff);
 };
 
 /**

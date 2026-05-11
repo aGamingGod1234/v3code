@@ -12,6 +12,7 @@ import {
   listLocal,
   openSession,
   readPreview,
+  readTranscriptSummary,
   readTranscript,
   scanFolder,
 } from "./v3ChatImportCore.ts";
@@ -21,6 +22,7 @@ export const V3_CHAT_IMPORT_CHANNELS = {
   LIST_LOCAL: "desktop:v3-chat-import-list-local",
   SCAN_FOLDER: "desktop:v3-chat-import-scan-folder",
   READ_PREVIEW: "desktop:v3-chat-import-read-preview",
+  READ_SUMMARY: "desktop:v3-chat-import-read-summary",
   READ_TRANSCRIPT: "desktop:v3-chat-import-read-transcript",
   CLOSE_SESSION: "desktop:v3-chat-import-close-session",
 } as const;
@@ -41,6 +43,7 @@ const requireSessionInput = (raw: unknown): { sessionId: string } => {
 };
 
 const isScanProvider = (value: unknown): value is DesktopTranscriptScanProvider =>
+  value === "all" ||
   value === "codex" ||
   value === "claude" ||
   value === "anthropic-console" ||
@@ -111,6 +114,10 @@ export const registerV3ChatImportIpc = (): void => {
   ipcMain.handle(V3_CHAT_IMPORT_CHANNELS.READ_PREVIEW, async (_event, raw: unknown) => {
     const { sessionId, transcriptId } = requireTranscriptInput(raw);
     return readPreview(sessionId, transcriptId);
+  });
+  ipcMain.handle(V3_CHAT_IMPORT_CHANNELS.READ_SUMMARY, async (_event, raw: unknown) => {
+    const { sessionId, transcriptId } = requireTranscriptInput(raw);
+    return readTranscriptSummary(sessionId, transcriptId);
   });
   ipcMain.handle(V3_CHAT_IMPORT_CHANNELS.READ_TRANSCRIPT, async (_event, raw: unknown) => {
     const { sessionId, transcriptId } = requireTranscriptInput(raw);
