@@ -374,16 +374,32 @@ jobs:
           node-version-file: package.json
           registry-url: https://registry.npmjs.org
 
+      - id: npm_token
+        name: Check npm publish token
+        env:
+          HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          if [[ "$HAS_NPM_TOKEN" == "true" ]]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::NPM_TOKEN is not configured; skipping CLI npm publish."
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
+        if: steps.npm_token.outputs.has_token == 'true'
         run: bun install --frozen-lockfile
 
       - name: Align package versions to release version
+        if: steps.npm_token.outputs.has_token == 'true'
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 
       - name: Build CLI package
+        if: steps.npm_token.outputs.has_token == 'true'
         run: bun run build --filter=@v3tools/web --filter=t3
 
       - name: Verify npm publish token
+        if: steps.npm_token.outputs.has_token == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -393,6 +409,7 @@ jobs:
           fi
 
       - name: Publish CLI package
+        if: steps.npm_token.outputs.has_token == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node apps/server/scripts/cli.ts publish --tag "${{ needs.preflight.outputs.cli_dist_tag }}" --app-version "${{ needs.preflight.outputs.version }}" --verbose
@@ -404,8 +421,22 @@ jobs:
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
+      - id: release_token_mode
+        name: Resolve release token mode
+        env:
+          HAS_RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID != '' }}
+          HAS_RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [[ "$HAS_RELEASE_APP_ID" == "true" && "$HAS_RELEASE_APP_PRIVATE_KEY" == "true" ]]; then
+            echo "use_app_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::RELEASE_APP_ID/RELEASE_APP_PRIVATE_KEY are not configured; using GITHUB_TOKEN to publish the GitHub release."
+            echo "use_app_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - id: app_token
         name: Mint release app token
+        if: steps.release_token_mode.outputs.use_app_token == 'true'
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
@@ -496,7 +527,7 @@ jobs:
             release-assets/*.blockmap
             release-assets/*.yml
           fail_on_unmatched_files: true
-          token: ${{ steps.app_token.outputs.token }}
+          token: ${{ steps.app_token.outputs.token || github.token }}
 
       - name: Publish first release
         if: needs.preflight.outputs.previous_tag == ''
@@ -516,7 +547,7 @@ jobs:
             release-assets/*.blockmap
             release-assets/*.yml
           fail_on_unmatched_files: true
-          token: ${{ steps.app_token.outputs.token }}
+          token: ${{ steps.app_token.outputs.token || github.token }}
 
   finalize:
     name: Finalize release

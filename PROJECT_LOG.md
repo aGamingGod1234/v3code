@@ -1,3 +1,34 @@
+## [2026-05-11] - Scheduled Release Failure Repair
+
+### What Was Implemented
+
+- Made scheduled releases skip npm CLI publishing when `NPM_TOKEN` is
+  not configured instead of failing the workflow.
+- Made GitHub release publication fall back to the built-in
+  `GITHUB_TOKEN` when release-app credentials are not configured.
+
+### Files Modified
+
+- `.github/workflows/release.yml` - makes optional release secrets
+  non-fatal for scheduled release runs.
+- `PROJECT_LOG.md` - records this release workflow repair pass.
+
+### Assumptions Made (flag these for review)
+
+- Desktop installer publishing should not be blocked by missing npm
+  publish credentials.
+- Using `GITHUB_TOKEN` is acceptable for GitHub Release creation when
+  the release GitHub App secrets are not installed.
+
+### Known Issues / Deferred
+
+- Stable release finalization still expects release-app credentials when
+  it needs to push version bumps back to `main`.
+
+### Suggested Next Steps
+
+- Add `NPM_TOKEN` if CLI npm publishing should happen during releases.
+
 ## [2026-05-11] - Main CI Browser Test Repair
 
 ### What Was Implemented
