@@ -1,3 +1,34 @@
+## [2026-05-11] - Orchestrator PR CI Repair
+
+### What Was Implemented
+
+- Removed accidental `ModelRunStats` references from the orchestrator PR's
+  `ChatView.tsx` changes so the PR no longer depends on unrelated local
+  unstaged files.
+- Kept the orchestrator PR scoped instead of adding the separate
+  model-run-stats feature files to the branch.
+
+### Files Modified
+
+- `apps/web/src/components/ChatView.tsx` - removes accidental
+  model-run-stats imports, timeline props, and branch-toolbar slot prop.
+- `PROJECT_LOG.md` - records this CI repair pass.
+
+### Assumptions Made (flag these for review)
+
+- The model-run-stats files are a separate local feature and should not
+  be pulled into the orchestrator PR just to satisfy missing imports.
+
+### Known Issues / Deferred
+
+- The local working tree still contains unrelated unstaged changes that
+  are intentionally left out of the PR.
+
+### Suggested Next Steps
+
+- Let the refreshed PR checks run and verify the main CI plus mobile
+  smoke jobs are green.
+
 ## [2026-05-11] - Orchestrated Session Feature
 
 ### What Was Implemented

@@ -136,11 +136,9 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
-import { ChatModelRunStatsStrip } from "./chat/ModelRunStats";
 import { ChatHeader } from "./chat/ChatHeader";
 import { ForkAcceptDialog } from "./chat/ForkAcceptDialog";
 import { requestOpenForkChatDialog } from "./chat/forkChatOpener";
-import { deriveAssistantMessageModelStats, deriveThreadModelRunStats } from "../lib/modelRunStats";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
@@ -1040,15 +1038,6 @@ export default function ChatView(props: ChatViewProps) {
     () =>
       deriveTimelineEntries(timelineMessages, activeThread?.proposedPlans ?? [], workLogEntries),
     [activeThread?.proposedPlans, timelineMessages, workLogEntries],
-  );
-  const detailedModelSpecsEnabled = settings.usage.detailedModelSpecsEnabled;
-  const modelStatsByAssistantMessageId = useMemo(
-    () => (activeThread ? deriveAssistantMessageModelStats(activeThread) : new Map()),
-    [activeThread],
-  );
-  const activeThreadModelStats = useMemo(
-    () => (activeThread ? deriveThreadModelRunStats(activeThread) : null),
-    [activeThread],
   );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
@@ -3076,8 +3065,6 @@ export default function ChatView(props: ChatViewProps) {
                 timestampFormat={timestampFormat}
                 workspaceRoot={activeWorkspaceRoot}
                 onIsAtEndChange={onIsAtEndChange}
-                detailedModelSpecsEnabled={detailedModelSpecsEnabled}
-                modelStatsByAssistantMessageId={modelStatsByAssistantMessageId}
               />
             )}
 
@@ -3193,11 +3180,6 @@ export default function ChatView(props: ChatViewProps) {
                     onEnvironmentChange,
                   }
                 : {})}
-              statsSlot={
-                detailedModelSpecsEnabled && activeThreadModelStats ? (
-                  <ChatModelRunStatsStrip stats={activeThreadModelStats} compact />
-                ) : null
-              }
             />
           )}
           {pullRequestDialogState ? (
