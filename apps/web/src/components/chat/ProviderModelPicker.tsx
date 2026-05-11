@@ -1,9 +1,9 @@
-import { type ProviderKind, type ServerProvider } from "@v3tools/contracts";
+import { type ProviderKind, type ServerProvider, type SessionMode } from "@v3tools/contracts";
 import { resolveSelectableModel } from "@v3tools/shared/model";
 import { memo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../../session-logic";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, WorkflowIcon } from "lucide-react";
 import { Button, buttonVariants } from "../ui/button";
 import {
   Menu,
@@ -51,6 +51,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   provider: ProviderKind;
   model: string;
   lockedProvider: ProviderKind | null;
+  sessionMode?: SessionMode;
   providers?: ReadonlyArray<ServerProvider>;
   modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>>;
   activeProviderIconClassName?: string;
@@ -59,8 +60,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   onProviderModelChange: (provider: ProviderKind, model: string) => void;
+  onSessionModeChange?: (mode: SessionMode) => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const isOrchestrated = props.sessionMode === "orchestrated";
   const activeProvider = props.lockedProvider ?? props.provider;
   const selectedProviderOptions = props.modelOptionsByProvider[activeProvider];
   const selectedModelLabel =
@@ -75,7 +78,13 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       props.modelOptionsByProvider[provider],
     );
     if (!resolvedModel) return;
+    props.onSessionModeChange?.("single");
     props.onProviderModelChange(provider, resolvedModel);
+    setIsMenuOpen(false);
+  };
+  const handleOrchestratorSelect = () => {
+    if (props.disabled) return;
+    props.onSessionModeChange?.("orchestrated");
     setIsMenuOpen(false);
   };
 
@@ -111,20 +120,33 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             props.compact ? "max-w-36 sm:pl-1" : undefined,
           )}
         >
-          <ProviderIcon
-            aria-hidden="true"
-            className={cn(
-              "size-4 shrink-0",
-              providerIconClassName(activeProvider, "text-muted-foreground/70"),
-              props.activeProviderIconClassName,
-            )}
-          />
-          <span className="min-w-0 flex-1 truncate">{selectedModelLabel}</span>
+          {isOrchestrated ? (
+            <WorkflowIcon aria-hidden="true" className="size-4 shrink-0 text-primary/80" />
+          ) : (
+            <ProviderIcon
+              aria-hidden="true"
+              className={cn(
+                "size-4 shrink-0",
+                providerIconClassName(activeProvider, "text-muted-foreground/70"),
+                props.activeProviderIconClassName,
+              )}
+            />
+          )}
+          <span className="min-w-0 flex-1 truncate">
+            {isOrchestrated ? "Orchestrator" : selectedModelLabel}
+          </span>
           <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
         </span>
       </MenuTrigger>
       <MenuPopup align="start">
-        {props.lockedProvider !== null ? (
+        {isOrchestrated && props.lockedProvider !== null ? (
+          <MenuGroup>
+            <MenuItem disabled>
+              <WorkflowIcon aria-hidden="true" className="size-4 shrink-0 text-primary/80" />
+              <span>Orchestrator active</span>
+            </MenuItem>
+          </MenuGroup>
+        ) : props.lockedProvider !== null ? (
           <MenuGroup>
             <MenuRadioGroup
               value={props.model}
@@ -143,6 +165,16 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           </MenuGroup>
         ) : (
           <>
+            <MenuItem onClick={handleOrchestratorSelect}>
+              <WorkflowIcon aria-hidden="true" className="size-4 shrink-0 text-primary/80" />
+              <span>Orchestrator</span>
+              {isOrchestrated ? (
+                <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
+                  Selected
+                </span>
+              ) : null}
+            </MenuItem>
+            <MenuDivider />
             {AVAILABLE_PROVIDER_OPTIONS.map((option) => {
               const OptionIcon = PROVIDER_ICON_BY_PROVIDER[option.value];
               const liveProvider = props.providers

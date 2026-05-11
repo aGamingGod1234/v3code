@@ -1,8 +1,8 @@
-version: 0.0.25-v3.20260507.settings-github-oauth-search
+version: 0.0.25-v3.20260511.orchestrator-audit
 files:
-  - url: V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe
-    sha512: MP5a9pv6sXd8apetTxnhuiknNnOikOBtSK+W1alo6hR0jEeNbn+SG7cl6aTlxcU/v76QVL7L6NYplcHWgK8OOg==
-    size: 119785259
-path: V3-Code-0.0.25-v3.20260507.settings-github-oauth-search-x64.exe
-sha512: MP5a9pv6sXd8apetTxnhuiknNnOikOBtSK+W1alo6hR0jEeNbn+SG7cl6aTlxcU/v76QVL7L6NYplcHWgK8OOg==
-releaseDate: '2026-05-07T03:04:53.124Z'
+  - url: V3-Code-0.0.25-v3.20260511.orchestrator-audit-x64.exe
+    sha512: YkMQZTiGhLTPbbbKDIuMdJ/EeuWfp7t4/zQ17u4v4BbPlYdcLOV0GZCrZzPet0f/NjidDrKP3bS61KOhRT9Qxw==
+    size: 119831679
+path: V3-Code-0.0.25-v3.20260511.orchestrator-audit-x64.exe
+sha512: YkMQZTiGhLTPbbbKDIuMdJ/EeuWfp7t4/zQ17u4v4BbPlYdcLOV0GZCrZzPet0f/NjidDrKP3bS61KOhRT9Qxw==
+releaseDate: '2026-05-11T05:08:24.720Z'

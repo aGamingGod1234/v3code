@@ -12,6 +12,12 @@ import {
   OpenCodeModelOptions,
 } from "./model.ts";
 import { ModelSelection, ProviderKind } from "./orchestration.ts";
+import {
+  DEFAULT_ORCHESTRATOR_CONFIG,
+  OrchestratorConfig,
+  OrchestratorPlanningBudget,
+  OrchestratorProvider,
+} from "./orchestrator-config.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -333,6 +339,9 @@ export const ServerSettings = Schema.Struct({
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  orchestratorConfig: OrchestratorConfig.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_ORCHESTRATOR_CONFIG)),
+  ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -438,6 +447,34 @@ const OpenCodeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const OrchestratorRoleConfigPatch = Schema.Struct({
+  provider: Schema.optionalKey(OrchestratorProvider),
+  model: Schema.optionalKey(Schema.String),
+  effort: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  mode: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
+const SubAgentDefinitionPatch = Schema.Struct({
+  id: Schema.optionalKey(Schema.String),
+  name: Schema.optionalKey(Schema.String),
+  provider: Schema.optionalKey(OrchestratorProvider),
+  model: Schema.optionalKey(Schema.String),
+  effort: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  mode: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  description: Schema.optionalKey(Schema.String),
+  prompt: Schema.optionalKey(Schema.String),
+  enabled: Schema.optionalKey(Schema.Boolean),
+});
+
+const OrchestratorConfigPatch = Schema.Struct({
+  orchestrator: Schema.optionalKey(OrchestratorRoleConfigPatch),
+  implementation: Schema.optionalKey(OrchestratorRoleConfigPatch),
+  assistant: Schema.optionalKey(OrchestratorRoleConfigPatch),
+  subAgents: Schema.optionalKey(Schema.Array(SubAgentDefinitionPatch)),
+  fastMode: Schema.optionalKey(Schema.Boolean),
+  planningBudget: Schema.optionalKey(OrchestratorPlanningBudget),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
@@ -457,5 +494,6 @@ export const ServerSettingsPatch = Schema.Struct({
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
     }),
   ),
+  orchestratorConfig: Schema.optionalKey(OrchestratorConfigPatch),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;

@@ -28,6 +28,13 @@ import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import {
+  buildOrchestratedImplementationPrompt,
+  modelSelectionLabel,
+  resolveImplementationDispatch,
+  roleConfigLabel,
+} from "../session.ts";
+import { ORCHESTRATOR_ACTIVITY_KINDS, makeOrchestratorActivity } from "../events.ts";
+import {
   ProviderCommandReactor,
   type ProviderCommandReactorShape,
 } from "../Services/ProviderCommandReactor.ts";
@@ -320,10 +327,15 @@ const make = Effect.gen(function* () {
       ? thread.session.providerName
       : undefined;
     const requestedModelSelection = options?.modelSelection;
-    const threadProvider: ProviderKind = currentProvider ?? thread.modelSelection.provider;
+    const canSwitchProviderForThread = thread.sessionMode === "orchestrated";
+    const threadProvider: ProviderKind =
+      canSwitchProviderForThread && requestedModelSelection !== undefined
+        ? requestedModelSelection.provider
+        : (currentProvider ?? thread.modelSelection.provider);
     if (
       requestedModelSelection !== undefined &&
-      requestedModelSelection.provider !== threadProvider
+      requestedModelSelection.provider !== threadProvider &&
+      !canSwitchProviderForThread
     ) {
       return yield* new ProviderAdapterRequestError({
         provider: threadProvider,
@@ -381,6 +393,8 @@ const make = Effect.gen(function* () {
       thread.session && thread.session.status !== "stopped" && activeSession ? thread.id : null;
     if (existingSessionThreadId) {
       const runtimeModeChanged = thread.runtimeMode !== thread.session?.runtimeMode;
+      const providerChanged =
+        currentProvider !== undefined && currentProvider !== desiredModelSelection.provider;
       const sessionModelSwitch =
         currentProvider === undefined
           ? "in-session"
@@ -397,15 +411,17 @@ const make = Effect.gen(function* () {
 
       if (
         !runtimeModeChanged &&
+        !providerChanged &&
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
         return existingSessionThreadId;
       }
 
-      const resumeCursor = shouldRestartForModelChange
-        ? undefined
-        : (activeSession?.resumeCursor ?? undefined);
+      const resumeCursor =
+        shouldRestartForModelChange || providerChanged
+          ? undefined
+          : (activeSession?.resumeCursor ?? undefined);
       yield* Effect.logInfo("provider command reactor restarting provider session", {
         threadId,
         existingSessionThreadId,
@@ -414,6 +430,7 @@ const make = Effect.gen(function* () {
         currentRuntimeMode: thread.session?.runtimeMode,
         desiredRuntimeMode: thread.runtimeMode,
         runtimeModeChanged,
+        providerChanged,
         modelChanged,
         shouldRestartForModelChange,
         shouldRestartForModelSelectionChange,
@@ -685,6 +702,181 @@ const make = Effect.gen(function* () {
           }),
         ),
       );
+
+    if (thread.sessionMode === "orchestrated") {
+      const settings = yield* serverSettingsService.getSettings;
+      const orchestratorConfig = thread.orchestratorConfig ?? settings.orchestratorConfig;
+      const implementationDispatch = resolveImplementationDispatch({
+        role: orchestratorConfig.implementation,
+        fallbackModelSelection: event.payload.modelSelection ?? thread.modelSelection,
+      });
+      const implementationModelSelection = implementationDispatch.modelSelection;
+      const taskId = `turn:${event.eventId}`;
+      const baseActivitySequence =
+        typeof event.sequence === "number" ? event.sequence * 1_000 : undefined;
+      let nextActivitySequenceOffset = 0;
+      const appendOrchestratorActivity = (input: {
+        readonly idTag: string;
+        readonly kind: (typeof ORCHESTRATOR_ACTIVITY_KINDS)[keyof typeof ORCHESTRATOR_ACTIVITY_KINDS];
+        readonly summary: string;
+        readonly lane: "orchestrator" | "implementation" | "assistant";
+        readonly chunk?: string;
+        readonly status?: string;
+        readonly turnId?: TurnId | null;
+        readonly payload?: Record<string, unknown>;
+      }) =>
+        orchestrationEngine.dispatch({
+          type: "thread.activity.append",
+          commandId: CommandId.make(`server:orchestrator:${event.eventId}:${input.idTag}`),
+          threadId: event.payload.threadId,
+          activity: makeOrchestratorActivity({
+            id: EventId.make(`orchestrator:${event.eventId}:${input.idTag}`),
+            taskId,
+            createdAt: event.payload.createdAt,
+            ...(baseActivitySequence !== undefined
+              ? { sequence: baseActivitySequence + nextActivitySequenceOffset++ }
+              : {}),
+            ...input,
+          }),
+          createdAt: event.payload.createdAt,
+        });
+
+      yield* appendOrchestratorActivity({
+        idTag: "task-created",
+        kind: ORCHESTRATOR_ACTIVITY_KINDS.taskCreated,
+        summary: "Orchestrator task created",
+        lane: "orchestrator",
+        status: "pending",
+        payload: {
+          fastMode: orchestratorConfig.fastMode,
+          planningBudget: orchestratorConfig.planningBudget,
+        },
+      });
+      yield* appendOrchestratorActivity({
+        idTag: "task-assigned",
+        kind: ORCHESTRATOR_ACTIVITY_KINDS.taskAssigned,
+        summary: "Task assigned to implementation lane",
+        lane: "implementation",
+        status: "assigned",
+        payload: {
+          modelSelection: implementationModelSelection,
+          runtimeFallback: implementationDispatch.fallbackReason,
+          orchestrator: roleConfigLabel(orchestratorConfig.orchestrator),
+          implementation: roleConfigLabel(orchestratorConfig.implementation),
+          assistant: roleConfigLabel(orchestratorConfig.assistant),
+        },
+      });
+      if (implementationDispatch.fallbackReason) {
+        yield* appendOrchestratorActivity({
+          idTag: "runtime-fallback",
+          kind: ORCHESTRATOR_ACTIVITY_KINDS.agentLaneChunk,
+          summary: "Implementation lane runtime fallback",
+          lane: "orchestrator",
+          status: "fallback",
+          chunk: implementationDispatch.fallbackReason,
+          payload: {
+            configuredImplementation: roleConfigLabel(orchestratorConfig.implementation),
+            runtimeModelSelection: implementationModelSelection,
+          },
+        });
+      }
+      if (!orchestratorConfig.fastMode) {
+        yield* appendOrchestratorActivity({
+          idTag: "planning",
+          kind: ORCHESTRATOR_ACTIVITY_KINDS.agentLaneChunk,
+          summary: "Orchestrator lane planning",
+          lane: "orchestrator",
+          chunk: `Planning with ${roleConfigLabel(orchestratorConfig.orchestrator)} before routing implementation.`,
+        });
+      }
+      yield* appendOrchestratorActivity({
+        idTag: "assistant-ready",
+        kind: ORCHESTRATOR_ACTIVITY_KINDS.agentLaneChunk,
+        summary: "Assistant lane ready",
+        lane: "assistant",
+        chunk: `${roleConfigLabel(orchestratorConfig.assistant)} is attached for review and follow-up support.`,
+      });
+
+      const sendTurnRequest = yield* buildSendTurnRequestForThread({
+        threadId: event.payload.threadId,
+        messageText: buildOrchestratedImplementationPrompt({
+          config: orchestratorConfig,
+          fallbackReason: implementationDispatch.fallbackReason,
+          runtimeModelSelection: implementationModelSelection,
+          userMessage: message.text,
+        }),
+        ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
+        modelSelection: implementationModelSelection,
+        ...(event.payload.approvalPolicy !== undefined
+          ? { approvalPolicy: event.payload.approvalPolicy }
+          : {}),
+        ...(event.payload.sandboxMode !== undefined
+          ? { sandboxMode: event.payload.sandboxMode }
+          : {}),
+        interactionMode: event.payload.interactionMode,
+        createdAt: event.payload.createdAt,
+      }).pipe(
+        Effect.map(Option.some),
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            const detail = formatFailureDetail(cause);
+            yield* appendOrchestratorActivity({
+              idTag: "task-failed-before-send",
+              kind: ORCHESTRATOR_ACTIVITY_KINDS.taskCompleted,
+              summary: "Implementation lane failed",
+              lane: "implementation",
+              status: "failed",
+              payload: {
+                state: "failed",
+                errorMessage: detail,
+              },
+            });
+            yield* handleTurnStartFailure(cause);
+            return Option.none();
+          }),
+        ),
+      );
+
+      if (Option.isNone(sendTurnRequest)) {
+        return;
+      }
+
+      yield* providerService.sendTurn(sendTurnRequest.value).pipe(
+        Effect.flatMap((turn) =>
+          appendOrchestratorActivity({
+            idTag: "implementation-started",
+            kind: ORCHESTRATOR_ACTIVITY_KINDS.agentLaneChunk,
+            summary: "Implementation lane started",
+            lane: "implementation",
+            status: "running",
+            turnId: turn.turnId,
+            chunk: `${implementationDispatch.fallbackReason ? modelSelectionLabel(implementationModelSelection) : roleConfigLabel(orchestratorConfig.implementation)} accepted the routed implementation turn.`,
+            payload: {
+              providerTurnId: turn.turnId,
+            },
+          }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            const detail = formatFailureDetail(cause);
+            yield* appendOrchestratorActivity({
+              idTag: "task-failed-send",
+              kind: ORCHESTRATOR_ACTIVITY_KINDS.taskCompleted,
+              summary: "Implementation lane failed",
+              lane: "implementation",
+              status: "failed",
+              payload: {
+                state: "failed",
+                errorMessage: detail,
+              },
+            });
+            yield* recoverTurnStartFailure(cause);
+          }),
+        ),
+        Effect.forkScoped,
+      );
+      return;
+    }
 
     const sendTurnRequest = yield* buildSendTurnRequestForThread({
       threadId: event.payload.threadId,

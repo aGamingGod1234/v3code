@@ -17,6 +17,8 @@ import type {
   DeviceId,
   ProviderInteractionMode,
   RuntimeMode,
+  SessionMode,
+  OrchestratorConfig,
 } from "@v3tools/contracts";
 
 export type SessionPhase = "disconnected" | "connecting" | "ready" | "running";
@@ -104,6 +106,8 @@ export interface Thread {
   title: string;
   hostDeviceId: DeviceId | null;
   modelSelection: ModelSelection;
+  sessionMode?: SessionMode;
+  orchestratorConfig?: OrchestratorConfig | null;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;
@@ -130,6 +134,8 @@ export interface ThreadShell {
   title: string;
   hostDeviceId: DeviceId | null;
   modelSelection: ModelSelection;
+  sessionMode?: SessionMode;
+  orchestratorConfig?: OrchestratorConfig | null;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
   error: string | null;
@@ -153,6 +159,7 @@ export interface SidebarThreadSummary {
   title: string;
   hostDeviceId: DeviceId | null;
   interactionMode: ProviderInteractionMode;
+  sessionMode?: SessionMode;
   session: ThreadSession | null;
   createdAt: string;
   archivedAt: string | null;

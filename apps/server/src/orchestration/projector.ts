@@ -1,5 +1,6 @@
 import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@v3tools/contracts";
 import {
+  DEFAULT_SESSION_MODE,
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
   OrchestrationSession,
@@ -257,6 +258,8 @@ export function projectEvent(
             title: payload.title,
             hostDeviceId: payload.hostDeviceId ?? null,
             modelSelection: payload.modelSelection,
+            sessionMode: payload.sessionMode ?? DEFAULT_SESSION_MODE,
+            orchestratorConfig: payload.orchestratorConfig ?? null,
             runtimeMode: payload.runtimeMode,
             interactionMode: payload.interactionMode,
             branch: payload.branch,
@@ -325,6 +328,10 @@ export function projectEvent(
             ...(payload.hostDeviceId !== undefined ? { hostDeviceId: payload.hostDeviceId } : {}),
             ...(payload.modelSelection !== undefined
               ? { modelSelection: payload.modelSelection }
+              : {}),
+            ...(payload.sessionMode !== undefined ? { sessionMode: payload.sessionMode } : {}),
+            ...(payload.orchestratorConfig !== undefined
+              ? { orchestratorConfig: payload.orchestratorConfig }
               : {}),
             ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
             ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),

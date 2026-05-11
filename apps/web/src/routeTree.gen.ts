@@ -21,6 +21,7 @@ import { Route as SettingsWorktreesRouteImport } from './routes/settings.worktre
 import { Route as SettingsUsageRouteImport } from './routes/settings.usage'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsPersonalizationRouteImport } from './routes/settings.personalization'
+import { Route as SettingsOrchestratorRouteImport } from './routes/settings.orchestrator'
 import { Route as SettingsMcpRouteImport } from './routes/settings.mcp'
 import { Route as SettingsGitRouteImport } from './routes/settings.git'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
@@ -91,6 +92,11 @@ const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
 const SettingsPersonalizationRoute = SettingsPersonalizationRouteImport.update({
   id: '/personalization',
   path: '/personalization',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsOrchestratorRoute = SettingsOrchestratorRouteImport.update({
+  id: '/orchestrator',
+  path: '/orchestrator',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsMcpRoute = SettingsMcpRouteImport.update({
@@ -173,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/git': typeof SettingsGitRoute
   '/settings/mcp': typeof SettingsMcpRoute
+  '/settings/orchestrator': typeof SettingsOrchestratorRoute
   '/settings/personalization': typeof SettingsPersonalizationRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/usage': typeof SettingsUsageRoute
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/git': typeof SettingsGitRoute
   '/settings/mcp': typeof SettingsMcpRoute
+  '/settings/orchestrator': typeof SettingsOrchestratorRoute
   '/settings/personalization': typeof SettingsPersonalizationRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/usage': typeof SettingsUsageRoute
@@ -224,6 +232,7 @@ export interface FileRoutesById {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/git': typeof SettingsGitRoute
   '/settings/mcp': typeof SettingsMcpRoute
+  '/settings/orchestrator': typeof SettingsOrchestratorRoute
   '/settings/personalization': typeof SettingsPersonalizationRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/usage': typeof SettingsUsageRoute
@@ -252,6 +261,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/git'
     | '/settings/mcp'
+    | '/settings/orchestrator'
     | '/settings/personalization'
     | '/settings/providers'
     | '/settings/usage'
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/git'
     | '/settings/mcp'
+    | '/settings/orchestrator'
     | '/settings/personalization'
     | '/settings/providers'
     | '/settings/usage'
@@ -302,6 +313,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/git'
     | '/settings/mcp'
+    | '/settings/orchestrator'
     | '/settings/personalization'
     | '/settings/providers'
     | '/settings/usage'
@@ -405,6 +417,13 @@ declare module '@tanstack/react-router' {
       path: '/personalization'
       fullPath: '/settings/personalization'
       preLoaderRoute: typeof SettingsPersonalizationRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/orchestrator': {
+      id: '/settings/orchestrator'
+      path: '/orchestrator'
+      fullPath: '/settings/orchestrator'
+      preLoaderRoute: typeof SettingsOrchestratorRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/mcp': {
@@ -519,6 +538,7 @@ interface SettingsRouteChildren {
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsGitRoute: typeof SettingsGitRoute
   SettingsMcpRoute: typeof SettingsMcpRoute
+  SettingsOrchestratorRoute: typeof SettingsOrchestratorRoute
   SettingsPersonalizationRoute: typeof SettingsPersonalizationRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsUsageRoute: typeof SettingsUsageRoute
@@ -536,6 +556,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsGitRoute: SettingsGitRoute,
   SettingsMcpRoute: SettingsMcpRoute,
+  SettingsOrchestratorRoute: SettingsOrchestratorRoute,
   SettingsPersonalizationRoute: SettingsPersonalizationRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsUsageRoute: SettingsUsageRoute,

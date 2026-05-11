@@ -7,6 +7,7 @@ import {
   ProviderKind,
   ProviderModelOptions,
   RuntimeMode,
+  SessionMode,
   ThreadId,
 } from "@v3tools/contracts";
 import * as Schema from "effect/Schema";
@@ -43,6 +44,7 @@ export const PersistedComposerThreadDraftState = Schema.Struct({
   activeProvider: Schema.optionalKey(Schema.NullOr(ProviderKind)),
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
+  sessionMode: Schema.optionalKey(SessionMode),
 });
 export type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftState.Type;
 
@@ -102,6 +104,7 @@ export const PersistedDraftThreadState = Schema.Struct({
   createdAt: Schema.String,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  sessionMode: Schema.optionalKey(SessionMode),
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   cwd: Schema.optionalKey(Schema.NullOr(Schema.String)),
