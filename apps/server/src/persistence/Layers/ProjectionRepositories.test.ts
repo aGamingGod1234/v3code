@@ -81,8 +81,6 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
           provider: "claudeAgent",
           model: "claude-opus-4-6",
         },
-        sessionMode: "single",
-        orchestratorConfig: null,
         runtimeMode: "full-access",
         interactionMode: "default",
         branch: null,

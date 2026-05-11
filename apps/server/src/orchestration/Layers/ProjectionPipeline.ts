@@ -1,7 +1,6 @@
 import {
   ApprovalRequestId,
   type ChatAttachment,
-  DEFAULT_SESSION_MODE,
   type OrchestrationEvent,
   ThreadId,
 } from "@v3tools/contracts";
@@ -569,8 +568,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             title: event.payload.title,
             hostDeviceId: event.payload.hostDeviceId ?? null,
             modelSelection: event.payload.modelSelection,
-            sessionMode: event.payload.sessionMode ?? DEFAULT_SESSION_MODE,
-            orchestratorConfig: event.payload.orchestratorConfig ?? null,
             runtimeMode: event.payload.runtimeMode,
             interactionMode: event.payload.interactionMode,
             branch: event.payload.branch,
@@ -635,12 +632,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
               : {}),
             ...(event.payload.modelSelection !== undefined
               ? { modelSelection: event.payload.modelSelection }
-              : {}),
-            ...(event.payload.sessionMode !== undefined
-              ? { sessionMode: event.payload.sessionMode }
-              : {}),
-            ...(event.payload.orchestratorConfig !== undefined
-              ? { orchestratorConfig: event.payload.orchestratorConfig }
               : {}),
             ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
             ...(event.payload.worktreePath !== undefined
@@ -717,12 +708,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             lastStreamVersion: event.streamVersion ?? existingRow.value.lastStreamVersion,
             updatedAt: event.occurredAt,
           });
-          if (
-            event.type !== "thread.activity-appended" ||
-            event.payload.activity.kind !== "agent_lane_chunk"
-          ) {
-            yield* refreshThreadShellSummary(event.payload.threadId);
-          }
+          yield* refreshThreadShellSummary(event.payload.threadId);
           return;
         }
 

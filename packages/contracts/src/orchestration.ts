@@ -5,7 +5,6 @@ import {
   CursorModelOptions,
   OpenCodeModelOptions,
 } from "./model.ts";
-import { OrchestratorConfig } from "./orchestrator-config.ts";
 import { RepositoryIdentity } from "./environment.ts";
 import {
   ApprovalRequestId,
@@ -35,9 +34,6 @@ export const ORCHESTRATION_WS_METHODS = {
 
 export const ProviderKind = Schema.Literals(["codex", "claudeAgent", "cursor", "opencode"]);
 export type ProviderKind = typeof ProviderKind.Type;
-export const SessionMode = Schema.Literals(["single", "orchestrated"]);
-export type SessionMode = typeof SessionMode.Type;
-export const DEFAULT_SESSION_MODE: SessionMode = "single";
 export const ProviderApprovalPolicy = Schema.Literals([
   "untrusted",
   "on-failure",
@@ -319,8 +315,6 @@ export const OrchestrationThread = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
-  sessionMode: Schema.optional(SessionMode),
-  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -369,8 +363,6 @@ export const OrchestrationThreadShell = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
-  sessionMode: Schema.optional(SessionMode),
-  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -478,8 +470,6 @@ const ThreadCreateCommand = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
-  sessionMode: Schema.optional(SessionMode),
-  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -514,8 +504,6 @@ const ThreadMetaUpdateCommand = Schema.Struct({
   title: Schema.optional(TrimmedNonEmptyString),
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: Schema.optional(ModelSelection),
-  sessionMode: Schema.optional(SessionMode),
-  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
 });
@@ -541,8 +529,6 @@ const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
-  sessionMode: Schema.optional(SessionMode),
-  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
@@ -870,8 +856,6 @@ export const ThreadCreatedPayload = Schema.Struct({
   title: TrimmedNonEmptyString,
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: ModelSelection,
-  sessionMode: Schema.optional(SessionMode),
-  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_RUNTIME_MODE))),
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -903,8 +887,6 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   title: Schema.optional(TrimmedNonEmptyString),
   hostDeviceId: Schema.optionalKey(Schema.NullOr(DeviceId)),
   modelSelection: Schema.optional(ModelSelection),
-  sessionMode: Schema.optional(SessionMode),
-  orchestratorConfig: Schema.optional(Schema.NullOr(OrchestratorConfig)),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: IsoDateTime,

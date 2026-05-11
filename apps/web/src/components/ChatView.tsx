@@ -1,6 +1,7 @@
 import {
   type ApprovalRequestId,
   DEFAULT_MODEL_BY_PROVIDER,
+  type ClaudeAgentEffort,
   type EnvironmentId,
   type MessageId,
   type ModelSelection,
@@ -9,6 +10,7 @@ import {
   type ProjectId,
   type ProviderApprovalDecision,
   type ServerProvider,
+  type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type ThreadId,
   type TurnId,
@@ -24,11 +26,11 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@v3tools/client-runtime";
-import { createModelSelection } from "@v3tools/shared/model";
+import { applyClaudePromptEffortPrefix, createModelSelection } from "@v3tools/shared/model";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@v3tools/shared/projectScripts";
 import { truncate } from "@v3tools/shared/String";
 import { Debouncer } from "@tanstack/react-pacer";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { useGitStatus } from "~/lib/gitStatusState";
@@ -81,6 +83,8 @@ import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
   type ChatMessage,
+  type SessionPhase,
+  type Thread,
   type TurnDiffSummary,
 } from "../types";
 import { useTheme } from "../hooks/useTheme";
@@ -92,6 +96,7 @@ import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
+import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { ChevronDownIcon } from "lucide-react";
 import { cn, randomUUID } from "~/lib/utils";
 import { toastManager } from "./ui/toast";
@@ -103,7 +108,7 @@ import {
   projectScriptIdFromCommand,
 } from "~/projectScripts";
 import { newCommandId, newDraftId, newMessageId, newThreadId } from "~/lib/utils";
-import { resolveSelectableProvider } from "../providerModels";
+import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
 import { useSettings } from "../hooks/useSettings";
 import { resolveAppModelSelection } from "../modelSelection";
 import { isTerminalFocused } from "../lib/terminalFocus";
@@ -144,10 +149,13 @@ import {
   buildExpiredTerminalContextToastCopy,
   buildLocalDraftThread,
   collectUserMessageBlobPreviewUrls,
+  createLocalDispatchSnapshot,
   deriveComposerSendState,
   deriveRemoteHostInputDisabledReason,
+  hasServerAcknowledgedLocalDispatch,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
+  type LocalDispatchSnapshot,
   PullRequestDialogState,
   cloneComposerImageForRetry,
   deriveLockedProvider,
@@ -186,7 +194,6 @@ import {
 import { useThreadPlanCatalog } from "./chatView/usePlanCatalog";
 import { useLocalDispatchState } from "./chatView/useLocalDispatchState";
 import { PersistentThreadTerminalDrawer } from "./chatView/PersistentThreadTerminalDrawer";
-import { OrchestratedSession } from "./OrchestratedSession";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -266,9 +273,6 @@ export default function ChatView(props: ChatViewProps) {
   const composerInteractionMode = useComposerDraftStore(
     (store) => store.getComposerDraft(composerDraftTarget)?.interactionMode ?? null,
   );
-  const composerSessionMode = useComposerDraftStore(
-    (store) => store.getComposerDraft(composerDraftTarget)?.sessionMode ?? null,
-  );
   const composerActiveProvider = useComposerDraftStore(
     (store) => store.getComposerDraft(composerDraftTarget)?.activeProvider ?? null,
   );
@@ -282,7 +286,6 @@ export default function ChatView(props: ChatViewProps) {
   const setComposerDraftInteractionMode = useComposerDraftStore(
     (store) => store.setInteractionMode,
   );
-  const setComposerDraftSessionMode = useComposerDraftStore((store) => store.setSessionMode);
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const getDraftSessionByLogicalProjectKey = useComposerDraftStore(
@@ -433,13 +436,6 @@ export default function ChatView(props: ChatViewProps) {
   );
   const isServerThread = routeKind === "server" && serverThread !== undefined;
   const activeThread = isServerThread ? serverThread : localDraftThread;
-  const isUnstartedServerThread = Boolean(
-    isServerThread &&
-    activeThread &&
-    activeThread.messages.length === 0 &&
-    activeThread.latestTurn === null &&
-    activeThread.session === null,
-  );
   const remoteHostInputDisabledReason = useMemo(
     () =>
       deriveRemoteHostInputDisabledReason({
@@ -451,10 +447,6 @@ export default function ChatView(props: ChatViewProps) {
   );
   const defaultRuntimeMode = runtimeModeFromCodexSettings(settings);
   const defaultInteractionMode = interactionModeFromCodexSettings(settings);
-  const sessionMode =
-    isUnstartedServerThread && composerSessionMode
-      ? composerSessionMode
-      : (activeThread?.sessionMode ?? composerSessionMode ?? "single");
   const runtimeMode = composerRuntimeMode ?? activeThread?.runtimeMode ?? defaultRuntimeMode;
   const interactionMode =
     composerInteractionMode ?? activeThread?.interactionMode ?? defaultInteractionMode;
@@ -1596,24 +1588,6 @@ export default function ChatView(props: ChatViewProps) {
   const toggleInteractionMode = useCallback(() => {
     handleInteractionModeChange(interactionMode === "plan" ? "default" : "plan");
   }, [handleInteractionModeChange, interactionMode]);
-  const handleSessionModeChange = useCallback(
-    (mode: "single" | "orchestrated") => {
-      if (mode === sessionMode) return;
-      setComposerDraftSessionMode(composerDraftTarget, mode);
-      if (isLocalDraftThread) {
-        setDraftThreadContext(composerDraftTarget, { sessionMode: mode });
-      }
-      scheduleComposerFocus();
-    },
-    [
-      composerDraftTarget,
-      isLocalDraftThread,
-      scheduleComposerFocus,
-      sessionMode,
-      setComposerDraftSessionMode,
-      setDraftThreadContext,
-    ],
-  );
   const togglePlanSidebar = useCallback(() => {
     setPlanSidebarOpen((open) => {
       if (open) {
@@ -1636,8 +1610,6 @@ export default function ChatView(props: ChatViewProps) {
       threadId: ThreadId;
       createdAt: string;
       modelSelection?: ModelSelection;
-      sessionMode: "single" | "orchestrated";
-      orchestratorConfig: typeof settings.orchestratorConfig | null;
       runtimeMode: RuntimeMode;
       interactionMode: ProviderInteractionMode;
     }) => {
@@ -1661,21 +1633,6 @@ export default function ChatView(props: ChatViewProps) {
           commandId: newCommandId(),
           threadId: input.threadId,
           modelSelection: input.modelSelection,
-        });
-      }
-
-      const nextOrchestratorConfig =
-        input.sessionMode === "orchestrated" ? input.orchestratorConfig : null;
-      if (
-        input.sessionMode !== (serverThread.sessionMode ?? "single") ||
-        JSON.stringify(nextOrchestratorConfig) !== JSON.stringify(serverThread.orchestratorConfig)
-      ) {
-        await api.orchestration.dispatchCommand({
-          type: "thread.meta.update",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          sessionMode: input.sessionMode,
-          orchestratorConfig: nextOrchestratorConfig,
         });
       }
 
@@ -2205,17 +2162,13 @@ export default function ChatView(props: ChatViewProps) {
     );
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
-    const baseOutgoingMessageText = messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT;
-    const outgoingMessageText =
-      sessionMode === "orchestrated"
-        ? baseOutgoingMessageText
-        : formatOutgoingPrompt({
-            provider: ctxSelectedProvider,
-            model: ctxSelectedModel,
-            models: ctxSelectedProviderModels,
-            effort: ctxSelectedPromptEffort,
-            text: baseOutgoingMessageText,
-          });
+    const outgoingMessageText = formatOutgoingPrompt({
+      provider: ctxSelectedProvider,
+      model: ctxSelectedModel,
+      models: ctxSelectedProviderModels,
+      effort: ctxSelectedPromptEffort,
+      text: messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT,
+    });
     const turnAttachmentsPromise = Promise.all(
       composerImagesSnapshot.map(async (image) => ({
         type: "image" as const,
@@ -2314,11 +2267,7 @@ export default function ChatView(props: ChatViewProps) {
         await persistThreadSettingsForNextTurn({
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
-          ...(sessionMode === "single" && ctxSelectedModel
-            ? { modelSelection: ctxSelectedModelSelection }
-            : {}),
-          sessionMode,
-          orchestratorConfig: sessionMode === "orchestrated" ? settings.orchestratorConfig : null,
+          ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
           runtimeMode,
           interactionMode,
         });
@@ -2334,9 +2283,6 @@ export default function ChatView(props: ChatViewProps) {
                       projectId: activeProject.id,
                       title,
                       modelSelection: threadCreateModelSelection,
-                      sessionMode,
-                      orchestratorConfig:
-                        sessionMode === "orchestrated" ? settings.orchestratorConfig : null,
                       runtimeMode,
                       interactionMode,
                       branch: activeThreadBranch,
@@ -2369,7 +2315,7 @@ export default function ChatView(props: ChatViewProps) {
           text: outgoingMessageText,
           attachments: turnAttachments,
         },
-        ...(sessionMode === "single" ? { modelSelection: ctxSelectedModelSelection } : {}),
+        modelSelection: ctxSelectedModelSelection,
         titleSeed: title,
         approvalPolicy: settings.codexRuntime.approvalPolicy,
         sandboxMode: settings.codexRuntime.sandboxMode,
@@ -2629,16 +2575,13 @@ export default function ChatView(props: ChatViewProps) {
       const threadIdForSend = activeThread.id;
       const messageIdForSend = newMessageId();
       const messageCreatedAt = new Date().toISOString();
-      const outgoingMessageText =
-        sessionMode === "orchestrated"
-          ? trimmed
-          : formatOutgoingPrompt({
-              provider: ctxSelectedProvider,
-              model: ctxSelectedModel,
-              models: ctxSelectedProviderModels,
-              effort: ctxSelectedPromptEffort,
-              text: trimmed,
-            });
+      const outgoingMessageText = formatOutgoingPrompt({
+        provider: ctxSelectedProvider,
+        model: ctxSelectedModel,
+        models: ctxSelectedProviderModels,
+        effort: ctxSelectedPromptEffort,
+        text: trimmed,
+      });
 
       sendInFlightRef.current = true;
       beginLocalDispatch({ preparingWorktree: false });
@@ -2665,9 +2608,7 @@ export default function ChatView(props: ChatViewProps) {
         await persistThreadSettingsForNextTurn({
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
-          ...(sessionMode === "single" ? { modelSelection: ctxSelectedModelSelection } : {}),
-          sessionMode,
-          orchestratorConfig: sessionMode === "orchestrated" ? settings.orchestratorConfig : null,
+          modelSelection: ctxSelectedModelSelection,
           runtimeMode,
           interactionMode: nextInteractionMode,
         });
@@ -2689,7 +2630,7 @@ export default function ChatView(props: ChatViewProps) {
             text: outgoingMessageText,
             attachments: [],
           },
-          ...(sessionMode === "single" ? { modelSelection: ctxSelectedModelSelection } : {}),
+          modelSelection: ctxSelectedModelSelection,
           titleSeed: activeThread.title,
           approvalPolicy: settings.codexRuntime.approvalPolicy,
           sandboxMode: settings.codexRuntime.sandboxMode,
@@ -2736,14 +2677,12 @@ export default function ChatView(props: ChatViewProps) {
       resetLocalDispatch,
       remoteHostInputDisabledReason,
       runtimeMode,
-      sessionMode,
       setComposerDraftInteractionMode,
       setThreadError,
       composerRef,
       environmentId,
       settings.codexRuntime.approvalPolicy,
       settings.codexRuntime.sandboxMode,
-      settings.orchestratorConfig,
     ],
   );
 
@@ -2778,16 +2717,13 @@ export default function ChatView(props: ChatViewProps) {
     const nextThreadId = newThreadId();
     const planMarkdown = activeProposedPlan.planMarkdown;
     const implementationPrompt = buildPlanImplementationPrompt(planMarkdown);
-    const outgoingImplementationPrompt =
-      sessionMode === "orchestrated"
-        ? implementationPrompt
-        : formatOutgoingPrompt({
-            provider: ctxSelectedProvider,
-            model: ctxSelectedModel,
-            models: ctxSelectedProviderModels,
-            effort: ctxSelectedPromptEffort,
-            text: implementationPrompt,
-          });
+    const outgoingImplementationPrompt = formatOutgoingPrompt({
+      provider: ctxSelectedProvider,
+      model: ctxSelectedModel,
+      models: ctxSelectedProviderModels,
+      effort: ctxSelectedPromptEffort,
+      text: implementationPrompt,
+    });
     const nextThreadTitle = truncate(buildPlanImplementationThreadTitle(planMarkdown));
     const nextThreadModelSelection: ModelSelection = ctxSelectedModelSelection;
 
@@ -2806,8 +2742,6 @@ export default function ChatView(props: ChatViewProps) {
         projectId: activeProject.id,
         title: nextThreadTitle,
         modelSelection: nextThreadModelSelection,
-        sessionMode,
-        orchestratorConfig: sessionMode === "orchestrated" ? settings.orchestratorConfig : null,
         runtimeMode,
         interactionMode: "default",
         branch: activeThreadBranch,
@@ -2825,7 +2759,7 @@ export default function ChatView(props: ChatViewProps) {
             text: outgoingImplementationPrompt,
             attachments: [],
           },
-          ...(sessionMode === "single" ? { modelSelection: ctxSelectedModelSelection } : {}),
+          modelSelection: ctxSelectedModelSelection,
           titleSeed: nextThreadTitle,
           approvalPolicy: settings.codexRuntime.approvalPolicy,
           sandboxMode: settings.codexRuntime.sandboxMode,
@@ -2884,8 +2818,6 @@ export default function ChatView(props: ChatViewProps) {
     environmentId,
     settings.codexRuntime.approvalPolicy,
     settings.codexRuntime.sandboxMode,
-    settings.orchestratorConfig,
-    sessionMode,
   ]);
 
   const onProviderModelSelect = useCallback(
@@ -2910,13 +2842,11 @@ export default function ChatView(props: ChatViewProps) {
         scopeThreadRef(activeThread.environmentId, activeThread.id),
         nextModelSelection,
       );
-      handleSessionModeChange("single");
       setStickyComposerModelSelection(nextModelSelection);
       scheduleComposerFocus();
     },
     [
       activeThread,
-      handleSessionModeChange,
       lockedProvider,
       scheduleComposerFocus,
       setComposerDraftModelSelection,
@@ -3064,13 +2994,6 @@ export default function ChatView(props: ChatViewProps) {
           {/* Messages Wrapper */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Messages — LegendList handles virtualization and scrolling internally */}
-            {sessionMode === "orchestrated" ? (
-              <OrchestratedSession
-                thread={activeThread}
-                fallbackConfig={settings.orchestratorConfig}
-              />
-            ) : null}
-
             <MessagesTimeline
               key={activeThread.id}
               isWorking={isWorking}
@@ -3149,7 +3072,6 @@ export default function ChatView(props: ChatViewProps) {
               planSidebarOpen={planSidebarOpen}
               runtimeMode={runtimeMode}
               interactionMode={interactionMode}
-              sessionMode={sessionMode}
               lockedProvider={lockedProvider}
               providerStatuses={providerStatuses as ServerProvider[]}
               activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
@@ -3174,7 +3096,6 @@ export default function ChatView(props: ChatViewProps) {
                 onChangeActivePendingUserInputCustomAnswer
               }
               onProviderModelSelect={onProviderModelSelect}
-              onSessionModeChange={handleSessionModeChange}
               toggleInteractionMode={toggleInteractionMode}
               handleRuntimeModeChange={handleRuntimeModeChange}
               handleInteractionModeChange={handleInteractionModeChange}

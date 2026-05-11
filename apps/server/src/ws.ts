@@ -461,10 +461,6 @@ const makeWsRpcLayer = (
                     }
                   : {}),
                 modelSelection: bootstrap.createThread.modelSelection,
-                sessionMode: bootstrap.createThread.sessionMode,
-                ...(bootstrap.createThread.orchestratorConfig !== undefined
-                  ? { orchestratorConfig: bootstrap.createThread.orchestratorConfig }
-                  : {}),
                 runtimeMode: bootstrap.createThread.runtimeMode,
                 interactionMode: bootstrap.createThread.interactionMode,
                 branch: bootstrap.createThread.branch,

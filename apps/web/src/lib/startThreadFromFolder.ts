@@ -138,8 +138,6 @@ export async function startThreadFromFolder(
         title,
         ...(input.hostDeviceId !== undefined ? { hostDeviceId: input.hostDeviceId } : {}),
         modelSelection,
-        sessionMode: "single",
-        orchestratorConfig: null,
         runtimeMode,
         interactionMode,
         branch: null,

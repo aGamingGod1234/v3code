@@ -46,7 +46,6 @@ import Migration0030 from "./Migrations/030_V3UserGitHubScopes.ts";
 import Migration0031 from "./Migrations/031_V3PushTokensAndFcmConfig.ts";
 import Migration0032 from "./Migrations/032_ProjectionThreadsForkLineageRecencyIndex.ts";
 import Migration0033 from "./Migrations/033_CommandIdempotencyKeys.ts";
-import Migration0034 from "./Migrations/034_ProjectionThreadsOrchestratorSession.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -92,7 +91,6 @@ export const migrationEntries = [
   [31, "V3PushTokensAndFcmConfig", Migration0031],
   [32, "ProjectionThreadsForkLineageRecencyIndex", Migration0032],
   [33, "CommandIdempotencyKeys", Migration0033],
-  [34, "ProjectionThreadsOrchestratorSession", Migration0034],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

@@ -38,8 +38,6 @@ export function buildLocalDraftThread(
     title: "New thread",
     hostDeviceId: null,
     modelSelection: fallbackModelSelection,
-    sessionMode: draftThread.sessionMode ?? "single",
-    orchestratorConfig: null,
     runtimeMode: draftThread.runtimeMode,
     interactionMode: draftThread.interactionMode,
     session: null,
@@ -261,14 +259,6 @@ export function deriveLockedProvider(input: {
   selectedProvider: ProviderKind | null;
   threadProvider: ProviderKind | null;
 }): ProviderKind | null {
-  if (input.thread?.sessionMode === "orchestrated") {
-    if (!threadHasStarted(input.thread)) {
-      return null;
-    }
-    return (
-      input.thread?.session?.provider ?? input.threadProvider ?? input.selectedProvider ?? null
-    );
-  }
   if (!threadHasStarted(input.thread)) {
     return null;
   }
