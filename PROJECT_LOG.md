@@ -1,3 +1,34 @@
+## [2026-05-11] - Main CI Browser Test Repair
+
+### What Was Implemented
+
+- Fixed the ChatComposer slash-command menu so it is not clipped by the
+  rounded composer surface while open.
+- Verified the failing browser test now hit-tests the visible menu item
+  instead of the message timeline behind it.
+
+### Files Modified
+
+- `apps/web/src/components/chat/ChatComposer.tsx` - switches the
+  composer surface to visible overflow only while the command menu is
+  open.
+- `PROJECT_LOG.md` - records this browser CI repair pass.
+
+### Assumptions Made (flag these for review)
+
+- The composer surface should keep rounded clipping in normal states and
+  relax overflow only for the command menu popover.
+
+### Known Issues / Deferred
+
+- Browser tests still print existing ResizeObserver and mock RPC warning
+  noise while passing.
+
+### Suggested Next Steps
+
+- Watch the refreshed main CI run to confirm the full browser-test step
+  passes on GitHub Actions.
+
 ## [2026-05-11] - Main CI Test Repair
 
 ### What Was Implemented

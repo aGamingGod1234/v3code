@@ -1775,7 +1775,8 @@ export const ChatComposer = memo(
         >
           <div
             className={cn(
-              "overflow-hidden rounded-[20px] border bg-card transition-colors duration-200 has-focus-visible:border-ring/45",
+              "rounded-[20px] border bg-card transition-colors duration-200 has-focus-visible:border-ring/45",
+              composerMenuOpen && !isComposerApprovalState ? "overflow-visible" : "overflow-hidden",
               isDragOverComposer ? "border-primary/70 bg-accent/30" : "border-border",
               composerProviderState.composerSurfaceClassName,
             )}
