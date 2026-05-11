@@ -7,7 +7,6 @@ import type {
   ProviderInteractionMode,
   ProviderKind,
   RuntimeMode,
-  SessionMode,
   ScopedThreadRef,
   ServerProvider,
   ThreadId,
@@ -409,7 +408,6 @@ export interface ChatComposerProps {
   // Mode
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
-  sessionMode: SessionMode;
 
   // Provider / model
   lockedProvider: ProviderKind | null;
@@ -454,7 +452,6 @@ export interface ChatComposerProps {
   ) => void;
 
   onProviderModelSelect: (provider: ProviderKind, model: string) => void;
-  onSessionModeChange: (mode: SessionMode) => void;
   toggleInteractionMode: () => void;
   handleRuntimeModeChange: (mode: RuntimeMode) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
@@ -504,7 +501,6 @@ export const ChatComposer = memo(
       planSidebarOpen,
       runtimeMode,
       interactionMode,
-      sessionMode,
       lockedProvider,
       providerStatuses,
       activeProjectDefaultModelSelection,
@@ -528,7 +524,6 @@ export const ChatComposer = memo(
       onPreviousActivePendingUserInputQuestion,
       onChangeActivePendingUserInputCustomAnswer,
       onProviderModelSelect,
-      onSessionModeChange,
       toggleInteractionMode,
       handleRuntimeModeChange,
       handleInteractionModeChange,
@@ -622,13 +617,6 @@ export const ChatComposer = memo(
           settings,
         ),
       [selectedModel, selectedModelOptionsForDispatch, selectedProvider, settings],
-    );
-    const selectProviderModel = useCallback(
-      (provider: ProviderKind, model: string) => {
-        onSessionModeChange("single");
-        onProviderModelSelect(provider, model);
-      },
-      [onProviderModelSelect, onSessionModeChange],
     );
     const selectedModelForPicker = selectedModel;
     const modelOptionsByProvider = useMemo<
@@ -1467,7 +1455,7 @@ export const ChatComposer = memo(
           }
           return;
         }
-        selectProviderModel(item.provider, item.model);
+        onProviderModelSelect(item.provider, item.model);
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
         });
@@ -1478,7 +1466,7 @@ export const ChatComposer = memo(
       [
         applyPromptReplacement,
         handleInteractionModeChange,
-        selectProviderModel,
+        onProviderModelSelect,
         resolveActiveComposerTrigger,
       ],
     );
@@ -1963,7 +1951,6 @@ export const ChatComposer = memo(
                     provider={selectedProvider}
                     model={selectedModelForPickerWithCustomFallback}
                     lockedProvider={lockedProvider}
-                    sessionMode={sessionMode}
                     providers={providerStatuses}
                     modelOptionsByProvider={modelOptionsByProvider}
                     {...(composerProviderState.modelPickerIconClassName
@@ -1972,8 +1959,7 @@ export const ChatComposer = memo(
                             composerProviderState.modelPickerIconClassName,
                         }
                       : {})}
-                    onProviderModelChange={selectProviderModel}
-                    onSessionModeChange={onSessionModeChange}
+                    onProviderModelChange={onProviderModelSelect}
                   />
 
                   {isComposerFooterCompact ? (

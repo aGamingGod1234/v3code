@@ -7,11 +7,9 @@ import {
   ApprovalRequestId,
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
-  DEFAULT_ORCHESTRATOR_CONFIG,
   EventId,
   MessageId,
   ProjectId,
-  type SessionMode,
   ThreadId,
   TurnId,
 } from "@v3tools/contracts";
@@ -102,7 +100,6 @@ describe("ProviderCommandReactor", () => {
   async function createHarness(input?: {
     readonly baseDir?: string;
     readonly threadModelSelection?: ModelSelection;
-    readonly sessionMode?: SessionMode;
     readonly sessionModelSwitch?: "unsupported" | "in-session";
   }) {
     const now = new Date().toISOString();
@@ -119,26 +116,6 @@ describe("ProviderCommandReactor", () => {
     };
     const startSession = vi.fn((_: unknown, input: unknown) => {
       const sessionIndex = nextSessionIndex++;
-      const provider =
-        typeof input === "object" &&
-        input !== null &&
-        "provider" in input &&
-        (input.provider === "codex" ||
-          input.provider === "claudeAgent" ||
-          input.provider === "cursor" ||
-          input.provider === "opencode")
-          ? input.provider
-          : modelSelection.provider;
-      const requestedModelSelection =
-        typeof input === "object" &&
-        input !== null &&
-        "modelSelection" in input &&
-        input.modelSelection &&
-        typeof input.modelSelection === "object" &&
-        "model" in input.modelSelection &&
-        typeof input.modelSelection.model === "string"
-          ? (input.modelSelection as ModelSelection)
-          : modelSelection;
       const resumeCursor =
         typeof input === "object" && input !== null && "resumeCursor" in input
           ? input.resumeCursor
@@ -151,7 +128,7 @@ describe("ProviderCommandReactor", () => {
           ? ThreadId.make(input.threadId)
           : ThreadId.make(`thread-${sessionIndex}`);
       const session: ProviderSession = {
-        provider,
+        provider: modelSelection.provider,
         status: "ready" as const,
         runtimeMode:
           typeof input === "object" &&
@@ -160,7 +137,7 @@ describe("ProviderCommandReactor", () => {
           (input.runtimeMode === "approval-required" || input.runtimeMode === "full-access")
             ? input.runtimeMode
             : "full-access",
-        model: requestedModelSelection.model,
+        ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
         threadId,
         resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
         createdAt: now,
@@ -316,7 +293,6 @@ describe("ProviderCommandReactor", () => {
         projectId: asProjectId("project-1"),
         title: "Thread",
         modelSelection: modelSelection,
-        sessionMode: input?.sessionMode ?? "single",
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
         branch: null,
@@ -921,109 +897,6 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 2);
     expect(harness.startSession.mock.calls.length).toBe(1);
     expect(harness.stopSession.mock.calls.length).toBe(0);
-  });
-
-  it("restarts an orchestrated session when the implementation provider changes", async () => {
-    const harness = await createHarness({
-      sessionMode: "orchestrated",
-      threadModelSelection: { provider: "codex", model: "gpt-5-codex" },
-    });
-    const now = new Date().toISOString();
-    const codexConfig = {
-      ...DEFAULT_ORCHESTRATOR_CONFIG,
-      implementation: {
-        provider: "codex" as const,
-        model: "gpt-5-codex",
-        effort: "high",
-        mode: "default",
-      },
-    };
-    const claudeConfig = {
-      ...DEFAULT_ORCHESTRATOR_CONFIG,
-      implementation: {
-        provider: "claude_code" as const,
-        model: "claude-sonnet-4-6",
-        effort: "high",
-        mode: null,
-      },
-    };
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.make("cmd-orchestrated-config-codex"),
-        threadId: ThreadId.make("thread-1"),
-        orchestratorConfig: codexConfig,
-      }),
-    );
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.make("cmd-turn-start-orchestrated-provider-codex"),
-        threadId: ThreadId.make("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-orchestrated-provider-codex"),
-          role: "user",
-          text: "first implementation turn",
-          attachments: [],
-        },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
-    );
-
-    await waitFor(() => harness.startSession.mock.calls.length === 1);
-    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.make("cmd-orchestrated-config-claude"),
-        threadId: ThreadId.make("thread-1"),
-        orchestratorConfig: claudeConfig,
-      }),
-    );
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.make("cmd-turn-start-orchestrated-provider-claude"),
-        threadId: ThreadId.make("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-orchestrated-provider-claude"),
-          role: "user",
-          text: "second implementation turn",
-          attachments: [],
-        },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
-    );
-
-    await waitFor(() => harness.startSession.mock.calls.length === 2);
-    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
-    expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
-      provider: "claudeAgent",
-      modelSelection: {
-        provider: "claudeAgent",
-        model: "claude-sonnet-4-6",
-        options: {
-          effort: "high",
-        },
-      },
-    });
-    expect(harness.startSession.mock.calls[1]?.[1]).not.toHaveProperty("resumeCursor");
-    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
-      threadId: ThreadId.make("thread-1"),
-      modelSelection: {
-        provider: "claudeAgent",
-        model: "claude-sonnet-4-6",
-        options: {
-          effort: "high",
-        },
-      },
-    });
   });
 
   it("restarts claude sessions when claude effort changes", async () => {

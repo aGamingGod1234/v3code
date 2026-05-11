@@ -93,30 +93,6 @@ export const SETTINGS_SEARCH_ENTRIES: ReadonlyArray<SettingsSearchEntry> = [
     "Codex, Claude, Cursor, OpenCode, provider status, model lists, spawn commands, CODEX_HOME, and provider settings.",
   ),
   entry(
-    "Orchestrator",
-    "/settings/orchestrator",
-    "Orchestrator",
-    "Configure orchestrator, implementation, assistant roles, generic providers, model strings, effort levels, modes, sub-agents, fast mode, and planning budget.",
-  ),
-  entry(
-    "Orchestrator",
-    "/settings/orchestrator",
-    "Roles",
-    "Set the provider, model, effort, and mode for each orchestrated session role.",
-  ),
-  entry(
-    "Orchestrator",
-    "/settings/orchestrator",
-    "Sub-agents",
-    "Add, remove, and configure optional Codex, Claude Code, Gemini, or custom sub-agent definitions.",
-  ),
-  entry(
-    "Orchestrator",
-    "/settings/orchestrator",
-    "Planning",
-    "Toggle fast mode and set an auto or numeric thinking budget for orchestrated sessions.",
-  ),
-  entry(
     "General",
     "/settings/general",
     "Keybindings",

@@ -10,11 +10,6 @@
   "module": "./dist/index.mjs",
   "types": "./src/index.ts",
   "exports": {
-    "./orchestrator-config": {
-      "types": "./src/orchestrator-config.ts",
-      "import": "./src/orchestrator-config.ts",
-      "require": "./src/orchestrator-config.ts"
-    },
     "./settings": {
       "types": "./src/settings.ts",
       "import": "./src/settings.ts",

@@ -15,7 +15,6 @@ export * from "./keybindings.ts";
 export * from "./server.ts";
 export * from "./settings.ts";
 export * from "./git.ts";
-export * from "./orchestrator-config.ts";
 export * from "./orchestration.ts";
 export * from "./editor.ts";
 export * from "./project.ts";

@@ -2,7 +2,6 @@ import {
   ApprovalRequestId,
   type AssistantDeliveryMode,
   CommandId,
-  EventId,
   MessageId,
   type OrchestrationEvent,
   type OrchestrationProposedPlanId,
@@ -28,7 +27,6 @@ import {
   type ProviderRuntimeIngestionShape,
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { ORCHESTRATOR_ACTIVITY_KINDS, makeOrchestratorActivity } from "../events.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
@@ -47,8 +45,6 @@ const BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_TTL = Duration.minutes(120);
 const BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY = 10_000;
 const BUFFERED_PROPOSED_PLAN_BY_ID_TTL = Duration.minutes(120);
 const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
-const ORCHESTRATOR_LANE_CHUNK_FLUSH_CHARS = 1_200;
-const ORCHESTRATOR_LANE_CHUNK_FLUSH_MS = 750;
 const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.V3CODE_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
 
 type TurnStartRequestedDomainEvent = Extract<
@@ -142,49 +138,6 @@ function normalizeRuntimeTurnState(
     default:
       return "completed";
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringPayloadValue(payload: unknown, key: string): string | undefined {
-  if (!isRecord(payload)) {
-    return undefined;
-  }
-  const value = payload[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function findOrchestratorTaskIdForTurn(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
-  turnId: TurnId,
-): string | undefined {
-  const turnIdText = String(turnId);
-  for (let index = activities.length - 1; index >= 0; index -= 1) {
-    const activity = activities[index];
-    if (!activity) {
-      continue;
-    }
-    if (
-      activity.kind !== ORCHESTRATOR_ACTIVITY_KINDS.taskAssigned &&
-      activity.kind !== ORCHESTRATOR_ACTIVITY_KINDS.agentLaneChunk
-    ) {
-      continue;
-    }
-    const payloadTurnId = stringPayloadValue(activity.payload, "providerTurnId");
-    const matchesTurn =
-      (activity.turnId !== null && String(activity.turnId) === turnIdText) ||
-      payloadTurnId === turnIdText;
-    if (!matchesTurn) {
-      continue;
-    }
-    const taskId = stringPayloadValue(activity.payload, "taskId");
-    if (taskId) {
-      return taskId;
-    }
-  }
-  return undefined;
 }
 
 function orchestrationSessionStatusFromRuntimeState(
@@ -618,89 +571,6 @@ const make = Effect.gen(function* () {
     timeToLive: BUFFERED_PROPOSED_PLAN_BY_ID_TTL,
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
   });
-
-  const orchestratorLaneChunkBuffers = new Map<
-    string,
-    {
-      readonly text: string;
-      readonly lastFlushAtMs: number;
-      readonly flushIndex: number;
-    }
-  >();
-
-  const appendImplementationLaneChunk = Effect.fn("appendImplementationLaneChunk")(
-    function* (input: {
-      readonly event: ProviderRuntimeEvent;
-      readonly threadId: ThreadId;
-      readonly turnId?: TurnId;
-      readonly taskId?: string;
-      readonly chunk?: string;
-      readonly createdAt: string;
-      readonly force?: boolean;
-    }) {
-      const key = `${input.threadId}:${input.turnId ?? input.event.eventId}`;
-      const createdAtMs = Date.parse(input.createdAt);
-      const nowMs = Number.isFinite(createdAtMs) ? createdAtMs : Date.now();
-      const existingBuffer = orchestratorLaneChunkBuffers.get(key);
-      const existing = existingBuffer ?? {
-        text: "",
-        lastFlushAtMs: nowMs,
-        flushIndex: 0,
-      };
-      const text = `${existing.text}${input.chunk ?? ""}`;
-      const shouldFlush =
-        input.force === true ||
-        text.length >= ORCHESTRATOR_LANE_CHUNK_FLUSH_CHARS ||
-        nowMs - existing.lastFlushAtMs >= ORCHESTRATOR_LANE_CHUNK_FLUSH_MS;
-
-      if (!shouldFlush) {
-        orchestratorLaneChunkBuffers.set(key, {
-          ...existing,
-          text,
-        });
-        return;
-      }
-      if (text.length === 0) {
-        orchestratorLaneChunkBuffers.delete(key);
-        return;
-      }
-
-      const flushIndex = existing.flushIndex;
-      const nextBuffer = {
-        text: "",
-        lastFlushAtMs: nowMs,
-        flushIndex: flushIndex + 1,
-      };
-      if (input.force === true) {
-        orchestratorLaneChunkBuffers.delete(key);
-      } else {
-        orchestratorLaneChunkBuffers.set(key, nextBuffer);
-      }
-
-      const eventWithSequence = input.event as ProviderRuntimeEvent & { sessionSequence?: number };
-      yield* orchestrationEngine.dispatch({
-        type: "thread.activity.append",
-        commandId: CommandId.make(
-          `provider:${input.event.eventId}:orchestrator-agent-lane-chunk:${flushIndex}`,
-        ),
-        threadId: input.threadId,
-        activity: makeOrchestratorActivity({
-          id: EventId.make(`orchestrator:${input.event.eventId}:implementation-lane:${flushIndex}`),
-          kind: ORCHESTRATOR_ACTIVITY_KINDS.agentLaneChunk,
-          summary: "Implementation lane output",
-          lane: "implementation",
-          chunk: text,
-          ...(input.taskId ? { taskId: input.taskId } : {}),
-          ...(input.turnId ? { turnId: input.turnId } : {}),
-          createdAt: input.createdAt,
-          ...(eventWithSequence.sessionSequence !== undefined
-            ? { sequence: eventWithSequence.sessionSequence * 1_000 + flushIndex }
-            : {}),
-        }),
-        createdAt: input.createdAt,
-      });
-    },
-  );
 
   const isGitRepoForThread = Effect.fn("isGitRepoForThread")(function* (threadId: ThreadId) {
     const readModel = yield* orchestrationEngine.getReadModel();
@@ -1416,19 +1286,6 @@ const make = Effect.gen(function* () {
             createdAt: now,
           });
         }
-        if (thread.sessionMode === "orchestrated") {
-          const taskId = turnId
-            ? findOrchestratorTaskIdForTurn(thread.activities, turnId)
-            : undefined;
-          yield* appendImplementationLaneChunk({
-            event,
-            threadId: thread.id,
-            ...(turnId ? { turnId } : {}),
-            ...(taskId ? { taskId } : {}),
-            chunk: assistantDelta,
-            createdAt: now,
-          });
-        }
       }
 
       const pauseForUserTurnId =
@@ -1566,52 +1423,6 @@ const make = Effect.gen(function* () {
       if (event.type === "turn.completed") {
         const turnId = toTurnId(event.turnId);
         if (turnId) {
-          if (thread.sessionMode === "orchestrated") {
-            const state = normalizeRuntimeTurnState(event.payload.state);
-            const taskId = findOrchestratorTaskIdForTurn(thread.activities, turnId);
-            yield* appendImplementationLaneChunk({
-              event,
-              threadId: thread.id,
-              turnId,
-              ...(taskId ? { taskId } : {}),
-              createdAt: now,
-              force: true,
-            });
-            yield* orchestrationEngine.dispatch({
-              type: "thread.activity.append",
-              commandId: CommandId.make(`provider:${event.eventId}:orchestrator-task-completed`),
-              threadId: thread.id,
-              activity: makeOrchestratorActivity({
-                id: EventId.make(`orchestrator:${event.eventId}:task-completed`),
-                kind: ORCHESTRATOR_ACTIVITY_KINDS.taskCompleted,
-                summary:
-                  state === "completed"
-                    ? "Implementation lane completed"
-                    : `Implementation lane ${state}`,
-                lane: "implementation",
-                ...(taskId ? { taskId } : {}),
-                status: state === "completed" ? "done" : state,
-                turnId,
-                createdAt: now,
-                ...(() => {
-                  const eventWithSequence = event as ProviderRuntimeEvent & {
-                    sessionSequence?: number;
-                  };
-                  return eventWithSequence.sessionSequence !== undefined
-                    ? { sequence: eventWithSequence.sessionSequence * 1_000 + 999 }
-                    : {};
-                })(),
-                payload: {
-                  providerTurnId: turnId,
-                  state,
-                  ...(event.payload.errorMessage
-                    ? { errorMessage: event.payload.errorMessage }
-                    : {}),
-                },
-              }),
-              createdAt: now,
-            });
-          }
           const assistantMessageIds = yield* getAssistantMessageIdsForTurn(thread.id, turnId);
           yield* Effect.forEach(
             assistantMessageIds,
